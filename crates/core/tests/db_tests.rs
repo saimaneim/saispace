@@ -1,0 +1,251 @@
+use saispace_core::models::{
+    ActionKind, Actor, CreateProjectInput, CreateTaskInput, EntityKind, ProjectStatus,
+    RecordActivityInput, TaskPriority, TaskStatus, UpdateProjectInput, UpdateTaskInput,
+};
+use saispace_core::{CoreError, Db};
+use serde_json::json;
+use uuid::Uuid;
+
+async fn setup_test_db() -> Db {
+    let db = Db::connect_in_memory()
+        .await
+        .expect("in-memory db connection should succeed");
+    db.migrate().await.expect("migrations should succeed");
+    db
+}
+
+#[tokio::test]
+async fn test_project_lifecycle() {
+    let db = setup_test_db().await;
+
+    let created = db
+        .create_project(CreateProjectInput {
+            name: "Saispace".to_string(),
+            path: "/path/to/saispace".to_string(),
+            context_notes: Some("# Project Context".to_string()),
+        })
+        .await
+        .expect("create_project failed");
+
+    assert_eq!(created.name, "Saispace");
+    assert_eq!(created.path, "/path/to/saispace");
+    assert_eq!(created.status, ProjectStatus::Active);
+    assert_eq!(created.context_notes, "# Project Context");
+
+    let by_id = db
+        .get_project(created.id)
+        .await
+        .expect("get_project failed")
+        .expect("project not found by id");
+    assert_eq!(by_id.id, created.id);
+
+    let by_path = db
+        .get_project_by_path("/path/to/saispace")
+        .await
+        .expect("get_project_by_path failed")
+        .expect("project not found by path");
+    assert_eq!(by_path.id, created.id);
+
+    let duplicate_path = db
+        .create_project(CreateProjectInput {
+            name: "Duplicate Path".to_string(),
+            path: "/path/to/saispace".to_string(),
+            context_notes: None,
+        })
+        .await;
+    assert!(duplicate_path.is_err());
+
+    let updated = db
+        .update_project(
+            created.id,
+            UpdateProjectInput {
+                name: Some("Saispace HQ".to_string()),
+                path: None,
+                status: Some(ProjectStatus::OnHold),
+                context_notes: Some("Updated context".to_string()),
+            },
+        )
+        .await
+        .expect("update_project failed");
+    assert_eq!(updated.name, "Saispace HQ");
+    assert_eq!(updated.status, ProjectStatus::OnHold);
+    assert_eq!(updated.context_notes, "Updated context");
+
+    let projects = db.list_projects().await.expect("list_projects failed");
+    assert_eq!(projects.len(), 1);
+
+    db.delete_project(created.id)
+        .await
+        .expect("delete_project failed");
+
+    let deleted_check = db
+        .get_project(created.id)
+        .await
+        .expect("get_project after delete failed");
+    assert!(deleted_check.is_none());
+
+    let delete_non_existent = db.delete_project(created.id).await;
+    assert!(matches!(
+        delete_non_existent,
+        Err(CoreError::NotFound {
+            entity: "Project",
+            ..
+        })
+    ));
+}
+
+#[tokio::test]
+async fn test_task_lifecycle_and_cascade() {
+    let db = setup_test_db().await;
+
+    let project = db
+        .create_project(CreateProjectInput {
+            name: "Project A".to_string(),
+            path: "/projects/a".to_string(),
+            context_notes: None,
+        })
+        .await
+        .expect("create_project failed");
+
+    let task = db
+        .create_task(CreateTaskInput {
+            project_id: project.id,
+            title: "First Task".to_string(),
+            priority: Some(TaskPriority::Urgent),
+        })
+        .await
+        .expect("create_task failed");
+
+    assert_eq!(task.project_id, project.id);
+    assert_eq!(task.title, "First Task");
+    assert_eq!(task.status, TaskStatus::Todo);
+    assert_eq!(task.priority, TaskPriority::Urgent);
+    assert!(task.completed_at.is_none());
+
+    let updated_done = db
+        .update_task(
+            task.id,
+            UpdateTaskInput {
+                title: None,
+                status: Some(TaskStatus::Done),
+                priority: None,
+            },
+        )
+        .await
+        .expect("update_task to Done failed");
+    assert_eq!(updated_done.status, TaskStatus::Done);
+    assert!(updated_done.completed_at.is_some());
+
+    let updated_reopened = db
+        .update_task(
+            task.id,
+            UpdateTaskInput {
+                title: None,
+                status: Some(TaskStatus::InProgress),
+                priority: None,
+            },
+        )
+        .await
+        .expect("update_task to InProgress failed");
+    assert_eq!(updated_reopened.status, TaskStatus::InProgress);
+    assert!(updated_reopened.completed_at.is_none());
+
+    let tasks = db
+        .list_tasks_by_project(project.id)
+        .await
+        .expect("list_tasks_by_project failed");
+    assert_eq!(tasks.len(), 1);
+
+    db.delete_project(project.id)
+        .await
+        .expect("delete_project failed");
+
+    let task_after_cascade = db.get_task(task.id).await.expect("get_task check failed");
+    assert!(task_after_cascade.is_none());
+}
+
+#[tokio::test]
+async fn test_foreign_key_violation() {
+    let db = setup_test_db().await;
+
+    let non_existent_project_id = Uuid::now_v7();
+    let result = db
+        .create_task(CreateTaskInput {
+            project_id: non_existent_project_id,
+            title: "Orphan Task".to_string(),
+            priority: None,
+        })
+        .await;
+
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_activity_recording_and_filtering() {
+    let db = setup_test_db().await;
+
+    let project = db
+        .create_project(CreateProjectInput {
+            name: "Project Beta".to_string(),
+            path: "/projects/beta".to_string(),
+            context_notes: None,
+        })
+        .await
+        .expect("create_project failed");
+
+    let event_agent = db
+        .record_activity(RecordActivityInput {
+            project_id: Some(project.id),
+            actor: Actor::Agent {
+                name: "Claude".to_string(),
+            },
+            action: ActionKind::Create,
+            entity: EntityKind::Project,
+            entity_id: Some(project.id),
+            details: Some(json!({ "branch": "main" })),
+        })
+        .await
+        .expect("record_activity agent failed");
+
+    assert_eq!(
+        event_agent.actor,
+        Actor::Agent {
+            name: "Claude".to_string()
+        }
+    );
+    assert_eq!(event_agent.action, ActionKind::Create);
+    assert_eq!(event_agent.entity, EntityKind::Project);
+    assert_eq!(event_agent.project_id, Some(project.id));
+    assert_eq!(event_agent.details, Some(json!({ "branch": "main" })));
+
+    let event_user = db
+        .record_activity(RecordActivityInput {
+            project_id: Some(project.id),
+            actor: Actor::User,
+            action: ActionKind::Update,
+            entity: EntityKind::ContextNotes,
+            entity_id: Some(project.id),
+            details: None,
+        })
+        .await
+        .expect("record_activity user failed");
+
+    assert_eq!(event_user.actor, Actor::User);
+    assert_eq!(event_user.action, ActionKind::Update);
+
+    let all_events = db.list_activity(50).await.expect("list_activity failed");
+    assert_eq!(all_events.len(), 2);
+
+    let project_events = db
+        .list_activity_by_project(project.id, 50)
+        .await
+        .expect("list_activity_by_project failed");
+    assert_eq!(project_events.len(), 2);
+
+    let context_events = db
+        .list_activity_by_entity(EntityKind::ContextNotes, project.id, 50)
+        .await
+        .expect("list_activity_by_entity failed");
+    assert_eq!(context_events.len(), 1);
+    assert_eq!(context_events[0].id, event_user.id);
+}
