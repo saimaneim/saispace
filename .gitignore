@@ -1,2 +1,4 @@
 /target
 *.db*
+**/node_modules/
+/apps/desktop/src-tauri/gen/schemas

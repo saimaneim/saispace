@@ -1,0 +1,8 @@
+id = "rust-no-dbg"
+description = "Sin dbg!() en el código"
+severity = "error"
+files = ["**/*.rs"]
+
+[check]
+kind = "forbid"
+pattern = 'dbg!\('

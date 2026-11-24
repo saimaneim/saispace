@@ -1,0 +1,8 @@
+id = "ui-no-raw-colors"
+description = "Colores solo vía tokens de index.css (sin hex/rgba en componentes)"
+severity = "warn"
+files = ["apps/desktop/src/**/*.tsx"]
+
+[check]
+kind = "forbid"
+pattern = '#[0-9a-fA-F]{3,8}\b|rgba?\('

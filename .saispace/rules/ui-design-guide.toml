@@ -1,0 +1,5 @@
+id = "ui-design-guide"
+description = "Guía visual de la app"
+severity = "error"
+files = ["apps/desktop/src/**/*.{tsx,css}"]
+guide = "Lee apps/desktop/DESIGN.md: sin bordes, sin degradados ni blur, tokens de index.css, mayúsculas de frase."

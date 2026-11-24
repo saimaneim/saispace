@@ -26,6 +26,11 @@ pub enum EntityKind {
     Project,
     Task,
     ContextNotes,
+    TechRule,
+    Stack,
+    Search,
+    Memory,
+    Secret,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

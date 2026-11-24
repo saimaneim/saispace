@@ -1,0 +1,9 @@
+id = "mcp-no-stdout"
+description = "El MCP habla por stdout: nada de println!/print!"
+severity = "error"
+files = ["crates/mcp/src/**/*.rs"]
+fix = "Usa tracing (stderr)"
+
+[check]
+kind = "forbid"
+pattern = '\bprint(ln)?!\('

@@ -39,12 +39,16 @@ pub struct Task {
 pub struct CreateTaskInput {
     pub project_id: Uuid,
     pub title: String,
+    #[serde(default)]
     pub priority: Option<TaskPriority>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UpdateTaskInput {
+    #[serde(default)]
     pub title: Option<String>,
+    #[serde(default)]
     pub status: Option<TaskStatus>,
+    #[serde(default)]
     pub priority: Option<TaskPriority>,
 }

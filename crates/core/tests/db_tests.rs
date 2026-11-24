@@ -15,6 +15,19 @@ async fn setup_test_db() -> Db {
 }
 
 #[tokio::test]
+async fn test_serde_defaults() {
+    let json_project = r#"{"name":"Test","path":"/tmp/test"}"#;
+    let input: CreateProjectInput =
+        serde_json::from_str(json_project).expect("should deserialize without context_notes");
+    assert_eq!(input.context_notes, None);
+
+    let json_task = format!(r#"{{"project_id":"{}","title":"Task"}}"#, Uuid::new_v4());
+    let task_input: CreateTaskInput =
+        serde_json::from_str(&json_task).expect("should deserialize without priority");
+    assert_eq!(task_input.priority, None);
+}
+
+#[tokio::test]
 async fn test_project_lifecycle() {
     let db = setup_test_db().await;
 
@@ -248,4 +261,188 @@ async fn test_activity_recording_and_filtering() {
         .expect("list_activity_by_entity failed");
     assert_eq!(context_events.len(), 1);
     assert_eq!(context_events[0].id, event_user.id);
+}
+
+fn project_input(name: &str, path: &str) -> CreateProjectInput {
+    CreateProjectInput {
+        name: name.to_string(),
+        path: path.to_string(),
+        context_notes: None,
+    }
+}
+
+#[tokio::test]
+async fn test_create_project_rejects_blank_name_and_path() {
+    let db = setup_test_db().await;
+
+    let blank_name = db
+        .create_project(project_input("   ", "/validation/a"))
+        .await;
+    assert!(matches!(blank_name, Err(CoreError::Validation(_))));
+
+    let blank_path = db.create_project(project_input("Name", " \t ")).await;
+    assert!(matches!(blank_path, Err(CoreError::Validation(_))));
+
+    let empty_name = db.create_project(project_input("", "/validation/b")).await;
+    assert!(matches!(empty_name, Err(CoreError::Validation(_))));
+}
+
+#[tokio::test]
+async fn test_create_project_enforces_name_length_limit() {
+    let db = setup_test_db().await;
+
+    let at_limit = "a".repeat(200);
+    let accepted = db
+        .create_project(project_input(&at_limit, "/validation/limit-ok"))
+        .await
+        .expect("200 chars should be accepted");
+    assert_eq!(accepted.name.chars().count(), 200);
+
+    let over_limit = "a".repeat(201);
+    let rejected = db
+        .create_project(project_input(&over_limit, "/validation/limit-over"))
+        .await;
+    assert!(matches!(rejected, Err(CoreError::Validation(_))));
+}
+
+#[tokio::test]
+async fn test_create_project_trims_name_and_path() {
+    let db = setup_test_db().await;
+
+    let created = db
+        .create_project(project_input("  Spaced  ", "  /validation/trim  "))
+        .await
+        .expect("create_project failed");
+    assert_eq!(created.name, "Spaced");
+    assert_eq!(created.path, "/validation/trim");
+
+    let by_path = db
+        .get_project_by_path("/validation/trim")
+        .await
+        .expect("get_project_by_path failed");
+    assert!(by_path.is_some());
+}
+
+#[tokio::test]
+async fn test_update_project_validates_name_and_path() {
+    let db = setup_test_db().await;
+    let project = db
+        .create_project(project_input("Original", "/validation/update"))
+        .await
+        .expect("create_project failed");
+
+    let blank_name = db
+        .update_project(
+            project.id,
+            UpdateProjectInput {
+                name: Some("  ".to_string()),
+                ..Default::default()
+            },
+        )
+        .await;
+    assert!(matches!(blank_name, Err(CoreError::Validation(_))));
+
+    let blank_path = db
+        .update_project(
+            project.id,
+            UpdateProjectInput {
+                path: Some(String::new()),
+                ..Default::default()
+            },
+        )
+        .await;
+    assert!(matches!(blank_path, Err(CoreError::Validation(_))));
+
+    let too_long = db
+        .update_project(
+            project.id,
+            UpdateProjectInput {
+                name: Some("b".repeat(201)),
+                ..Default::default()
+            },
+        )
+        .await;
+    assert!(matches!(too_long, Err(CoreError::Validation(_))));
+
+    let unchanged = db
+        .get_project(project.id)
+        .await
+        .expect("get_project failed")
+        .expect("project should still exist");
+    assert_eq!(unchanged.name, "Original");
+    assert_eq!(unchanged.path, "/validation/update");
+
+    let trimmed = db
+        .update_project(
+            project.id,
+            UpdateProjectInput {
+                name: Some("  Renamed  ".to_string()),
+                path: Some(" /validation/renamed ".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("valid update should succeed");
+    assert_eq!(trimmed.name, "Renamed");
+    assert_eq!(trimmed.path, "/validation/renamed");
+}
+
+#[tokio::test]
+async fn test_create_and_update_task_validate_title() {
+    let db = setup_test_db().await;
+    let project = db
+        .create_project(project_input("Tasks", "/validation/tasks"))
+        .await
+        .expect("create_project failed");
+
+    let blank = db
+        .create_task(CreateTaskInput {
+            project_id: project.id,
+            title: "   ".to_string(),
+            priority: None,
+        })
+        .await;
+    assert!(matches!(blank, Err(CoreError::Validation(_))));
+
+    let too_long = db
+        .create_task(CreateTaskInput {
+            project_id: project.id,
+            title: "t".repeat(201),
+            priority: None,
+        })
+        .await;
+    assert!(matches!(too_long, Err(CoreError::Validation(_))));
+
+    let task = db
+        .create_task(CreateTaskInput {
+            project_id: project.id,
+            title: "  Ship it  ".to_string(),
+            priority: None,
+        })
+        .await
+        .expect("create_task failed");
+    assert_eq!(task.title, "Ship it");
+
+    let blank_update = db
+        .update_task(
+            task.id,
+            UpdateTaskInput {
+                title: Some(" ".to_string()),
+                ..Default::default()
+            },
+        )
+        .await;
+    assert!(matches!(blank_update, Err(CoreError::Validation(_))));
+
+    let renamed = db
+        .update_task(
+            task.id,
+            UpdateTaskInput {
+                title: Some("  Renamed task  ".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("valid update should succeed");
+    assert_eq!(renamed.title, "Renamed task");
 }

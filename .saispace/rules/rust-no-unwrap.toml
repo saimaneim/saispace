@@ -1,0 +1,13 @@
+id = "rust-no-unwrap"
+description = "Sin .unwrap()/.expect() en código de producción"
+severity = "error"
+files = [
+    "crates/*/src/**/*.rs",
+    "apps/desktop/src-tauri/src/**/*.rs",
+]
+fix = "Propaga el error con ? y un error tipado"
+
+[check]
+kind = "forbid"
+pattern = '\.unwrap\(\)|\.expect\('
+stop_at = '^\s*#\[cfg\(test\)\]'

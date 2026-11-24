@@ -1,0 +1,21 @@
+[package]
+name = "saispace-cli"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "sai"
+path = "src/main.rs"
+
+[dependencies]
+saispace-core = { path = "../core" }
+saispace-rules = { path = "../rules" }
+clap = { version = "4.6", features = ["derive"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+
+[lints]
+workspace = true

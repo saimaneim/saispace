@@ -14,6 +14,19 @@ pub enum CoreError {
     #[error("{entity} not found with id {id}")]
     NotFound { entity: &'static str, id: Uuid },
 
+    #[error("Background task failed: {0}")]
+    Join(#[from] tokio::task::JoinError),
+
+    #[error("Vault error: {0}")]
+    Vault(String),
+
+    #[error("access to secret {secret} for agent {agent} is {status}")]
+    SecretAccess {
+        secret: String,
+        agent: String,
+        status: &'static str,
+    },
+
     #[error("Validation error: {0}")]
     Validation(String),
 }

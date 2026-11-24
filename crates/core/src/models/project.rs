@@ -27,13 +27,18 @@ pub struct Project {
 pub struct CreateProjectInput {
     pub name: String,
     pub path: String,
+    #[serde(default)]
     pub context_notes: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UpdateProjectInput {
+    #[serde(default)]
     pub name: Option<String>,
+    #[serde(default)]
     pub path: Option<String>,
+    #[serde(default)]
     pub status: Option<ProjectStatus>,
+    #[serde(default)]
     pub context_notes: Option<String>,
 }
