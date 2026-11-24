@@ -8,7 +8,7 @@ pub const DEFAULT_SEARCH_LIMIT: i64 = 20;
 pub const MAX_SEARCH_LIMIT: i64 = 100;
 
 /// Words that carry no meaning on their own; dropped unless nothing else is left.
-const STOPWORDS: &[&str] = &[
+pub(crate) const STOPWORDS: &[&str] = &[
     "a", "al", "como", "con", "de", "del", "el", "en", "es", "la", "las", "lo", "los", "o", "para",
     "pero", "por", "que", "se", "sin", "su", "sus", "un", "una", "unos", "unas", "y", "and", "for",
     "in", "is", "of", "on", "or", "the", "to", "with",

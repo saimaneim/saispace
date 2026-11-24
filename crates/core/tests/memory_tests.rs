@@ -1,6 +1,6 @@
 use chrono::{Duration, Utc};
 use saispace_core::models::{
-    CreateProjectInput, MemoryKind, MemoryScope, SaveMemoryInput, SearchKind,
+    CreateProjectInput, MemoryKind, MemoryScope, SaveMemoryInput, SearchKind, UpdateMemoryInput,
 };
 use saispace_core::{CoreError, Db};
 use std::path::Path;
@@ -317,4 +317,270 @@ async fn search_falls_back_to_any_term_and_finds_similar_memories() {
         similar.iter().map(|h| h.id).collect::<Vec<_>>(),
         vec![vault.id]
     );
+}
+
+#[tokio::test]
+async fn update_memory_updates_fields_and_bumps_updated_at() {
+    let db = setup().await;
+    let old_time = Utc::now() - Duration::hours(1);
+    let original = db
+        .save_memory_at(
+            input("Titulo original", "Contenido original", Some("tema/orig")),
+            old_time,
+            Some(old_time),
+        )
+        .await
+        .expect("save");
+
+    let updated = db
+        .update_memory(
+            original.id,
+            UpdateMemoryInput {
+                title: Some("Titulo editado".into()),
+                content: Some("Contenido editado".into()),
+                kind: Some(MemoryKind::Bugfix),
+                topic_key: Some("tema/editado".into()),
+            },
+        )
+        .await
+        .expect("update");
+
+    assert_eq!(updated.id, original.id);
+    assert_eq!(updated.title, "Titulo editado");
+    assert_eq!(updated.content, "Contenido editado");
+    assert_eq!(updated.kind, MemoryKind::Bugfix);
+    assert_eq!(updated.topic_key.as_deref(), Some("tema/editado"));
+    assert!(updated.updated_at > original.updated_at);
+
+    let partial = db
+        .update_memory(
+            original.id,
+            UpdateMemoryInput {
+                title: Some("Solo titulo".into()),
+                content: None,
+                kind: None,
+                topic_key: None,
+            },
+        )
+        .await
+        .expect("partial");
+
+    assert_eq!(partial.title, "Solo titulo");
+    assert_eq!(partial.content, "Contenido editado");
+    assert_eq!(partial.kind, MemoryKind::Bugfix);
+    assert_eq!(partial.topic_key.as_deref(), Some("tema/editado"));
+}
+
+#[tokio::test]
+async fn update_memory_clears_topic_key_when_empty_string() {
+    let db = setup().await;
+    let original = db
+        .save_memory(input("Con tema", "Contenido", Some("tema/a_borrar")))
+        .await
+        .expect("save");
+    assert_eq!(original.topic_key.as_deref(), Some("tema/a_borrar"));
+
+    let cleared = db
+        .update_memory(
+            original.id,
+            UpdateMemoryInput {
+                title: None,
+                content: None,
+                kind: None,
+                topic_key: Some(String::new()),
+            },
+        )
+        .await
+        .expect("clear");
+    assert_eq!(cleared.topic_key, None);
+
+    let re_get = db.get_memory(original.id).await.expect("get");
+    assert_eq!(re_get.topic_key, None);
+
+    let reset = db
+        .update_memory(
+            original.id,
+            UpdateMemoryInput {
+                title: None,
+                content: None,
+                kind: None,
+                topic_key: Some("  \t  ".into()),
+            },
+        )
+        .await
+        .expect("clear whitespace");
+    assert_eq!(reset.topic_key, None);
+}
+
+#[tokio::test]
+async fn update_memory_validations_and_not_found() {
+    let db = setup().await;
+    let mem = db.save_memory(input("T", "C", None)).await.expect("save");
+
+    assert!(matches!(
+        db.update_memory(
+            mem.id,
+            UpdateMemoryInput {
+                title: Some("   ".into()),
+                ..Default::default()
+            }
+        )
+        .await,
+        Err(CoreError::Validation(_))
+    ));
+
+    assert!(matches!(
+        db.update_memory(
+            mem.id,
+            UpdateMemoryInput {
+                title: Some("a".repeat(201)),
+                ..Default::default()
+            }
+        )
+        .await,
+        Err(CoreError::Validation(_))
+    ));
+
+    assert!(matches!(
+        db.update_memory(
+            mem.id,
+            UpdateMemoryInput {
+                content: Some("   ".into()),
+                ..Default::default()
+            }
+        )
+        .await,
+        Err(CoreError::Validation(_))
+    ));
+
+    assert!(matches!(
+        db.update_memory(
+            mem.id,
+            UpdateMemoryInput {
+                content: Some("a".repeat(20_001)),
+                ..Default::default()
+            }
+        )
+        .await,
+        Err(CoreError::Validation(_))
+    ));
+
+    assert!(matches!(
+        db.update_memory(
+            mem.id,
+            UpdateMemoryInput {
+                topic_key: Some("a".repeat(121)),
+                ..Default::default()
+            }
+        )
+        .await,
+        Err(CoreError::Validation(_))
+    ));
+
+    let missing = Uuid::now_v7();
+    assert!(matches!(
+        db.update_memory(
+            missing,
+            UpdateMemoryInput {
+                title: Some("Nuevo".into()),
+                ..Default::default()
+            }
+        )
+        .await,
+        Err(CoreError::NotFound {
+            entity: "memory",
+            id
+        }) if id == missing
+    ));
+}
+
+#[tokio::test]
+async fn update_memory_conflict_on_unique_topic_returns_validation_error() {
+    let db = setup().await;
+    let project = db
+        .create_project(CreateProjectInput {
+            name: "beta".into(),
+            path: "/p/beta".into(),
+            context_notes: None,
+        })
+        .await
+        .expect("project");
+
+    let first = db
+        .save_memory(SaveMemoryInput {
+            project_id: Some(project.id),
+            ..input("Primero", "Contenido 1", Some("arch/dup"))
+        })
+        .await
+        .expect("save first");
+
+    let second = db
+        .save_memory(SaveMemoryInput {
+            project_id: Some(project.id),
+            ..input("Segundo", "Contenido 2", Some("arch/unique"))
+        })
+        .await
+        .expect("save second");
+
+    let conflict = db
+        .update_memory(
+            second.id,
+            UpdateMemoryInput {
+                title: None,
+                content: None,
+                kind: None,
+                topic_key: Some("arch/dup".into()),
+            },
+        )
+        .await;
+
+    match conflict {
+        Err(CoreError::Validation(msg)) => {
+            assert!(msg.contains("arch/dup"), "Message was: {msg}");
+        }
+        other => panic!("Expected Validation error, got {other:?}"),
+    }
+
+    let self_update = db
+        .update_memory(
+            first.id,
+            UpdateMemoryInput {
+                title: Some("Primero actualizado".into()),
+                content: None,
+                kind: None,
+                topic_key: Some("arch/dup".into()),
+            },
+        )
+        .await;
+    assert!(self_update.is_ok());
+
+    let other_project = db
+        .create_project(CreateProjectInput {
+            name: "gamma".into(),
+            path: "/p/gamma".into(),
+            context_notes: None,
+        })
+        .await
+        .expect("other project");
+
+    let cross_project = db
+        .save_memory(SaveMemoryInput {
+            project_id: Some(other_project.id),
+            ..input("Tercero", "Contenido 3", Some("arch/other"))
+        })
+        .await
+        .expect("save cross");
+
+    let cross_update = db
+        .update_memory(
+            cross_project.id,
+            UpdateMemoryInput {
+                title: None,
+                content: None,
+                kind: None,
+                topic_key: Some("arch/dup".into()),
+            },
+        )
+        .await;
+    assert!(cross_update.is_ok());
 }

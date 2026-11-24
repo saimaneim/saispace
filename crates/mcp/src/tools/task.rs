@@ -79,7 +79,7 @@ pub struct UpdateTaskParams {
 impl SaiSpaceServer {
     #[tool(
         name = "list_tasks",
-        description = "List tasks for a project with optional status filter"
+        description = "List tasks for a project (by project_id or path) with optional status filter"
     )]
     async fn list_tasks(&self, Parameters(params): Parameters<ListTasksParams>) -> CallToolResult {
         let project_id = match params.project_id.as_deref() {
@@ -129,7 +129,7 @@ impl SaiSpaceServer {
 
     #[tool(
         name = "create_task",
-        description = "Create a new task under a project"
+        description = "Create a new task under a project (by project_id or path)"
     )]
     async fn create_task(
         &self,

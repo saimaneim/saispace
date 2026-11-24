@@ -418,9 +418,31 @@ async fn assert_duplicate_hint_and_context(
     let context = text_json(&context);
     assert_eq!(context["project"]["id"], project_id);
     assert_eq!(context["preferences"][0]["title"], "Preferencia");
+    assert_eq!(context["pinned"].as_array().expect("array").len(), 0);
     let memories = context["memories"].as_array().expect("array");
     assert_eq!(memories.len(), 1);
     assert_eq!(memories[0]["preview"], "Tokens rotativos");
+
+    let pinned_save = call(
+        client,
+        "save_memory",
+        json!({ "project_id": project_id, "title": "Fijada", "content": "Detalle fijado", "pinned": true }),
+    )
+    .await;
+    assert_eq!(pinned_save.is_error, Some(false));
+    assert_eq!(text_json(&pinned_save)["memory"]["pinned"], true);
+
+    let context_pinned = call(
+        client,
+        "memory_context",
+        json!({ "project_id": project_id }),
+    )
+    .await;
+    let context_pinned = text_json(&context_pinned);
+    let pinned_items = context_pinned["pinned"].as_array().expect("array");
+    assert_eq!(pinned_items.len(), 1);
+    assert_eq!(pinned_items[0]["title"], "Fijada");
+    assert_eq!(pinned_items[0]["preview"], "Detalle fijado");
 }
 
 #[tokio::test]
@@ -553,4 +575,496 @@ async fn test_secret_tools_never_expose_values() {
     let _ = std::fs::remove_dir_all(key_dir);
     client.cancel().await.expect("cancel");
     server_task.await.expect("server task");
+}
+
+async fn register_test_project(
+    client: &rmcp::service::RunningService<rmcp::RoleClient, TestClientHandler>,
+    name: &str,
+    path: &str,
+) -> String {
+    let result = call(
+        client,
+        "register_project",
+        json!({ "name": name, "path": path }),
+    )
+    .await;
+    assert_eq!(result.is_error, Some(false));
+    let json = text_json(&result);
+    json["id"].as_str().expect("project id string").to_string()
+}
+
+async fn create_test_task(
+    client: &rmcp::service::RunningService<rmcp::RoleClient, TestClientHandler>,
+    project_id: &str,
+    title: &str,
+    priority: Option<&str>,
+) -> String {
+    let mut args = json!({ "project_id": project_id, "title": title });
+    if let Some(pri) = priority {
+        args["priority"] = json!(pri);
+    }
+    let result = call(client, "create_task", args).await;
+    assert_eq!(result.is_error, Some(false));
+    let json = text_json(&result);
+    json["id"].as_str().expect("task id string").to_string()
+}
+
+fn assert_project_summary_fields(item: &serde_json::Value, name: &str, path: &str) {
+    let raw_id = item["id"].as_str().expect("project id string");
+    assert!(uuid::Uuid::parse_str(raw_id).is_ok());
+    assert_eq!(item["name"], name);
+    assert_eq!(item["path"], path);
+    assert_eq!(item["status"], "active");
+    assert!(item["context_notes"].is_string());
+    assert!(item["created_at"].is_string());
+    assert!(item["updated_at"].is_string());
+}
+
+#[tokio::test]
+async fn test_list_projects_contract() {
+    let server = setup_test_server().await;
+    let (client, server_task) = connect(server).await;
+
+    let id_a = register_test_project(&client, "Project Alpha", "/dev/proj-alpha").await;
+    let id_b = register_test_project(&client, "Project Beta", "/dev/proj-beta").await;
+
+    let result = call(&client, "list_projects", json!({})).await;
+    assert_eq!(result.is_error, Some(false));
+
+    let projects = text_json(&result);
+    let list = projects.as_array().expect("array of projects");
+    assert!(list.len() >= 2);
+
+    let alpha = list.iter().find(|p| p["id"] == id_a).expect("alpha found");
+    assert_project_summary_fields(alpha, "Project Alpha", "/dev/proj-alpha");
+
+    let beta = list.iter().find(|p| p["id"] == id_b).expect("beta found");
+    assert_project_summary_fields(beta, "Project Beta", "/dev/proj-beta");
+
+    client.cancel().await.expect("cancel client failed");
+    let _ = server_task.await;
+}
+
+#[tokio::test]
+async fn test_list_tasks_project_and_status_filtering() {
+    let server = setup_test_server().await;
+    let (client, server_task) = connect(server).await;
+
+    let proj_a = register_test_project(&client, "Tasks Project A", "/dev/tasks-a").await;
+    let proj_b = register_test_project(&client, "Tasks Project B", "/dev/tasks-b").await;
+
+    let task_todo = create_test_task(&client, &proj_a, "Task Todo", Some("medium")).await;
+    let task_prog = create_test_task(&client, &proj_a, "Task Prog", Some("high")).await;
+    let task_done = create_test_task(&client, &proj_a, "Task Done", Some("low")).await;
+    let _task_other = create_test_task(&client, &proj_b, "Task B", None).await;
+
+    call(
+        &client,
+        "update_task",
+        json!({ "task_id": task_prog, "status": "in_progress" }),
+    )
+    .await;
+    call(
+        &client,
+        "update_task",
+        json!({ "task_id": task_done, "status": "done" }),
+    )
+    .await;
+
+    let all_a = text_json(&call(&client, "list_tasks", json!({ "project_id": proj_a })).await);
+    let all_a_array = all_a.as_array().expect("array");
+    assert_eq!(all_a_array.len(), 3);
+    assert!(all_a_array.iter().all(|t| t["project_id"] == proj_a));
+
+    let by_path = text_json(&call(&client, "list_tasks", json!({ "path": "/dev/tasks-a" })).await);
+    assert_eq!(by_path.as_array().expect("array").len(), 3);
+
+    let filtered_todo = text_json(
+        &call(
+            &client,
+            "list_tasks",
+            json!({ "project_id": proj_a, "status": "todo" }),
+        )
+        .await,
+    );
+    let todo_tasks = filtered_todo.as_array().expect("array");
+    assert_eq!(todo_tasks.len(), 1);
+    assert_eq!(todo_tasks[0]["id"], task_todo);
+
+    let filtered_prog = text_json(
+        &call(
+            &client,
+            "list_tasks",
+            json!({ "project_id": proj_a, "status": "in_progress" }),
+        )
+        .await,
+    );
+    let prog_tasks = filtered_prog.as_array().expect("array");
+    assert_eq!(prog_tasks.len(), 1);
+    assert_eq!(prog_tasks[0]["id"], task_prog);
+    assert_eq!(prog_tasks[0]["status"], "in_progress");
+
+    let filtered_done = text_json(
+        &call(
+            &client,
+            "list_tasks",
+            json!({ "project_id": proj_a, "status": "done" }),
+        )
+        .await,
+    );
+    let done_tasks = filtered_done.as_array().expect("array");
+    assert_eq!(done_tasks.len(), 1);
+    assert_eq!(done_tasks[0]["id"], task_done);
+
+    let bad_project = call(
+        &client,
+        "list_tasks",
+        json!({ "project_id": uuid::Uuid::now_v7().to_string() }),
+    )
+    .await;
+    assert_eq!(bad_project.is_error, Some(true));
+
+    client.cancel().await.expect("cancel client failed");
+    let _ = server_task.await;
+}
+
+#[tokio::test]
+async fn test_update_task_persistence_and_activity() {
+    let server = setup_test_server().await;
+    let db = server.db.clone();
+    let (client, server_task) = connect(server).await;
+
+    let project_id = register_test_project(&client, "Task Update Proj", "/dev/task-update").await;
+    let task_id = create_test_task(&client, &project_id, "Original Title", Some("low")).await;
+
+    let updated = call(
+        &client,
+        "update_task",
+        json!({
+            "task_id": task_id,
+            "title": "Modified Title",
+            "status": "in_progress",
+            "priority": "urgent"
+        }),
+    )
+    .await;
+    assert_eq!(updated.is_error, Some(false));
+    let updated_json = text_json(&updated);
+    assert_eq!(updated_json["title"], "Modified Title");
+    assert_eq!(updated_json["status"], "in_progress");
+    assert_eq!(updated_json["priority"], "urgent");
+
+    let tasks = text_json(&call(&client, "list_tasks", json!({ "project_id": project_id })).await);
+    let task = tasks
+        .as_array()
+        .expect("array")
+        .iter()
+        .find(|t| t["id"] == task_id)
+        .expect("task found");
+    assert_eq!(task["title"], "Modified Title");
+    assert_eq!(task["status"], "in_progress");
+    assert_eq!(task["priority"], "urgent");
+
+    let unknown_uuid = uuid::Uuid::now_v7().to_string();
+    let unknown_res = call(
+        &client,
+        "update_task",
+        json!({ "task_id": unknown_uuid, "title": "Nope" }),
+    )
+    .await;
+    assert_eq!(unknown_res.is_error, Some(true));
+
+    let malformed_res = call(
+        &client,
+        "update_task",
+        json!({ "task_id": "not-a-uuid", "title": "Nope" }),
+    )
+    .await;
+    assert_eq!(malformed_res.is_error, Some(true));
+
+    let parsed_task_id = uuid::Uuid::parse_str(&task_id).expect("uuid");
+    let activities = db.list_activity(50).await.expect("list activity");
+    assert!(activities.iter().any(|a| {
+        a.action == saispace_core::models::ActionKind::Update
+            && a.entity == saispace_core::models::EntityKind::Task
+            && a.entity_id == Some(parsed_task_id)
+    }));
+
+    client.cancel().await.expect("cancel client failed");
+    let _ = server_task.await;
+}
+
+#[tokio::test]
+async fn test_memory_scope_all_and_orphan_isolation() {
+    let server = setup_test_server().await;
+    let db = server.db.clone();
+    let (client, server_task) = connect(server).await;
+
+    let proj_a = register_test_project(&client, "Scope Alpha", "/dev/scope-alpha").await;
+    let proj_b = register_test_project(&client, "Scope Beta", "/dev/scope-beta").await;
+
+    call(
+        &client,
+        "save_memory",
+        json!({
+            "project_id": proj_a,
+            "title": "Alpha Secrets",
+            "content": "Redis clustering architecture",
+            "kind": "architecture",
+            "topic_key": "arch/clustering"
+        }),
+    )
+    .await;
+
+    call(
+        &client,
+        "save_memory",
+        json!({
+            "project_id": proj_b,
+            "title": "Beta Database",
+            "content": "Postgres replication pipeline",
+            "kind": "decision",
+            "topic_key": "db/replication"
+        }),
+    )
+    .await;
+
+    let scoped_search = text_json(
+        &call(
+            &client,
+            "search_memory",
+            json!({ "query": "replication", "project_id": proj_a }),
+        )
+        .await,
+    );
+    assert_eq!(scoped_search.as_array().expect("array").len(), 0);
+
+    let all_search = text_json(
+        &call(
+            &client,
+            "search_memory",
+            json!({ "query": "replication", "all": true }),
+        )
+        .await,
+    );
+    let all_hits = all_search.as_array().expect("array");
+    assert_eq!(all_hits.len(), 1);
+    assert_eq!(all_hits[0]["title"], "Beta Database");
+
+    db.save_memory(saispace_core::models::SaveMemoryInput {
+        project_id: None,
+        project_name: Some("UnregisteredExternal".to_string()),
+        kind: saispace_core::models::MemoryKind::Note,
+        title: "Orphaned Formula".to_string(),
+        content: "Proprietary quantum formula 42".to_string(),
+        topic_key: Some("secret/quantum".to_string()),
+    })
+    .await
+    .expect("save orphan memory");
+
+    let context =
+        text_json(&call(&client, "memory_context", json!({ "project_id": proj_a })).await);
+    let memories = context["memories"].as_array().expect("memories array");
+    assert!(memories.iter().all(|m| m["title"] != "Orphaned Formula"));
+    let preferences = context["preferences"]
+        .as_array()
+        .expect("preferences array");
+    assert!(preferences.iter().all(|p| p["title"] != "Orphaned Formula"));
+
+    let orphan_search = text_json(
+        &call(
+            &client,
+            "search_memory",
+            json!({ "query": "quantum", "project_id": proj_a }),
+        )
+        .await,
+    );
+    assert_eq!(orphan_search.as_array().expect("array").len(), 0);
+
+    client.cancel().await.expect("cancel client failed");
+    let _ = server_task.await;
+}
+
+#[tokio::test]
+async fn test_memory_context_path_and_cwd_fallback() {
+    let server = setup_test_server().await;
+    let (client, server_task) = connect(server).await;
+
+    let temp_registered =
+        std::env::temp_dir().join(format!("saispace-mcp-ctx-{}", uuid::Uuid::now_v7()));
+    std::fs::create_dir_all(&temp_registered).expect("create registered dir");
+    let registered_path = std::fs::canonicalize(&temp_registered)
+        .expect("canonicalize")
+        .to_string_lossy()
+        .into_owned();
+
+    let temp_unregistered =
+        std::env::temp_dir().join(format!("saispace-mcp-unreg-{}", uuid::Uuid::now_v7()));
+    std::fs::create_dir_all(&temp_unregistered).expect("create unregistered dir");
+    let unregistered_path = std::fs::canonicalize(&temp_unregistered)
+        .expect("canonicalize")
+        .to_string_lossy()
+        .into_owned();
+
+    let proj_id = register_test_project(&client, "Context Proj", &registered_path).await;
+
+    call(
+        &client,
+        "save_memory",
+        json!({
+            "project_id": proj_id,
+            "title": "Local Context Memory",
+            "content": "Specific project details",
+            "kind": "note"
+        }),
+    )
+    .await;
+
+    call(
+        &client,
+        "save_memory",
+        json!({
+            "title": "Global Preference",
+            "content": "Always prefer concise Spanish",
+            "kind": "preference",
+            "global": true
+        }),
+    )
+    .await;
+
+    let path_context = text_json(
+        &call(
+            &client,
+            "memory_context",
+            json!({ "path": registered_path }),
+        )
+        .await,
+    );
+    assert_eq!(path_context["project"]["id"], proj_id);
+    assert_eq!(path_context["memories"].as_array().expect("array").len(), 1);
+    assert_eq!(
+        path_context["preferences"].as_array().expect("array").len(),
+        1
+    );
+
+    let unreg_context = text_json(
+        &call(
+            &client,
+            "memory_context",
+            json!({ "path": unregistered_path }),
+        )
+        .await,
+    );
+    assert!(unreg_context["project"].is_null());
+    assert_eq!(
+        unreg_context["memories"].as_array().expect("array").len(),
+        0
+    );
+    assert_eq!(
+        unreg_context["preferences"]
+            .as_array()
+            .expect("array")
+            .len(),
+        1
+    );
+
+    let cwd_fallback_context = text_json(&call(&client, "memory_context", json!({})).await);
+    assert_eq!(
+        cwd_fallback_context["preferences"]
+            .as_array()
+            .expect("array")
+            .len(),
+        1
+    );
+
+    let _ = std::fs::remove_dir_all(&temp_registered);
+    let _ = std::fs::remove_dir_all(&temp_unregistered);
+    client.cancel().await.expect("cancel client failed");
+    let _ = server_task.await;
+}
+
+#[tokio::test]
+async fn test_save_memory_git_autoregistration_and_root_rejection() {
+    let server = setup_test_server().await;
+    let db = server.db.clone();
+    let (client, server_task) = connect(server).await;
+
+    let temp_repo = std::env::temp_dir().join(format!("saispace-mcp-git-{}", uuid::Uuid::now_v7()));
+    std::fs::create_dir_all(temp_repo.join(".git")).expect("create git repo fixture");
+    let repo_path = std::fs::canonicalize(&temp_repo)
+        .expect("canonicalize")
+        .to_string_lossy()
+        .into_owned();
+    let repo_name = temp_repo
+        .file_name()
+        .expect("repo file name")
+        .to_string_lossy()
+        .into_owned();
+
+    let orphan = db
+        .save_memory(saispace_core::models::SaveMemoryInput {
+            project_id: None,
+            project_name: Some(repo_name.clone()),
+            kind: saispace_core::models::MemoryKind::Note,
+            title: "Pre-existing orphan note".to_string(),
+            content: "Content saved before repo was registered".to_string(),
+            topic_key: Some("notes/pre".to_string()),
+        })
+        .await
+        .expect("save orphan");
+
+    let saved = call(
+        &client,
+        "save_memory",
+        json!({
+            "path": repo_path,
+            "title": "Git Architecture",
+            "content": "Repository design details",
+            "kind": "architecture"
+        }),
+    )
+    .await;
+    assert_eq!(saved.is_error, Some(false));
+    let saved_json = text_json(&saved);
+    let auto_project_id = saved_json["memory"]["project_id"]
+        .as_str()
+        .expect("project id string")
+        .to_string();
+
+    let projects = text_json(&call(&client, "list_projects", json!({})).await);
+    let auto_project = projects
+        .as_array()
+        .expect("array")
+        .iter()
+        .find(|p| p["id"] == auto_project_id)
+        .expect("auto-registered project in list_projects");
+    assert_eq!(auto_project["name"], repo_name);
+    assert_eq!(auto_project["path"], repo_path);
+
+    let linked_orphan = db.get_memory(orphan.id).await.expect("get orphan");
+    let parsed_project_id = uuid::Uuid::parse_str(&auto_project_id).expect("uuid");
+    assert_eq!(linked_orphan.project_id, Some(parsed_project_id));
+
+    let root_res = call(
+        &client,
+        "save_memory",
+        json!({
+            "path": "/",
+            "title": "Root Memory",
+            "content": "Root forbidden content"
+        }),
+    )
+    .await;
+    assert_eq!(root_res.is_error, Some(true));
+    let err_msg = root_res
+        .content
+        .first()
+        .and_then(|c| c.as_text())
+        .map(|t| t.text.as_str())
+        .expect("error text");
+    assert!(err_msg.contains("no project for this directory"));
+
+    let _ = std::fs::remove_dir_all(&temp_repo);
+    client.cancel().await.expect("cancel client failed");
+    let _ = server_task.await;
 }

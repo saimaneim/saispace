@@ -181,7 +181,7 @@ impl SaiSpaceServer {
 
     #[tool(
         name = "update_project_context",
-        description = "Update or append context notes and key decisions for a project"
+        description = "Update or append context notes and key decisions for a project, by project_id or path"
     )]
     async fn update_project_context(
         &self,

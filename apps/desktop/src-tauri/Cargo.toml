@@ -17,5 +17,8 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "query"] }
 
+[dev-dependencies]
+tempfile = "3"
+
 [lints]
 workspace = true

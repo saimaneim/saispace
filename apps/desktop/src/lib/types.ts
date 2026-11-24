@@ -151,8 +151,32 @@ export interface Memory {
   title: string;
   content: string;
   topic_key: string | null;
+  pinned: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface UpdateMemoryInput {
+  title?: string;
+  content?: string;
+  kind?: MemoryKind;
+  topic_key?: string;
+}
+
+export interface AgentContext {
+  text: string;
+  bytes: number;
+}
+
+export interface OrphanGroup {
+  project_name: string;
+  count: number;
+  last_updated: string;
+}
+
+export interface DuplicatePair {
+  a: Memory;
+  b: Memory;
 }
 
 export interface InstructionFile {

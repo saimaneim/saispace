@@ -1,8 +1,9 @@
 use crate::{CliError, CliResult};
 use clap::Subcommand;
+use saispace_core::memory_render::{excerpt, kind_label, render_context, render_memory};
 use saispace_core::models::{
-    ActionKind, Actor, EntityKind, Memory, MemoryContext, MemoryKind, MemoryScope, Project,
-    RecordActivityInput, SaveMemoryInput,
+    ActionKind, Actor, EntityKind, Memory, MemoryKind, MemoryScope, Project, RecordActivityInput,
+    SaveMemoryInput, UpdateMemoryInput,
 };
 use saispace_core::{Db, default_db_path};
 use std::path::PathBuf;
@@ -12,53 +13,104 @@ use uuid::Uuid;
 pub enum MemoryCommand {
     #[command(about = "Guarda o actualiza (mismo --topic) una memoria del proyecto actual")]
     Save {
-        #[arg(long)]
+        #[arg(help = "Título de la memoria", long)]
         title: String,
+        #[arg(help = "Contenido; usa \"-\" para leerlo de stdin", long)]
+        content: String,
+        #[arg(
+            help = "Tipo: decision, architecture, bugfix, pattern, config, discovery, preference, session_summary, note",
+            long,
+            default_value = "note"
+        )]
+        kind: String,
+        #[arg(help = "Tema para agrupar o actualizar la memoria", long)]
+        topic: Option<String>,
+        #[arg(help = "Memoria global, no ligada al proyecto", long)]
+        global: bool,
+    },
+    #[command(about = "Lista memorias recientes del proyecto y globales")]
+    List {
+        #[arg(
+            help = "Filtra por tipo (decision, architecture, bugfix, pattern, config, discovery, preference, session_summary, note)",
+            long
+        )]
+        kind: Option<String>,
+        #[arg(help = "Muestra memorias de todos los proyectos", long)]
+        all: bool,
+        #[arg(help = "Límite de memorias a mostrar", long, default_value_t = 50)]
+        limit: i64,
+        #[arg(help = "Salida en formato JSON", long)]
+        json: bool,
+    },
+    #[command(about = "Edita una memoria existente")]
+    Edit {
+        id: Uuid,
+        #[arg(long)]
+        title: Option<String>,
         #[arg(help = "Contenido; usa \"-\" para leerlo de stdin")]
         #[arg(long)]
-        content: String,
+        content: Option<String>,
         #[arg(
             help = "decision, architecture, bugfix, pattern, config, discovery, preference, session_summary, note"
         )]
-        #[arg(long, default_value = "note")]
-        kind: String,
+        #[arg(long)]
+        kind: Option<String>,
         #[arg(long)]
         topic: Option<String>,
-        #[arg(help = "Memoria global, no ligada al proyecto")]
-        #[arg(long)]
-        global: bool,
     },
     #[command(about = "Búsqueda FTS5 en memorias, notas, tareas y reglas")]
     Search {
+        #[arg(help = "Texto de búsqueda")]
         query: String,
-        #[arg(help = "Busca en todos los proyectos")]
-        #[arg(long)]
+        #[arg(help = "Busca en todos los proyectos", long)]
         all: bool,
-        #[arg(long, default_value_t = 10)]
+        #[arg(help = "Límite de resultados", long, default_value_t = 10)]
         limit: i64,
-        #[arg(long)]
+        #[arg(help = "Salida en formato JSON", long)]
         json: bool,
     },
     #[command(about = "Índice de memorias del proyecto actual (para el inicio de sesión)")]
     Context {
-        #[arg(long, default_value_t = 12)]
+        #[arg(help = "Límite de memorias en el índice", long, default_value_t = 12)]
         limit: i64,
-        #[arg(long)]
+        #[arg(help = "Salida en formato JSON", long)]
         json: bool,
     },
     #[command(about = "Contenido completo de una memoria")]
     Get {
+        #[arg(help = "Identificador de la memoria")]
         id: Uuid,
-        #[arg(long)]
+        #[arg(help = "Salida en formato JSON", long)]
         json: bool,
     },
+    #[command(about = "Fija una memoria")]
+    Pin { id: Uuid },
+    #[command(about = "Desfija una memoria")]
+    Unpin { id: Uuid },
     #[command(about = "Elimina una memoria")]
-    Rm { id: Uuid },
+    Rm {
+        #[arg(help = "Identificador de la memoria a eliminar")]
+        id: Uuid,
+    },
+    #[command(about = "Detecta posibles memorias duplicadas")]
+    Dupes {
+        #[arg(help = "Busca en todos los proyectos")]
+        #[arg(long)]
+        all: bool,
+    },
     #[command(about = "Importa las observaciones de engram (idempotente)")]
     ImportEngram {
-        #[arg(long)]
+        #[arg(help = "Ruta opcional a la base de datos de engram", long)]
         db: Option<PathBuf>,
     },
+    #[command(about = "Vincula memorias huérfanas a un proyecto")]
+    Link {
+        project_name: String,
+        #[arg(long)]
+        path: Option<PathBuf>,
+    },
+    #[command(about = "Lista grupos de memorias sin proyecto")]
+    Orphans,
 }
 
 fn actor() -> Actor {
@@ -73,112 +125,6 @@ async fn current_project(db: &Db, register: bool) -> CliResult<Option<Project>> 
     let cwd = std::env::current_dir()?;
     let cwd = cwd.canonicalize().unwrap_or(cwd);
     Ok(db.project_for_path(&cwd, register).await?)
-}
-
-/// Hook output above ~10 KB is cut to a 2 KB preview by Claude Code.
-const CONTEXT_BUDGET: usize = 6_000;
-
-fn excerpt(text: &str, max: usize) -> String {
-    let flat = text
-        .lines()
-        .map(|l| l.trim().trim_start_matches('#').trim())
-        .filter(|l| !l.is_empty())
-        .collect::<Vec<_>>()
-        .join(" · ");
-    if flat.chars().count() <= max {
-        return flat;
-    }
-    let cut: String = flat.chars().take(max).collect();
-    format!("{}…", cut.trim_end())
-}
-
-fn kind_label(kind: MemoryKind) -> &'static str {
-    match kind {
-        MemoryKind::Decision => "decision",
-        MemoryKind::Architecture => "architecture",
-        MemoryKind::Bugfix => "bugfix",
-        MemoryKind::Pattern => "pattern",
-        MemoryKind::Config => "config",
-        MemoryKind::Discovery => "discovery",
-        MemoryKind::Preference => "preference",
-        MemoryKind::SessionSummary => "session_summary",
-        MemoryKind::Note => "note",
-    }
-}
-
-fn render_context(project: Option<&Project>, context: &MemoryContext) -> String {
-    use std::fmt::Write as _;
-    let mut out = String::new();
-    match project {
-        Some(p) => {
-            let _ = writeln!(out, "# Memoria de {} ({})", p.name, p.path);
-        }
-        None => out.push_str("# Memoria global (este directorio aún no tiene memorias propias)\n"),
-    }
-    out.push_str(
-        "Abre una con `sai memory get <id>`; busca con `sai memory search \"<texto>\"`.\n\
-         Guarda decisiones, causas raíz y pendientes con `sai memory save --topic <tema>` (mismo tema = actualiza).\n",
-    );
-    if !context.preferences.is_empty() {
-        out.push_str("\n## Preferencias del usuario\n");
-        for m in &context.preferences {
-            let _ = writeln!(
-                out,
-                "- {}: {} ({})",
-                m.title,
-                excerpt(&m.content, 240),
-                m.id
-            );
-        }
-    }
-    if let Some(m) = &context.last_session {
-        let _ = writeln!(
-            out,
-            "\n## Última sesión · {} · {}\n{}",
-            m.updated_at.format("%Y-%m-%d"),
-            m.id,
-            excerpt(&m.content, 700)
-        );
-    }
-    if !context.memories.is_empty() {
-        out.push_str("\n## Memorias\n");
-        for m in &context.memories {
-            let line = format!(
-                "- [{}] {} · {} · {}\n",
-                kind_label(m.kind),
-                excerpt(&m.title, 90),
-                m.updated_at.format("%Y-%m-%d"),
-                m.id
-            );
-            if out.len() + line.len() > CONTEXT_BUDGET {
-                out.push_str("- … más con `sai memory search`\n");
-                break;
-            }
-            out.push_str(&line);
-        }
-    }
-    if context.preferences.is_empty()
-        && context.last_session.is_none()
-        && context.memories.is_empty()
-    {
-        out.push_str("\nSin memorias todavía.\n");
-    }
-    out
-}
-
-fn render_memory(m: &Memory) -> String {
-    format!(
-        "# {}\n{} · {} · {} · actualizada {}{}\n\n{}",
-        m.title,
-        kind_label(m.kind),
-        m.project_name.as_deref().unwrap_or("global"),
-        m.id,
-        m.updated_at.format("%Y-%m-%d %H:%M"),
-        m.topic_key
-            .as_deref()
-            .map_or_else(String::new, |t| format!(" · tema {t}")),
-        m.content.trim()
-    )
 }
 
 fn print_memory_line(m: &Memory) {
@@ -262,6 +208,204 @@ async fn save(
     Ok(())
 }
 
+async fn list(db: &Db, kind: Option<String>, all: bool, limit: i64, json: bool) -> CliResult<()> {
+    let target_kind = match kind.as_deref() {
+        Some(raw) => Some(
+            MemoryKind::parse(raw)
+                .ok_or_else(|| CliError::Usage(format!("unknown memory kind '{raw}'")))?,
+        ),
+        None => None,
+    };
+    let project = current_project(db, false).await?;
+    let scope = if all {
+        MemoryScope::All
+    } else {
+        MemoryScope::for_project(project.as_ref().map(|p| p.id))
+    };
+    let fetch_limit = if target_kind.is_some() { 200 } else { limit };
+    let mut memories = db.recent_memories(scope, fetch_limit).await?;
+    if let Some(target) = target_kind {
+        memories.retain(|m| m.kind == target);
+        let max = usize::try_from(limit.max(0)).unwrap_or(0);
+        memories.truncate(max);
+    }
+    if json {
+        crate::out!("{}", serde_json::to_string_pretty(&memories)?);
+        return Ok(());
+    }
+    if memories.is_empty() {
+        crate::out!("Sin memorias.");
+        return Ok(());
+    }
+    let header = if all {
+        format!("# Memorias de todos los proyectos · {}", memories.len())
+    } else if let Some(p) = &project {
+        format!("# Memorias de {} · {}", p.name, memories.len())
+    } else {
+        format!("# Memorias globales · {}", memories.len())
+    };
+    crate::out!("{header}");
+    let mut groups: Vec<(MemoryKind, Vec<&Memory>)> = Vec::new();
+    for m in &memories {
+        if let Some((_, list)) = groups.iter_mut().find(|(k, _)| *k == m.kind) {
+            list.push(m);
+        } else {
+            groups.push((m.kind, vec![m]));
+        }
+    }
+    for (kind, items) in groups {
+        crate::out!("\n## {}", kind_label(kind));
+        for m in items {
+            print_memory_line(m);
+        }
+    }
+    Ok(())
+}
+
+async fn search(db: &Db, query: &str, all: bool, limit: i64, json: bool) -> CliResult<()> {
+    let scope = if all {
+        MemoryScope::All
+    } else {
+        MemoryScope::for_project(current_project(db, false).await?.map(|p| p.id))
+    };
+    let hits = db.search_scoped(query, scope, Some(limit)).await?;
+    if json {
+        crate::out!("{}", serde_json::to_string_pretty(&hits)?);
+    } else {
+        for h in &hits {
+            crate::out!(
+                "{:?}  {}  {}\n    {}",
+                h.kind,
+                h.id,
+                h.title,
+                excerpt(&h.snippet, 200)
+            );
+        }
+        if hits.is_empty() {
+            crate::out!("sin resultados");
+        }
+    }
+    Ok(())
+}
+
+async fn rm(db: &Db, id: Uuid) -> CliResult<()> {
+    let memory = db.get_memory(id).await?;
+    db.delete_memory(id).await?;
+    crate::out!("eliminada {}  {}", memory.id, memory.title);
+    Ok(())
+}
+
+async fn edit(
+    db: &Db,
+    id: Uuid,
+    title: Option<String>,
+    content: Option<String>,
+    kind: Option<&str>,
+    topic: Option<String>,
+) -> CliResult<()> {
+    if title.is_none() && content.is_none() && kind.is_none() && topic.is_none() {
+        return Err(CliError::Usage(
+            "indica al menos un campo a modificar (--title, --content, --kind, --topic)"
+                .to_string(),
+        ));
+    }
+    let parsed_kind = match kind {
+        Some(k) => Some(
+            MemoryKind::parse(k)
+                .ok_or_else(|| CliError::Usage(format!("unknown memory kind '{k}'")))?,
+        ),
+        None => None,
+    };
+    let content = match content {
+        Some(c) if c == "-" => Some(std::io::read_to_string(std::io::stdin())?),
+        Some(c) => Some(c),
+        None => None,
+    };
+    let updated = db
+        .update_memory(
+            id,
+            UpdateMemoryInput {
+                title,
+                content,
+                kind: parsed_kind,
+                topic_key: topic,
+            },
+        )
+        .await?;
+    db.record_activity(RecordActivityInput {
+        project_id: updated.project_id,
+        actor: actor(),
+        action: ActionKind::Update,
+        entity: EntityKind::Memory,
+        entity_id: Some(updated.id),
+        details: Some(serde_json::json!({ "title": updated.title })),
+    })
+    .await?;
+    print_memory_line(&updated);
+    Ok(())
+}
+
+async fn list_orphans(db: &Db) -> CliResult<()> {
+    let groups = db.orphan_memory_groups().await?;
+    if groups.is_empty() {
+        crate::out!("sin memorias huérfanas");
+    } else {
+        for g in &groups {
+            crate::out!(
+                "{}  ({} {})  {}",
+                g.project_name,
+                g.count,
+                if g.count == 1 { "memoria" } else { "memorias" },
+                g.last_updated.format("%Y-%m-%d %H:%M")
+            );
+        }
+    }
+    Ok(())
+}
+
+async fn link_orphans(db: &Db, project_name: &str, path: Option<PathBuf>) -> CliResult<()> {
+    let target = match path {
+        Some(p) => p,
+        None => std::env::current_dir()?,
+    };
+    let target = target.canonicalize().unwrap_or(target);
+    let project = db.project_for_path(&target, true).await?.ok_or_else(|| {
+        CliError::Usage(
+            "este directorio no es un proyecto: no se pudo resolver ni registrar".to_string(),
+        )
+    })?;
+    let linked = db.link_orphans_to_project(project_name, project.id).await?;
+    db.record_activity(RecordActivityInput {
+        project_id: Some(project.id),
+        actor: actor(),
+        action: ActionKind::Update,
+        entity: EntityKind::Memory,
+        entity_id: None,
+        details: Some(serde_json::json!({
+            "project_name": project_name,
+            "linked": linked,
+        })),
+    })
+    .await?;
+    crate::out!("{linked} memorias vinculadas a {}", project.name);
+    Ok(())
+}
+
+async fn set_pinned(db: &Db, id: Uuid, pinned: bool) -> CliResult<()> {
+    let memory = db.set_memory_pinned(id, pinned).await?;
+    db.record_activity(RecordActivityInput {
+        project_id: memory.project_id,
+        actor: actor(),
+        action: ActionKind::Update,
+        entity: EntityKind::Memory,
+        entity_id: Some(id),
+        details: Some(serde_json::json!({ "title": memory.title, "pinned": pinned })),
+    })
+    .await?;
+    crate::out!("{} {id}", if pinned { "fijada" } else { "desfijada" });
+    Ok(())
+}
+
 async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
     let db = Db::open(&default_db_path()?).await?;
     match cmd {
@@ -272,35 +416,25 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
             topic,
             global,
         } => save(&db, title, content, &kind, topic, global).await?,
+        MemoryCommand::List {
+            kind,
+            all,
+            limit,
+            json,
+        } => list(&db, kind, all, limit, json).await?,
+        MemoryCommand::Edit {
+            id,
+            title,
+            content,
+            kind,
+            topic,
+        } => edit(&db, id, title, content, kind.as_deref(), topic).await?,
         MemoryCommand::Search {
             query,
             all,
             limit,
             json,
-        } => {
-            let scope = if all {
-                MemoryScope::All
-            } else {
-                MemoryScope::for_project(current_project(&db, false).await?.map(|p| p.id))
-            };
-            let hits = db.search_scoped(&query, scope, Some(limit)).await?;
-            if json {
-                crate::out!("{}", serde_json::to_string_pretty(&hits)?);
-            } else {
-                for h in &hits {
-                    crate::out!(
-                        "{:?}  {}  {}\n    {}",
-                        h.kind,
-                        h.id,
-                        h.title,
-                        excerpt(&h.snippet, 200)
-                    );
-                }
-                if hits.is_empty() {
-                    crate::out!("sin resultados");
-                }
-            }
-        }
+        } => search(&db, &query, all, limit, json).await?,
         MemoryCommand::Context { limit, json } => {
             let project = current_project(&db, false).await?;
             let scope = MemoryScope::for_project(project.as_ref().map(|p| p.id));
@@ -319,9 +453,24 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
                 crate::out!("{}", render_memory(&memory));
             }
         }
-        MemoryCommand::Rm { id } => {
-            db.delete_memory(id).await?;
-            crate::out!("eliminada {id}");
+        MemoryCommand::Rm { id } => rm(&db, id).await?,
+        MemoryCommand::Pin { id } => set_pinned(&db, id, true).await?,
+        MemoryCommand::Unpin { id } => set_pinned(&db, id, false).await?,
+        MemoryCommand::Dupes { all } => {
+            let scope = if all {
+                MemoryScope::All
+            } else {
+                MemoryScope::for_project(current_project(&db, false).await?.map(|p| p.id))
+            };
+            let pairs = db.duplicate_pairs(scope, 50).await?;
+            if pairs.is_empty() {
+                crate::out!("sin duplicados");
+            } else {
+                for pair in &pairs {
+                    crate::out!("{}  {}", pair.a.id, pair.a.title);
+                    crate::out!("  ≈ {}  {}", pair.b.id, pair.b.title);
+                }
+            }
         }
         MemoryCommand::ImportEngram { db: source } => {
             let source = match source {
@@ -332,6 +481,10 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
             };
             let report = db.import_engram(&source).await?;
             crate::out!("{}", serde_json::to_string_pretty(&report)?);
+        }
+        MemoryCommand::Orphans => list_orphans(&db).await?,
+        MemoryCommand::Link { project_name, path } => {
+            link_orphans(&db, &project_name, path).await?;
         }
     }
     Ok(())

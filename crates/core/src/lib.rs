@@ -1,12 +1,14 @@
 pub mod db;
 pub mod error;
 pub mod inventory;
+pub mod memory_render;
 pub mod models;
 pub mod paths;
 pub mod tech;
 pub mod vault;
 
 pub use db::Db;
+pub use db::DuplicatePair;
 pub use error::{CoreError, CoreResult};
 pub use models::*;
 pub use paths::{

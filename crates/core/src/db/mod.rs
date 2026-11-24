@@ -8,6 +8,10 @@ use std::time::Duration;
 pub mod activity;
 pub mod import;
 pub mod memory;
+pub mod memory_dupes;
+pub mod memory_edit;
+pub mod memory_orphans;
+pub mod memory_pin;
 pub mod project;
 pub mod search;
 pub mod secret;
@@ -15,6 +19,9 @@ pub mod task;
 pub mod tech_rule;
 pub mod technology;
 mod validation;
+
+pub use memory_dupes::DuplicatePair;
+pub use memory_orphans::OrphanGroup;
 
 #[derive(Debug, Clone)]
 pub struct Db {

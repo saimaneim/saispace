@@ -79,7 +79,7 @@ impl SaiSpaceServer {
 
     #[tool(
         name = "upsert_tech_rule",
-        description = "Create or replace a short rule anchored to a technology and an optional version prefix (e.g. technology 'tauri', version '2'). The technology must match a dependency name as detected in the stack"
+        description = "Create or replace a short rule anchored to a technology and an optional version prefix (e.g. technology 'tauri', version '2')"
     )]
     async fn upsert_tech_rule(
         &self,
