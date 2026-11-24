@@ -2,12 +2,15 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   ActivityEvent,
+  AgentContext,
   AiInventory,
   ContextFile,
   CreateProjectInput,
   CreateTaskInput,
   DirectoryListing,
+  DuplicatePair,
   Memory,
+  OrphanGroup,
   Project,
   SearchHit,
   SecretGrant,
@@ -15,6 +18,7 @@ import type {
   Task,
   Technology,
   TechRule,
+  UpdateMemoryInput,
   UpdateProjectInput,
   UpdateTaskInput,
   UpsertTechRuleInput,
@@ -118,6 +122,9 @@ export const api = {
   listMemories: (projectId: string | null, limit?: number) =>
     invokeOrFallback<Memory[]>("list_memories", { projectId, limit }, []),
 
+  memoryDuplicates: (projectId?: string | null) =>
+    invokeOrFallback<DuplicatePair[]>("memory_duplicates", { projectId: projectId ?? null }, []),
+
   getMemory: (id: string) => invokeOrFallback<Memory>("get_memory", { id }),
 
   globalAiInventory: () =>
@@ -147,6 +154,24 @@ export const api = {
   techIcon: (name: string) => invokeOrFallback<string | null>("tech_icon", { name }, null),
 
   deleteMemory: (id: string) => invokeOrFallback<void>("delete_memory", { id }),
+
+  updateMemory: (id: string, input: UpdateMemoryInput) =>
+    invokeOrFallback<Memory>("update_memory", { id, input }),
+  setMemoryPinned: (id: string, pinned: boolean) =>
+    invokeOrFallback<Memory>("set_memory_pinned", { id, pinned }),
+  agentMemoryContext: (projectId?: string | null) =>
+    invokeOrFallback<AgentContext>("agent_memory_context", {
+      projectId: projectId ?? null,
+    }),
+
+  listOrphanMemoryGroups: () =>
+    invokeOrFallback<OrphanGroup[]>("list_orphan_memory_groups", undefined, []),
+
+  linkOrphanMemories: (projectName: string, projectId: string) =>
+    invokeOrFallback<number>("link_orphan_memories", {
+      projectName,
+      projectId,
+    }),
 
   openUrl: (url: string) => invokeOrFallback<void>("open_url", { url }),
 

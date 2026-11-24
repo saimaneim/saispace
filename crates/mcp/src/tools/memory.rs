@@ -23,6 +23,7 @@ pub struct SaveMemoryParams {
     pub project_id: Option<String>,
     pub path: Option<String>,
     pub global: Option<bool>,
+    pub pinned: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -68,6 +69,7 @@ struct ContextResponse {
     project: Option<Project>,
     preferences: Vec<ContextItem>,
     last_session: Option<ContextItem>,
+    pinned: Vec<ContextItem>,
     memories: Vec<ContextItem>,
     hint: &'static str,
 }
@@ -117,7 +119,7 @@ impl SaiSpaceServer {
 impl SaiSpaceServer {
     #[tool(
         name = "save_memory",
-        description = "Persist a durable memory (decision, architecture, bugfix, pattern, config, discovery, preference, session_summary, note). Same topic_key in the same project replaces the previous memory. Scope: project_id or path; global=true for cross-project knowledge"
+        description = "Persist a durable memory (decision, architecture, bugfix, pattern, config, discovery, preference, session_summary, note). Same topic_key in the same project replaces the previous memory. Scope: the current project (project_id, path, or the working directory); global=true for cross-project knowledge"
     )]
     async fn save_memory(
         &self,
@@ -145,7 +147,7 @@ impl SaiSpaceServer {
                 Err(result) => return result,
             }
         };
-        let saved = match self
+        let mut saved = match self
             .db
             .save_memory(SaveMemoryInput {
                 project_id,
@@ -160,6 +162,12 @@ impl SaiSpaceServer {
             Ok(memory) => memory,
             Err(err) => return format_error(&err),
         };
+        if let Some(pinned) = params.pinned {
+            saved = match self.db.set_memory_pinned(saved.id, pinned).await {
+                Ok(memory) => memory,
+                Err(err) => return format_error(&err),
+            };
+        }
         let action = if saved.created_at == saved.updated_at {
             ActionKind::Create
         } else {
@@ -224,6 +232,11 @@ impl SaiSpaceServer {
                 .last_session
                 .as_ref()
                 .map(|m| ContextItem::new(m, 800)),
+            pinned: context
+                .pinned
+                .iter()
+                .map(|m| ContextItem::new(m, 400))
+                .collect(),
             memories: context
                 .memories
                 .iter()

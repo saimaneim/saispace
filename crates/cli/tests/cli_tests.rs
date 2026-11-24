@@ -207,6 +207,28 @@ fn memory_save_upsert_search_context_and_validation() {
         "the index lists titles only"
     );
     let id = items[0]["id"].as_str().expect("id");
+
+    let pinned = sb.sai(&repo, &["memory", "pin", id]);
+    assert!(pinned.status.success());
+    assert!(stdout(&pinned).contains(&format!("fijada {id}")));
+
+    let pinned_ctx = stdout(&sb.sai(&repo, &["memory", "context"]));
+    assert!(pinned_ctx.contains("## Fijadas"));
+    assert!(pinned_ctx.contains(&format!("- [note] Decisión de auth · {id}")));
+    assert!(pinned_ctx.contains("Pasamos a tokens rotativos"));
+
+    let pinned_json = sb.sai(&repo, &["memory", "context", "--json"]);
+    let pinned_obj: serde_json::Value = serde_json::from_slice(&pinned_json.stdout).expect("json");
+    assert_eq!(pinned_obj["pinned"].as_array().expect("array").len(), 1);
+    assert_eq!(pinned_obj["memories"].as_array().expect("array").len(), 0);
+
+    let unpinned = sb.sai(&repo, &["memory", "unpin", id]);
+    assert!(unpinned.status.success());
+    assert!(stdout(&unpinned).contains(&format!("desfijada {id}")));
+
+    let unpinned_ctx = stdout(&sb.sai(&repo, &["memory", "context"]));
+    assert!(!unpinned_ctx.contains("## Fijadas"));
+
     let full = stdout(&sb.sai(&repo, &["memory", "get", id]));
     assert!(full.starts_with("# Decisión de auth\nnote · "), "{full}");
     assert!(full.contains("Pasamos a tokens rotativos"));
@@ -232,8 +254,187 @@ fn memory_save_upsert_search_context_and_validation() {
     );
     assert_eq!(bad_kind.status.code(), Some(2));
 
-    assert!(sb.sai(&repo, &["memory", "rm", id]).status.success());
+    let rm = sb.sai(&repo, &["memory", "rm", id]);
+    assert!(rm.status.success());
+    assert!(stdout(&rm).contains(&format!("eliminada {id}  Decisión de auth")));
     assert_eq!(sb.sai(&repo, &["memory", "get", id]).status.code(), Some(2));
+}
+
+#[test]
+fn memory_list_grouping_and_filtering() {
+    let sb = Sandbox::new("memory-list-grp");
+    let repo = sb.repo();
+
+    let empty = sb.sai(&repo, &["memory", "list"]);
+    assert!(empty.status.success());
+    assert_eq!(stdout(&empty).trim(), "Sin memorias.");
+
+    let dec = sb.sai(
+        &repo,
+        &[
+            "memory",
+            "save",
+            "--title",
+            "Decisión SQLite",
+            "--content",
+            "Usar SQLite embebido",
+            "--kind",
+            "decision",
+        ],
+    );
+    assert!(dec.status.success());
+
+    let note = sb.sai(
+        &repo,
+        &[
+            "memory",
+            "save",
+            "--title",
+            "Nota general",
+            "--content",
+            "Información adicional",
+            "--kind",
+            "note",
+        ],
+    );
+    assert!(note.status.success());
+
+    let listed = sb.sai(&repo, &["memory", "list"]);
+    assert!(listed.status.success());
+    let list_txt = stdout(&listed);
+    assert!(list_txt.starts_with("# Memorias de repo · 2"), "{list_txt}");
+    assert!(list_txt.contains("## decision"), "{list_txt}");
+    assert!(list_txt.contains("## note"), "{list_txt}");
+    assert!(list_txt.contains("Decisión SQLite"), "{list_txt}");
+    assert!(list_txt.contains("Nota general"), "{list_txt}");
+
+    let filtered = sb.sai(&repo, &["memory", "list", "--kind", "decision"]);
+    assert!(filtered.status.success());
+    let filtered_txt = stdout(&filtered);
+    assert!(
+        filtered_txt.starts_with("# Memorias de repo · 1"),
+        "{filtered_txt}"
+    );
+    assert!(filtered_txt.contains("## decision"), "{filtered_txt}");
+    assert!(filtered_txt.contains("Decisión SQLite"), "{filtered_txt}");
+    assert!(!filtered_txt.contains("## note"), "{filtered_txt}");
+    assert!(!filtered_txt.contains("Nota general"), "{filtered_txt}");
+
+    let bad_kind = sb.sai(&repo, &["memory", "list", "--kind", "inventado"]);
+    assert_eq!(bad_kind.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&bad_kind.stderr).contains("unknown memory kind 'inventado'"));
+}
+
+#[test]
+fn memory_list_scoping_and_cross_project() {
+    let sb = Sandbox::new("memory-list-scope");
+    let repo = sb.repo();
+
+    let saved_local = sb.sai(
+        &repo,
+        &[
+            "memory",
+            "save",
+            "--title",
+            "Memoria local",
+            "--content",
+            "Local repo",
+            "--kind",
+            "note",
+        ],
+    );
+    assert!(saved_local.status.success());
+
+    let repo2 = sb.root.join("repo2");
+    fs::create_dir_all(repo2.join(".git")).expect("mkdir repo2");
+    let saved_other = sb.sai(
+        &repo2,
+        &[
+            "memory",
+            "save",
+            "--title",
+            "Memoria de repo2",
+            "--content",
+            "Contenido repo2",
+            "--kind",
+            "pattern",
+        ],
+    );
+    assert!(saved_other.status.success());
+
+    let list_local = stdout(&sb.sai(&repo, &["memory", "list"]));
+    assert!(!list_local.contains("Memoria de repo2"), "{list_local}");
+
+    let list_all = stdout(&sb.sai(&repo, &["memory", "list", "--all"]));
+    assert!(list_all.contains("Memoria de repo2"), "{list_all}");
+    assert!(list_all.contains("Memoria local"), "{list_all}");
+
+    let saved_global = sb.sai(
+        &repo,
+        &[
+            "memory",
+            "save",
+            "--global",
+            "--title",
+            "Memoria global",
+            "--content",
+            "Aplica en cualquier lugar",
+            "--kind",
+            "preference",
+        ],
+    );
+    assert!(saved_global.status.success());
+
+    let plain_dir = sb.root.join("plain_dir");
+    fs::create_dir_all(&plain_dir).expect("mkdir plain_dir");
+    let global_list = sb.sai(&plain_dir, &["memory", "list"]);
+    assert!(global_list.status.success());
+    let global_txt = stdout(&global_list);
+    assert!(
+        global_txt.starts_with("# Memorias globales · 1"),
+        "{global_txt}"
+    );
+    assert!(global_txt.contains("## preference"), "{global_txt}");
+    assert!(global_txt.contains("Memoria global"), "{global_txt}");
+    assert!(!global_txt.contains("Memoria local"), "{global_txt}");
+    assert!(!global_txt.contains("Memoria de repo2"), "{global_txt}");
+
+    let json_res = sb.sai(&repo, &["memory", "list", "--json"]);
+    assert!(json_res.status.success());
+    let json_val: serde_json::Value = serde_json::from_slice(&json_res.stdout).expect("json");
+    let arr = json_val.as_array().expect("array");
+    assert_eq!(arr.len(), 2);
+
+    let saved_for_rm = sb.sai(
+        &repo,
+        &[
+            "memory",
+            "save",
+            "--title",
+            "Borrame luego",
+            "--content",
+            "Temporal",
+            "--kind",
+            "note",
+        ],
+    );
+    assert!(saved_for_rm.status.success());
+    let rm_json = sb.sai(&repo, &["memory", "list", "--json"]);
+    let rm_val: serde_json::Value = serde_json::from_slice(&rm_json.stdout).expect("json");
+    let target = rm_val
+        .as_array()
+        .expect("array")
+        .iter()
+        .find(|m| m["title"] == "Borrame luego")
+        .expect("found memory");
+    let target_id = target["id"].as_str().expect("id");
+    let rm_res = sb.sai(&repo, &["memory", "rm", target_id]);
+    assert!(rm_res.status.success());
+    let rm_txt = stdout(&rm_res);
+    assert!(
+        rm_txt.contains(&format!("eliminada {target_id}  Borrame luego")),
+        "{rm_txt}"
+    );
 }
 
 fn sai_with_stdin(sb: &Sandbox, args: &[&str], input: &str) -> Output {
@@ -337,4 +538,184 @@ fn secret_run_needs_approval_and_masks_value() {
         ],
     );
     assert_eq!(compared.status.code(), Some(0));
+}
+
+#[test]
+fn memory_edit_updates_fields_and_validates_input() {
+    let sb = Sandbox::new("mem-edit");
+    let repo = sb.repo();
+
+    let save = sb.sai(
+        &repo,
+        &[
+            "memory",
+            "save",
+            "--title",
+            "Original",
+            "--content",
+            "Contenido inicial",
+            "--kind",
+            "note",
+            "--topic",
+            "arch/orig",
+        ],
+    );
+    assert!(save.status.success());
+    let list = sb.sai(&repo, &["memory", "context", "--json"]);
+    let ctx: serde_json::Value = serde_json::from_slice(&list.stdout).expect("json");
+    let id = ctx["memories"][0]["id"].as_str().expect("id");
+
+    let no_fields = sb.sai(&repo, &["memory", "edit", id]);
+    assert_eq!(no_fields.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&no_fields.stderr).contains("indica al menos un campo"));
+
+    let edit = sb.sai(
+        &repo,
+        &[
+            "memory",
+            "edit",
+            id,
+            "--title",
+            "Nuevo titulo",
+            "--kind",
+            "bugfix",
+            "--topic",
+            "arch/nuevo",
+        ],
+    );
+    assert!(
+        edit.status.success(),
+        "{}",
+        String::from_utf8_lossy(&edit.stderr)
+    );
+    let edit_out = stdout(&edit);
+    assert!(edit_out.contains("Nuevo titulo"));
+    assert!(edit_out.contains("Bugfix"));
+
+    let get = sb.sai(&repo, &["memory", "get", id, "--json"]);
+    let mem: serde_json::Value = serde_json::from_slice(&get.stdout).expect("json");
+    assert_eq!(mem["title"], "Nuevo titulo");
+    assert_eq!(mem["kind"], "bugfix");
+    assert_eq!(mem["topic_key"], "arch/nuevo");
+    assert_eq!(mem["content"], "Contenido inicial");
+
+    let stdin_edit = sai_with_stdin(
+        &sb,
+        &["memory", "edit", id, "--content", "-"],
+        "Contenido stdin\n",
+    );
+    assert!(stdin_edit.status.success());
+    let get2 = sb.sai(&repo, &["memory", "get", id, "--json"]);
+    let mem2: serde_json::Value = serde_json::from_slice(&get2.stdout).expect("json");
+    assert_eq!(mem2["content"], "Contenido stdin");
+
+    let clear_topic = sb.sai(&repo, &["memory", "edit", id, "--topic", ""]);
+    assert!(clear_topic.status.success());
+    let get3 = sb.sai(&repo, &["memory", "get", id, "--json"]);
+    let mem3: serde_json::Value = serde_json::from_slice(&get3.stdout).expect("json");
+    assert!(mem3["topic_key"].is_null());
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("rt");
+    runtime.block_on(async {
+        let db = saispace_core::Db::open(&sb.root.join("db/saispace.db"))
+            .await
+            .expect("db");
+        let activity = db.list_activity(10).await.expect("activity");
+        let update_event = activity.iter().find(|e| {
+            e.action == saispace_core::models::ActionKind::Update
+                && e.entity == saispace_core::models::EntityKind::Memory
+        });
+        assert!(update_event.is_some(), "Update activity event was recorded");
+    });
+}
+
+#[test]
+fn memory_orphans_and_linking() {
+    let sb = Sandbox::new("orphans");
+    let repo = sb.repo();
+
+    let initial = stdout(&sb.sai(&repo, &["memory", "orphans"]));
+    assert!(initial.contains("sin memorias huérfanas"));
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("rt");
+    runtime.block_on(async {
+        let db = saispace_core::Db::open(&sb.root.join("db/saispace.db"))
+            .await
+            .expect("db");
+        db.save_memory(saispace_core::models::SaveMemoryInput {
+            project_id: None,
+            project_name: Some("imported-repo".to_string()),
+            kind: saispace_core::models::MemoryKind::Decision,
+            title: "Imported auth strategy".to_string(),
+            content: "JWT stateless tokens".to_string(),
+            topic_key: None,
+        })
+        .await
+        .expect("save");
+    });
+
+    let listed = stdout(&sb.sai(&repo, &["memory", "orphans"]));
+    assert!(listed.contains("imported-repo"));
+    assert!(listed.contains("1 memoria"));
+
+    let linked = stdout(&sb.sai(&repo, &["memory", "link", "imported-repo"]));
+    assert!(linked.contains("1 memorias vinculadas a repo"));
+
+    let after = stdout(&sb.sai(&repo, &["memory", "orphans"]));
+    assert!(after.contains("sin memorias huérfanas"));
+
+    let ctx = sb.sai(&repo, &["memory", "context", "--json"]);
+    let context: serde_json::Value = serde_json::from_slice(&ctx.stdout).expect("json");
+    let items = context["memories"].as_array().expect("array");
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["title"], "Imported auth strategy");
+}
+
+#[test]
+fn memory_dupes_detects_and_prints_pairs() {
+    let sb = Sandbox::new("memory-dupes");
+    let repo = sb.repo();
+
+    let initial = sb.sai(&repo, &["memory", "dupes"]);
+    assert_eq!(initial.status.code(), Some(0));
+    assert!(stdout(&initial).contains("sin duplicados"));
+
+    let m1 = sb.sai(
+        &repo,
+        &[
+            "memory",
+            "save",
+            "--title",
+            "Database connection pooling configuration",
+            "--content",
+            "Usar 5 conexiones",
+        ],
+    );
+    assert_eq!(m1.status.code(), Some(0));
+
+    let m2 = sb.sai(
+        &repo,
+        &[
+            "memory",
+            "save",
+            "--title",
+            "Database connection pooling settings",
+            "--content",
+            "Max 5 conexiones sqlite",
+        ],
+    );
+    assert_eq!(m2.status.code(), Some(0));
+
+    let dupes = sb.sai(&repo, &["memory", "dupes"]);
+    assert_eq!(dupes.status.code(), Some(0));
+    let out = stdout(&dupes);
+    assert!(!out.contains("sin duplicados"));
+    assert!(out.contains("Database connection pooling"));
+    assert!(out.contains("≈"));
 }

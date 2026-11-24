@@ -8,7 +8,9 @@ pub mod tech_rule;
 pub mod technology;
 
 pub use activity::{ActionKind, ActivityEvent, Actor, EntityKind, RecordActivityInput};
-pub use memory::{Memory, MemoryContext, MemoryKind, MemoryScope, SaveMemoryInput};
+pub use memory::{
+    Memory, MemoryContext, MemoryKind, MemoryScope, SaveMemoryInput, UpdateMemoryInput,
+};
 pub use project::{CreateProjectInput, Project, ProjectStatus, UpdateProjectInput};
 pub use search::{SearchHit, SearchKind};
 pub use secret::{GrantStatus, SecretGrant, SecretMeta};

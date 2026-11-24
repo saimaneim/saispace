@@ -44,6 +44,7 @@ pub struct Memory {
     pub title: String,
     pub content: String,
     pub topic_key: Option<String>,
+    pub pinned: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -57,6 +58,18 @@ pub struct SaveMemoryInput {
     pub kind: MemoryKind,
     pub title: String,
     pub content: String,
+    #[serde(default)]
+    pub topic_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UpdateMemoryInput {
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub content: Option<String>,
+    #[serde(default)]
+    pub kind: Option<MemoryKind>,
     #[serde(default)]
     pub topic_key: Option<String>,
 }
@@ -79,11 +92,10 @@ impl MemoryScope {
     }
 }
 
-/// What an agent needs at session start: the user's standing preferences, the
-/// last session summary and an index of the rest, newest first.
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MemoryContext {
     pub preferences: Vec<Memory>,
     pub last_session: Option<Memory>,
+    pub pinned: Vec<Memory>,
     pub memories: Vec<Memory>,
 }

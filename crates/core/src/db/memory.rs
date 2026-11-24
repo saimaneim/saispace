@@ -1,4 +1,5 @@
 use crate::db::Db;
+use crate::db::search::STOPWORDS;
 use crate::db::validation::text_with_limit;
 use crate::error::{CoreError, CoreResult};
 use crate::models::{
@@ -11,7 +12,33 @@ pub const MAX_MEMORY_TITLE_CHARS: usize = 200;
 pub const MAX_MEMORY_CONTENT_CHARS: usize = 20_000;
 pub const MAX_TOPIC_KEY_CHARS: usize = 120;
 
-const MEMORY_COLUMNS: &str = "id, project_id, NULLIF(project_name, '') AS project_name, kind, title, content, NULLIF(topic_key, '') AS topic_key, created_at, updated_at";
+pub(crate) const MEMORY_COLUMNS: &str = "id, project_id, NULLIF(project_name, '') AS project_name, kind, title, content, NULLIF(topic_key, '') AS topic_key, pinned, created_at, updated_at";
+
+/// Share of meaningful title words two memories must have in common (Jaccard)
+/// to count as possible duplicates. One shared word such as a client name
+/// ("Onix", "Pujades") is not enough.
+const MIN_TITLE_SIMILARITY: f64 = 0.5;
+
+fn title_words(title: &str) -> std::collections::HashSet<String> {
+    title
+        .split(|c: char| !c.is_alphanumeric())
+        .map(str::to_lowercase)
+        .filter(|w| w.chars().count() >= 3 && !STOPWORDS.contains(&w.as_str()))
+        .collect()
+}
+
+/// Jaccard similarity of the meaningful words of two titles, from 0.0 to 1.0.
+#[must_use]
+pub fn title_similarity(a: &str, b: &str) -> f64 {
+    let (a, b) = (title_words(a), title_words(b));
+    let union = a.union(&b).count();
+    if union == 0 {
+        return 0.0;
+    }
+    #[allow(clippy::cast_precision_loss)]
+    let ratio = a.intersection(&b).count() as f64 / union as f64;
+    ratio
+}
 
 impl Db {
     pub async fn save_memory(&self, input: SaveMemoryInput) -> CoreResult<Memory> {
@@ -107,8 +134,8 @@ impl Db {
         Ok(items)
     }
 
-    /// Session-start context: every preference, the newest session summary
-    /// (older ones are superseded) and up to `limit` other memories.
+    /// Session-start context: every preference, pinned memories, the newest
+    /// session summary (older ones are superseded) and up to `limit` others.
     pub async fn memory_context(
         &self,
         scope: MemoryScope,
@@ -119,6 +146,7 @@ impl Db {
         for memory in self.recent_memories(scope, 200).await? {
             match memory.kind {
                 MemoryKind::Preference => context.preferences.push(memory),
+                _ if memory.pinned => context.pinned.push(memory),
                 MemoryKind::SessionSummary => {
                     if context.last_session.is_none() {
                         context.last_session = Some(memory);
@@ -148,7 +176,10 @@ impl Db {
             .await?;
         let mut similar = Vec::new();
         for hit in hits {
-            if hit.kind != SearchKind::Memory || hit.id == memory.id {
+            if hit.kind != SearchKind::Memory
+                || hit.id == memory.id
+                || title_similarity(&memory.title, &hit.title) < MIN_TITLE_SIMILARITY
+            {
                 continue;
             }
             if self.get_memory(hit.id).await?.kind == MemoryKind::SessionSummary {
@@ -185,5 +216,34 @@ impl Db {
         .execute(&self.pool)
         .await?;
         Ok(result.rows_affected())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::title_similarity;
+
+    #[test]
+    fn title_similarity_ignores_a_single_shared_name() {
+        assert!(
+            title_similarity(
+                "Onix: encargos duplicados por carrera con la IA",
+                "Onix: trabajador 1 de Cegid empresa 552 sobrescrito",
+            ) < 0.5
+        );
+        assert!(
+            title_similarity(
+                "Stack detection, tech_rules and FTS5 search",
+                "saispace UI rules and AI context files",
+            ) < 0.5
+        );
+        assert!(
+            title_similarity(
+                "Database connection pooling configuration",
+                "Database connection pooling settings",
+            ) >= 0.5
+        );
+        assert!(title_similarity("Baúl de claves", "Claves del baúl cifradas") >= 0.5);
+        assert!(title_similarity("", "de la") < 0.5);
     }
 }
