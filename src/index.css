@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+@theme {
+  --color-void: #141414;
+  --color-carbon: #1a1a1a;
+  --color-obsidian: #212121;
+  --color-elevated: #2a2a2a;
+  --color-graphite: #333333;
+  --color-smoke: #444444;
+  --color-ash: #6b6b6b;
+  --color-fog: #9a9a9a;
+  --color-mist: #d4d4d4;
+  --color-bone: #e8e8e8;
+  --color-paper: #f5f5f5;
+  --color-acid-lime: #e2f928;
+  --color-pulse-green: #22c55e;
+  --color-status-amber: #f59e0b;
+  --color-coral-red: #ef4444;
+  --color-signal-teal: #06b6d4;
+  --color-iris: #6366f1;
+  --shadow-popover: 0 10px 30px -4px #00000080;
+  --shadow-modal: 0 24px 48px -12px #000000b3;
+  --font-sans:
+    "Plus Jakarta Sans Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono:
+    "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-void);
+  color: var(--color-mist);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  letter-spacing: -0.006em;
+  font-feature-settings:
+    "cv01" on,
+    "ss03" on;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+::selection {
+  background-color: rgba(226, 249, 40, 0.28);
+  color: var(--color-paper);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
+}

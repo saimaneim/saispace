@@ -1,0 +1,159 @@
+import { invoke, isTauri } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type {
+  ActivityEvent,
+  AiInventory,
+  ContextFile,
+  CreateProjectInput,
+  CreateTaskInput,
+  DirectoryListing,
+  Memory,
+  Project,
+  SearchHit,
+  SecretGrant,
+  SecretMeta,
+  Task,
+  Technology,
+  TechRule,
+  UpdateProjectInput,
+  UpdateTaskInput,
+  UpsertTechRuleInput,
+} from "./types";
+
+export interface CommandErrorPayload {
+  message: string;
+  kind?: string;
+}
+
+export function formatError(err: unknown): string {
+  if (typeof err === "object" && err !== null && "message" in err) {
+    return String((err as CommandErrorPayload).message);
+  }
+  if (typeof err === "string") {
+    return err;
+  }
+  return "Error inesperado";
+}
+
+async function invokeOrFallback<T>(
+  cmd: string,
+  args?: Record<string, unknown>,
+  fallback?: T,
+): Promise<T> {
+  if (isTauri()) {
+    return invoke<T>(cmd, args);
+  }
+  if (fallback !== undefined) {
+    return fallback;
+  }
+  throw new Error(`Entorno web sin Tauri: comando '${cmd}' no disponible`);
+}
+
+export const api = {
+  isAvailable: isTauri,
+
+  listDirectory: (path?: string, showHidden?: boolean) =>
+    invokeOrFallback<DirectoryListing>("list_directory", {
+      path,
+      showHidden,
+    }),
+
+  listProjects: () => invokeOrFallback<Project[]>("list_projects", undefined, []),
+
+  getProject: (id: string) => invokeOrFallback<Project | null>("get_project", { id }, null),
+
+  createProject: (input: CreateProjectInput) =>
+    invokeOrFallback<Project>("create_project", { input }),
+
+  updateProject: (id: string, input: UpdateProjectInput) =>
+    invokeOrFallback<Project>("update_project", { id, input }),
+
+  deleteProject: (id: string) => invokeOrFallback<void>("delete_project", { id }),
+
+  listTasks: (projectId: string) => invokeOrFallback<Task[]>("list_tasks", { projectId }, []),
+
+  createTask: (input: CreateTaskInput) => invokeOrFallback<Task>("create_task", { input }),
+
+  updateTask: (id: string, input: UpdateTaskInput) =>
+    invokeOrFallback<Task>("update_task", { id, input }),
+
+  deleteTask: (id: string) => invokeOrFallback<void>("delete_task", { id }),
+
+  listActivity: (limit?: number) =>
+    invokeOrFallback<ActivityEvent[]>("list_activity", { limit }, []),
+
+  listActivityByProject: (projectId: string, limit?: number) =>
+    invokeOrFallback<ActivityEvent[]>("list_activity_by_project", { projectId, limit }, []),
+
+  listContextFiles: (projectId: string) =>
+    invokeOrFallback<ContextFile[]>("list_context_files", { projectId }, []),
+
+  readContextFile: (projectId: string, relativePath: string) =>
+    invokeOrFallback<string>("read_context_file", { projectId, relativePath }),
+
+  writeContextFile: (projectId: string, relativePath: string, content: string) =>
+    invokeOrFallback<ContextFile>("write_context_file", { projectId, relativePath, content }),
+
+  listTechnologies: (projectId: string) =>
+    invokeOrFallback<Technology[]>("list_technologies", { projectId }, []),
+
+  syncProjectStack: (projectId: string) =>
+    invokeOrFallback<Technology[]>("sync_project_stack", { projectId }, []),
+
+  listProjectTechRules: (projectId: string) =>
+    invokeOrFallback<TechRule[]>("list_project_tech_rules", { projectId }, []),
+
+  upsertTechRule: (input: UpsertTechRuleInput) =>
+    invokeOrFallback<TechRule>("upsert_tech_rule", { input }),
+
+  deleteTechRule: (id: string) => invokeOrFallback<void>("delete_tech_rule", { id }),
+
+  searchMemory: (query: string, projectId?: string | null, limit?: number) =>
+    invokeOrFallback<SearchHit[]>(
+      "search_memory",
+      { query, projectId: projectId ?? null, limit },
+      [],
+    ),
+
+  listMemories: (projectId: string | null, limit?: number) =>
+    invokeOrFallback<Memory[]>("list_memories", { projectId, limit }, []),
+
+  getMemory: (id: string) => invokeOrFallback<Memory>("get_memory", { id }),
+
+  globalAiInventory: () =>
+    invokeOrFallback<AiInventory>("global_ai_inventory", undefined, {
+      instructions: [],
+      skills: [],
+      mcp_servers: [],
+      plugins: [],
+      hooks: [],
+      warnings: [],
+    }),
+
+  listSecrets: () => invokeOrFallback<SecretMeta[]>("list_secrets", undefined, []),
+
+  setSecret: (name: string, value: string, description: string) =>
+    invokeOrFallback<SecretMeta>("set_secret", { name, value, description }),
+
+  deleteSecret: (name: string) => invokeOrFallback<void>("delete_secret", { name }),
+
+  listSecretGrants: () => invokeOrFallback<SecretGrant[]>("list_secret_grants", undefined, []),
+
+  decideSecretGrant: (id: string, approve: boolean) =>
+    invokeOrFallback<void>("decide_secret_grant", { id, approve }),
+
+  revokeSecretGrant: (id: string) => invokeOrFallback<void>("revoke_secret_grant", { id }),
+
+  techIcon: (name: string) => invokeOrFallback<string | null>("tech_icon", { name }, null),
+
+  deleteMemory: (id: string) => invokeOrFallback<void>("delete_memory", { id }),
+
+  openUrl: (url: string) => invokeOrFallback<void>("open_url", { url }),
+
+  onActivityChanged: async (callback: () => void): Promise<UnlistenFn> => {
+    if (!isTauri()) {
+      return () => {};
+    }
+    return listen("saispace:activity", () => callback());
+  },
+};

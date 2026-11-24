@@ -1,0 +1,21 @@
+[package]
+name = "saispace-desktop"
+version = "0.1.0"
+edition = "2024"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+saispace-core = { path = "../../../crates/core" }
+tauri = { version = "2", features = [] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "query"] }
+
+[lints]
+workspace = true
