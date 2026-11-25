@@ -39,6 +39,9 @@ fn to_display_path(path: &Path, home: &Path) -> String {
     }
 }
 
+/// # Errors
+///
+/// Returns an error if the path is not a directory or its entries cannot be read.
 #[tauri::command]
 pub fn list_directory(
     path: Option<String>,

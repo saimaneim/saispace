@@ -332,6 +332,9 @@ fn canonical_root(project: &Project) -> CommandResult<PathBuf> {
         .ok_or_else(|| invalid(format!("Project path is not a directory: {}", project.path)))
 }
 
+/// # Errors
+///
+/// Returns an error if the project does not exist or its context files cannot be listed.
 #[tauri::command]
 pub async fn list_context_files(
     project_id: String,
@@ -344,6 +347,9 @@ pub async fn list_context_files(
     Ok(scan_project(&root))
 }
 
+/// # Errors
+///
+/// Returns an error if the file cannot be read.
 #[tauri::command]
 pub async fn read_context_file(
     project_id: String,
@@ -355,6 +361,9 @@ pub async fn read_context_file(
     read_context(&root, &relative_path)
 }
 
+/// # Errors
+///
+/// Returns an error if the file cannot be written.
 #[tauri::command]
 pub async fn write_context_file(
     project_id: String,

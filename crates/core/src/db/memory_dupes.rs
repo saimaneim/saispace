@@ -40,6 +40,9 @@ fn make_pair(a: Memory, b: Memory) -> DuplicatePair {
 }
 
 impl Db {
+    /// # Errors
+    ///
+    /// Returns an error if the memories cannot be loaded.
     pub async fn duplicate_pairs(
         &self,
         scope: MemoryScope,

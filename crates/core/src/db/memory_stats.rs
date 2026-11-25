@@ -17,10 +17,16 @@ struct TotalCountsRow {
 }
 
 impl Db {
+    /// # Errors
+    ///
+    /// Returns an error if the statistics cannot be computed.
     pub async fn memory_usage_stats(&self) -> CoreResult<MemoryUsageStats> {
         self.memory_usage_stats_at(Utc::now()).await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the statistics cannot be computed.
     pub async fn memory_usage_stats_at(&self, now: DateTime<Utc>) -> CoreResult<MemoryUsageStats> {
         let (saves_by_agent, most_used, totals, by_project) = tokio::try_join!(
             self.fetch_saves_by_agent(now),

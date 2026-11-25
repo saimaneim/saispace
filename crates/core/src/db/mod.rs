@@ -34,6 +34,9 @@ pub struct Db {
 }
 
 impl Db {
+    /// # Errors
+    ///
+    /// Returns an error if the database URL is invalid or the pool cannot connect.
     pub async fn connect(database_url: &str) -> CoreResult<Self> {
         let options = SqliteConnectOptions::from_str(database_url)?
             .create_if_missing(true)
@@ -49,6 +52,9 @@ impl Db {
         Ok(Self { pool })
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the parent directory cannot be created or the database cannot be opened.
     pub async fn open(path: &Path) -> CoreResult<Self> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| {
@@ -70,6 +76,9 @@ impl Db {
         Ok(db)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the in-memory database cannot be opened.
     pub async fn connect_in_memory() -> CoreResult<Self> {
         let options = SqliteConnectOptions::from_str(":memory:")?
             .foreign_keys(true)
@@ -83,6 +92,9 @@ impl Db {
         Ok(Self { pool })
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if a migration fails.
     pub async fn migrate(&self) -> CoreResult<()> {
         sqlx::migrate!("./migrations").run(&self.pool).await?;
         Ok(())

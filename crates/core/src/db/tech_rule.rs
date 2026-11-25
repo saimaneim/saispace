@@ -13,6 +13,9 @@ const RULE_COLUMNS: &str =
     "id, technology, NULLIF(version_req, '') AS version_req, rule, created_at, updated_at";
 
 impl Db {
+    /// # Errors
+    ///
+    /// Returns an error if the input is invalid or the rule cannot be stored.
     pub async fn upsert_tech_rule(&self, input: UpsertTechRuleInput) -> CoreResult<TechRule> {
         let technology =
             text_with_limit("technology", &input.technology, MAX_TECHNOLOGY_CHARS)?.to_lowercase();
@@ -43,6 +46,9 @@ impl Db {
         Ok(saved)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the rules cannot be loaded.
     pub async fn list_tech_rules(&self, technology: Option<&str>) -> CoreResult<Vec<TechRule>> {
         let filter = technology.map(|t| t.trim().to_lowercase());
         let sql = format!(
@@ -60,6 +66,9 @@ impl Db {
         Ok(rules)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the rule does not exist or the delete fails.
     pub async fn delete_tech_rule(&self, id: Uuid) -> CoreResult<()> {
         let result = sqlx::query("DELETE FROM tech_rules WHERE id = ?1")
             .bind(id)
@@ -74,6 +83,9 @@ impl Db {
         Ok(())
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the stack or its rules cannot be loaded.
     pub async fn tech_rules_for_project(&self, project_id: Uuid) -> CoreResult<Vec<TechRule>> {
         let stack = self.list_technologies(project_id).await?;
         let rules = self.list_tech_rules(None).await?;

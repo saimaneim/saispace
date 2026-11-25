@@ -18,6 +18,9 @@ pub struct SaiSpaceServer {
     tool_router: ToolRouter<Self>,
 }
 
+// The generated handlers return immediately, so the macro emits an `async`
+// trait impl without any `.await`; pedantic flags that expansion.
+#[allow(clippy::unused_async_trait_impl)]
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for SaiSpaceServer {
     fn get_info(&self) -> ServerConfig {
@@ -62,6 +65,9 @@ impl SaiSpaceServer {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the project does not exist or its stack cannot be synced.
     pub async fn sync_stack(&self, project_id: Uuid) -> Result<Vec<Technology>, CoreError> {
         let stack = self.db.sync_project_stack(project_id).await?;
         self.record(RecordActivityInput {
@@ -76,6 +82,9 @@ impl SaiSpaceServer {
         Ok(stack)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the project cannot be looked up.
     pub async fn resolve_project(
         &self,
         project_id: Option<Uuid>,

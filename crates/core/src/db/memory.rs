@@ -41,10 +41,16 @@ pub fn title_similarity(a: &str, b: &str) -> f64 {
 }
 
 impl Db {
+    /// # Errors
+    ///
+    /// Returns an error if the input is invalid or the memory cannot be stored.
     pub async fn save_memory(&self, input: SaveMemoryInput) -> CoreResult<Memory> {
         self.save_memory_at(input, Utc::now(), None).await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the input is invalid or the memory cannot be stored.
     pub async fn save_memory_at(
         &self,
         input: SaveMemoryInput,
@@ -97,6 +103,9 @@ impl Db {
         Ok(memory)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the memory does not exist or the query fails.
     pub async fn get_memory(&self, id: Uuid) -> CoreResult<Memory> {
         let sql = format!("SELECT {MEMORY_COLUMNS} FROM memories WHERE id = ?1");
         sqlx::query_as::<_, Memory>(&sql)
@@ -109,6 +118,9 @@ impl Db {
             })
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the memories cannot be loaded.
     pub async fn recent_memories(&self, scope: MemoryScope, limit: i64) -> CoreResult<Vec<Memory>> {
         let (mode, project_id) = match scope {
             MemoryScope::All => (0, None),
@@ -137,6 +149,10 @@ impl Db {
 
     /// Session-start context: every preference, pinned memories, the newest
     /// session summary (older ones are superseded) and up to `limit` others.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the memories cannot be loaded.
     pub async fn memory_context(
         &self,
         scope: MemoryScope,
@@ -163,6 +179,10 @@ impl Db {
     /// Memories in the same scope whose title shares words with `memory`'s
     /// title, so the caller can merge or delete duplicates instead of piling
     /// them up. Session summaries are history, never duplicates.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the search or the follow-up lookups fail.
     pub async fn similar_memories(
         &self,
         memory: &Memory,
@@ -198,6 +218,9 @@ impl Db {
         Ok(similar)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the memory does not exist or the delete fails.
     pub async fn delete_memory(&self, id: Uuid) -> CoreResult<()> {
         let result = sqlx::query("DELETE FROM memories WHERE id = ?1")
             .bind(id)
@@ -212,6 +235,9 @@ impl Db {
         Ok(())
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the memories cannot be updated.
     pub async fn link_memories_by_name(&self, project_id: Uuid, name: &str) -> CoreResult<u64> {
         let result = sqlx::query(
             "UPDATE memories SET project_id = ?1 WHERE project_id IS NULL AND project_name = ?2",

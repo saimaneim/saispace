@@ -9,6 +9,9 @@ use uuid::Uuid;
 const MAX_SECRET_BYTES: usize = 64 * 1024;
 const MAX_NAME_LEN: usize = 64;
 
+/// # Errors
+///
+/// Returns an error if the name does not match `[A-Z][A-Z0-9_]*` or is too long.
 pub fn validate_secret_name(name: &str) -> CoreResult<String> {
     let name = name.trim();
     let mut chars = name.chars();
@@ -29,6 +32,9 @@ fn validate_agent(agent: &str) -> CoreResult<String> {
 const GRANT_COLUMNS: &str = "g.id, g.secret_id, s.name AS secret_name, g.agent, g.status, g.reason, g.created_at, g.decided_at";
 
 impl Db {
+    /// # Errors
+    ///
+    /// Returns an error if the name is invalid, the value is too large, or the secret cannot be stored.
     pub async fn set_secret(
         &self,
         vault: &Vault,
@@ -78,6 +84,9 @@ impl Db {
         Ok(meta)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the secrets cannot be loaded.
     pub async fn list_secrets(&self) -> CoreResult<Vec<SecretMeta>> {
         let items = sqlx::query_as::<_, SecretMeta>(
             "SELECT id, name, description, created_at, updated_at, last_used_at FROM secrets ORDER BY name",
@@ -96,6 +105,9 @@ impl Db {
             .ok_or_else(|| CoreError::Validation(format!("secret {name} does not exist")))
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the secret does not exist or cannot be deleted.
     pub async fn delete_secret(&self, name: &str) -> CoreResult<()> {
         let id = self.secret_id(name).await?;
         sqlx::query("DELETE FROM secrets WHERE id = ?1")
@@ -105,6 +117,9 @@ impl Db {
         Ok(())
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the name is invalid, the secret does not exist, or the grant cannot be stored.
     pub async fn request_secret_access(
         &self,
         name: &str,
@@ -144,6 +159,9 @@ impl Db {
         Ok(grant)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the grants cannot be loaded.
     pub async fn list_secret_grants(&self) -> CoreResult<Vec<SecretGrant>> {
         let sql = format!(
             "SELECT {GRANT_COLUMNS} FROM secret_grants g JOIN secrets s ON s.id = g.secret_id ORDER BY g.status = 'pending' DESC, g.created_at DESC"
@@ -154,6 +172,9 @@ impl Db {
         Ok(items)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the grant does not exist or cannot be updated.
     pub async fn decide_secret_grant(&self, id: Uuid, approve: bool) -> CoreResult<()> {
         let status = if approve {
             GrantStatus::Approved
@@ -176,6 +197,9 @@ impl Db {
         Ok(())
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the grant does not exist or cannot be deleted.
     pub async fn revoke_secret_grant(&self, id: Uuid) -> CoreResult<()> {
         let result = sqlx::query("DELETE FROM secret_grants WHERE id = ?1")
             .bind(id)
@@ -190,6 +214,9 @@ impl Db {
         Ok(())
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the secret does not exist, access is not approved, or decryption fails.
     pub async fn reveal_secret(
         &self,
         vault: &Vault,

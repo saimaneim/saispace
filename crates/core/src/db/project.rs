@@ -8,6 +8,9 @@ use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 impl Db {
+    /// # Errors
+    ///
+    /// Returns an error if the input is invalid or the project cannot be stored.
     pub async fn create_project(&self, input: CreateProjectInput) -> CoreResult<Project> {
         let name = limited_text("name", &input.name)?;
         let path = required_text("path", &input.path)?;
@@ -36,6 +39,9 @@ impl Db {
         Ok(project)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
     pub async fn get_project(&self, id: Uuid) -> CoreResult<Option<Project>> {
         let project = sqlx::query_as::<_, Project>(
             r"
@@ -51,6 +57,9 @@ impl Db {
         Ok(project)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
     pub async fn get_project_by_path(&self, path: &str) -> CoreResult<Option<Project>> {
         let project = sqlx::query_as::<_, Project>(
             r"
@@ -66,6 +75,9 @@ impl Db {
         Ok(project)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the projects cannot be loaded.
     pub async fn list_projects(&self) -> CoreResult<Vec<Project>> {
         let projects = sqlx::query_as::<_, Project>(
             r"
@@ -80,6 +92,9 @@ impl Db {
         Ok(projects)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the input is invalid, the project does not exist, or the update fails.
     pub async fn update_project(&self, id: Uuid, input: UpdateProjectInput) -> CoreResult<Project> {
         let name = input
             .name
@@ -120,6 +135,9 @@ impl Db {
         })
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the project does not exist or the delete fails.
     pub async fn delete_project(&self, id: Uuid) -> CoreResult<()> {
         let result = sqlx::query("DELETE FROM projects WHERE id = ?1")
             .bind(id)
@@ -136,6 +154,9 @@ impl Db {
         Ok(())
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the projects cannot be loaded or the path cannot be inspected.
     pub async fn find_project_for_path(
         &self,
         path: &std::path::Path,
@@ -152,6 +173,10 @@ impl Db {
     /// is registered when `register` is true, or when orphan memories already
     /// carry its name (imported from another tool). Roots such as `$HOME` or
     /// `~/Dev` are never registered.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the project cannot be looked up or registered.
     pub async fn project_for_path(
         &self,
         path: &Path,
@@ -222,6 +247,10 @@ impl Db {
 
     /// Attaches memories saved under this project's name (with any spelling:
     /// `onix gestoria` matches `ONIX GESTORIA`) before the project existed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the memories cannot be updated.
     pub async fn link_orphan_memories(&self, project: &Project) -> CoreResult<u64> {
         let folder = Path::new(&project.path)
             .file_name()

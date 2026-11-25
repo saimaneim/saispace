@@ -8,6 +8,9 @@ pub struct Config {
 }
 
 impl Config {
+    /// # Errors
+    ///
+    /// Returns an error if the database path cannot be resolved.
     pub fn from_env() -> Result<Self, CoreError> {
         let agent_name =
             std::env::var("SAISPACE_AGENT_NAME").unwrap_or_else(|_| "mcp-agent".to_string());

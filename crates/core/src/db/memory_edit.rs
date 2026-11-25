@@ -21,6 +21,9 @@ pub(crate) fn is_unique_constraint_violation(err: &sqlx::Error) -> bool {
 }
 
 impl Db {
+    /// # Errors
+    ///
+    /// Returns an error if the input is invalid, the memory does not exist, or the update fails.
     pub async fn update_memory(&self, id: Uuid, input: UpdateMemoryInput) -> CoreResult<Memory> {
         let title = input
             .title

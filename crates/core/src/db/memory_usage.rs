@@ -24,6 +24,9 @@ where
 }
 
 impl Db {
+    /// # Errors
+    ///
+    /// Returns an error if the usage timestamps cannot be updated.
     pub async fn touch_memories(&self, ids: &[Uuid]) -> CoreResult<()> {
         if ids.is_empty() {
             return Ok(());
