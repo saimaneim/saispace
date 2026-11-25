@@ -64,13 +64,13 @@ impl Db {
                 Err(err) => return Err(err),
             };
 
-            for hit in similar {
-                let key = pair_key(m.id, hit.id);
+            for s in similar {
+                let key = pair_key(m.id, s.hit.id);
                 if seen.contains(&key) {
                     continue;
                 }
 
-                let other = self.get_memory(hit.id).await?;
+                let other = self.get_memory(s.hit.id).await?;
                 if other.kind == MemoryKind::SessionSummary {
                     continue;
                 }

@@ -87,7 +87,9 @@ impl Db {
                 .topic_key
                 .clone()
                 .filter(|t| !t.trim().is_empty())
-                .unwrap_or_else(|| format!("engram/{}", row.id));
+                // Stable and non-empty after topic_key normalization, so
+                // re-importing upserts instead of duplicating.
+                .unwrap_or_else(|| format!("engram-obs-{}", row.id));
             let updated = parse_time(&row.updated_at).unwrap_or_else(Utc::now);
             let created = parse_time(&row.created_at);
             let input = SaveMemoryInput {

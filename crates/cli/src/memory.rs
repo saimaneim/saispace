@@ -111,6 +111,10 @@ pub enum MemoryCommand {
     },
     #[command(about = "Lista grupos de memorias sin proyecto")]
     Orphans,
+    #[command(
+        about = "Normaliza los topic_key guardados a la convención actual (migración de datos)"
+    )]
+    NormalizeTopics,
 }
 
 fn actor() -> Actor {
@@ -201,8 +205,17 @@ async fn save(
         crate::out!(
             "parecidas (actualiza con el mismo --topic o borra la sobrante con `sai memory rm <id>`):"
         );
-        for h in &similar {
-            crate::out!("  {}  {}", h.id, h.title);
+        for s in &similar {
+            if s.topic_key.is_empty() {
+                crate::out!("  {}  {}", s.hit.id, s.hit.title);
+            } else {
+                crate::out!(
+                    "  {}  {}  (usa --topic {} para actualizarla)",
+                    s.hit.id,
+                    s.hit.title,
+                    s.topic_key
+                );
+            }
         }
     }
     Ok(())
@@ -485,6 +498,10 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
         MemoryCommand::Orphans => list_orphans(&db).await?,
         MemoryCommand::Link { project_name, path } => {
             link_orphans(&db, &project_name, path).await?;
+        }
+        MemoryCommand::NormalizeTopics => {
+            let changed = db.normalize_existing_topic_keys().await?;
+            crate::out!("{changed} claves de tema normalizadas");
         }
     }
     Ok(())

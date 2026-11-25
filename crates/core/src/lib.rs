@@ -5,6 +5,7 @@ pub mod memory_render;
 pub mod models;
 pub mod paths;
 pub mod tech;
+pub mod topic_key;
 pub mod vault;
 
 pub use db::Db;
@@ -14,4 +15,5 @@ pub use models::*;
 pub use paths::{
     default_db_path, detect_agent_name, detect_project_root, project_key, vault_key_path_for,
 };
+pub use topic_key::normalize_topic_key;
 pub use vault::Vault;

@@ -398,6 +398,10 @@ async fn assert_duplicate_hint_and_context(
         .await,
     );
     assert_eq!(&twin["similar"][0]["id"], first_id);
+    // Saved without topic_key, so the hint points at the similar memory's.
+    assert_eq!(twin["similar"][0]["topic_key"], "arch-auth");
+    let hint = twin["hint"].as_str().expect("hint");
+    assert!(hint.contains("\"arch-auth\""), "{hint}");
     let twin_id = twin["memory"]["id"].as_str().expect("twin id").to_string();
     call(client, "delete_memory", json!({ "id": twin_id })).await;
 
