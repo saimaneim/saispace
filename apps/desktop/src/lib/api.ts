@@ -16,6 +16,7 @@ import type {
   SearchHit,
   SecretGrant,
   SecretMeta,
+  StaleReport,
   Task,
   Technology,
   TechRule,
@@ -134,6 +135,12 @@ export const api = {
       total: 0,
       by_project: [],
     }),
+  memoryStale: (projectId?: string | null, days?: number) =>
+    invokeOrFallback<StaleReport>(
+      "memory_stale",
+      { projectId: projectId ?? null, days },
+      { stale: [], surplus_sessions: [] },
+    ),
 
   getMemory: (id: string) => invokeOrFallback<Memory>("get_memory", { id }),
 

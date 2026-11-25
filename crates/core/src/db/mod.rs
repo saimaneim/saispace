@@ -12,6 +12,7 @@ pub mod memory_dupes;
 pub mod memory_edit;
 pub mod memory_orphans;
 pub mod memory_pin;
+pub mod memory_stale;
 pub mod memory_stats;
 pub mod memory_topics;
 pub mod memory_usage;
@@ -25,6 +26,7 @@ mod validation;
 
 pub use memory_dupes::DuplicatePair;
 pub use memory_orphans::OrphanGroup;
+pub use memory_stale::StaleReport;
 
 #[derive(Debug, Clone)]
 pub struct Db {
