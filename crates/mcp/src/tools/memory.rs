@@ -119,7 +119,7 @@ impl SaiSpaceServer {
 impl SaiSpaceServer {
     #[tool(
         name = "save_memory",
-        description = "Persist a durable memory (decision, architecture, bugfix, pattern, config, discovery, preference, session_summary, note). Same topic_key in the same project replaces the previous memory. Scope: the current project (project_id, path, or the working directory); global=true for cross-project knowledge"
+        description = "Save durable knowledge (decision, architecture, bugfix, pattern, config, discovery, preference, session_summary, note). Reusing topic_key in the same scope updates rather than duplicates. Scope: project_id, path, or the working directory; global=true for cross-project knowledge"
     )]
     async fn save_memory(
         &self,
@@ -199,7 +199,7 @@ impl SaiSpaceServer {
 
     #[tool(
         name = "memory_context",
-        description = "Session-start memory index for the current project (defaults to the working directory): user preferences, the last session summary and recent memories with short previews. Open one with get_memory"
+        description = "Read the session-start memory index for the current project (project_id, path, or working directory): preferences, pinned memories, the latest session summary and recent previews. Open items with get_memory"
     )]
     async fn memory_context(
         &self,

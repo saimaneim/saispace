@@ -1,4 +1,10 @@
-use rmcp::{ServerHandler, handler::server::router::tool::ToolRouter, tool_handler};
+use crate::instructions::INSTRUCTIONS;
+use rmcp::{
+    ServerHandler,
+    handler::server::router::tool::ToolRouter,
+    model::{Implementation, ServerCapabilities, ServerConfig},
+    tool_handler,
+};
 use saispace_core::models::{
     ActionKind, Actor, EntityKind, Project, RecordActivityInput, Technology,
 };
@@ -12,13 +18,14 @@ pub struct SaiSpaceServer {
     tool_router: ToolRouter<Self>,
 }
 
-#[tool_handler(
-    router = self.tool_router,
-    name = "saispace",
-    version = "0.1.0",
-    instructions = "Local project and context command center for AI agents"
-)]
-impl ServerHandler for SaiSpaceServer {}
+#[tool_handler(router = self.tool_router)]
+impl ServerHandler for SaiSpaceServer {
+    fn get_info(&self) -> ServerConfig {
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
+            .with_server_info(Implementation::new("saispace", "0.1.0"))
+            .with_instructions(INSTRUCTIONS)
+    }
+}
 
 impl SaiSpaceServer {
     #[must_use]
