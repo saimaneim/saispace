@@ -10,5 +10,5 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },
-  "include": ["saispace.ts"]
+  "include": ["saispace.ts", "core.ts"]
 }
