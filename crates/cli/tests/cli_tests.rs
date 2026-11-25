@@ -600,7 +600,7 @@ fn memory_edit_updates_fields_and_validates_input() {
     let mem: serde_json::Value = serde_json::from_slice(&get.stdout).expect("json");
     assert_eq!(mem["title"], "Nuevo titulo");
     assert_eq!(mem["kind"], "bugfix");
-    assert_eq!(mem["topic_key"], "arch/nuevo");
+    assert_eq!(mem["topic_key"], "arch-nuevo");
     assert_eq!(mem["content"], "Contenido inicial");
 
     let stdin_edit = sai_with_stdin(
@@ -634,6 +634,80 @@ fn memory_edit_updates_fields_and_validates_input() {
         });
         assert!(update_event.is_some(), "Update activity event was recorded");
     });
+}
+
+#[test]
+fn memory_save_normalizes_topic_and_hints_similar() {
+    let sb = Sandbox::new("mem-topic");
+    let repo = sb.repo();
+
+    let first = sb.sai(
+        &repo,
+        &[
+            "memory",
+            "save",
+            "--title",
+            "Reglas del panel de UI",
+            "--content",
+            "Paleta estilo Vercel",
+            "--topic",
+            "arch/auth",
+        ],
+    );
+    assert!(
+        first.status.success(),
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+
+    // Same title saved without a topic: the CLI points at the topic the
+    // similar memory already has.
+    let twin = sb.sai(
+        &repo,
+        &[
+            "memory",
+            "save",
+            "--title",
+            "Reglas panel UI v2",
+            "--content",
+            "Duplicada",
+        ],
+    );
+    assert!(twin.status.success());
+    let twin_out = stdout(&twin);
+    assert!(
+        twin_out.contains("usa --topic arch-auth para actualizarla"),
+        "{twin_out}"
+    );
+
+    // A messy key is stored with the convention.
+    let saved = sb.sai(
+        &repo,
+        &[
+            "memory",
+            "save",
+            "--title",
+            "Exportación PDF",
+            "--content",
+            "Usamos printcss",
+            "--topic",
+            "Proj/My_Topic",
+        ],
+    );
+    assert!(
+        saved.status.success(),
+        "{}",
+        String::from_utf8_lossy(&saved.stderr)
+    );
+    let list = sb.sai(&repo, &["memory", "list", "--json"]);
+    let memories: serde_json::Value = serde_json::from_slice(&list.stdout).expect("json");
+    let row = memories
+        .as_array()
+        .expect("array")
+        .iter()
+        .find(|m| m["title"] == "Exportación PDF")
+        .expect("saved row");
+    assert_eq!(row["topic_key"], "proj-my-topic");
 }
 
 #[test]

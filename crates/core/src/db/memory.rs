@@ -3,14 +3,14 @@ use crate::db::search::STOPWORDS;
 use crate::db::validation::text_with_limit;
 use crate::error::{CoreError, CoreResult};
 use crate::models::{
-    Memory, MemoryContext, MemoryKind, MemoryScope, SaveMemoryInput, SearchHit, SearchKind,
+    Memory, MemoryContext, MemoryKind, MemoryScope, SaveMemoryInput, SearchKind, SimilarMemory,
 };
+use crate::topic_key::normalize_topic_key;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 pub const MAX_MEMORY_TITLE_CHARS: usize = 200;
 pub const MAX_MEMORY_CONTENT_CHARS: usize = 20_000;
-pub const MAX_TOPIC_KEY_CHARS: usize = 120;
 
 pub(crate) const MEMORY_COLUMNS: &str = "id, project_id, NULLIF(project_name, '') AS project_name, kind, title, content, NULLIF(topic_key, '') AS topic_key, pinned, created_at, updated_at, last_used_at, use_count";
 
@@ -53,10 +53,6 @@ impl Db {
     ) -> CoreResult<Memory> {
         let title = text_with_limit("title", &input.title, MAX_MEMORY_TITLE_CHARS)?;
         let content = text_with_limit("content", &input.content, MAX_MEMORY_CONTENT_CHARS)?;
-        let topic_key = match input.topic_key.as_deref().map(str::trim) {
-            None | Some("") => String::new(),
-            Some(key) => text_with_limit("topic_key", key, MAX_TOPIC_KEY_CHARS)?,
-        };
         let project_name = match (input.project_id, input.project_name.as_deref()) {
             (Some(id), _) => {
                 self.get_project(id)
@@ -69,6 +65,11 @@ impl Db {
             }
             (None, Some(name)) => name.trim().to_string(),
             (None, None) => String::new(),
+        };
+        // Empty result = no topic: the upsert below only matches non-empty keys.
+        let topic_key = match input.topic_key.as_deref() {
+            None => String::new(),
+            Some(raw) => normalize_topic_key(raw, &project_name),
         };
 
         let sql = format!(
@@ -166,7 +167,7 @@ impl Db {
         &self,
         memory: &Memory,
         limit: i64,
-    ) -> CoreResult<Vec<SearchHit>> {
+    ) -> CoreResult<Vec<SimilarMemory>> {
         if memory.kind == MemoryKind::SessionSummary {
             return Ok(Vec::new());
         }
@@ -182,10 +183,14 @@ impl Db {
             {
                 continue;
             }
-            if self.get_memory(hit.id).await?.kind == MemoryKind::SessionSummary {
+            let other = self.get_memory(hit.id).await?;
+            if other.kind == MemoryKind::SessionSummary {
                 continue;
             }
-            similar.push(hit);
+            similar.push(SimilarMemory {
+                topic_key: other.topic_key.clone().unwrap_or_default(),
+                hit,
+            });
             if similar.len() >= usize::try_from(limit).unwrap_or(0) {
                 break;
             }

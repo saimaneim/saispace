@@ -7,7 +7,7 @@ use rmcp::{tool, tool_router};
 use saispace_core::CoreError;
 use saispace_core::models::{
     ActionKind, EntityKind, Memory, MemoryKind, MemoryScope, Project, RecordActivityInput,
-    SaveMemoryInput, SearchHit,
+    SaveMemoryInput, SimilarMemory,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -77,8 +77,33 @@ struct ContextResponse {
 #[derive(Debug, Serialize)]
 struct SaveResponse {
     memory: Memory,
-    similar: Vec<SearchHit>,
-    hint: Option<&'static str>,
+    similar: Vec<SimilarMemory>,
+    hint: Option<String>,
+}
+
+/// When the agent saved without a `topic_key` and a similar memory already
+/// carries one, the cheapest fix is to save again reusing it.
+fn save_hint(saved: &Memory, similar: &[SimilarMemory]) -> Option<String> {
+    let generic = (!similar.is_empty()).then(|| {
+        "Similar memories exist: merge by saving again with the same topic_key, or delete_memory the stale one".to_string()
+    });
+    if saved
+        .topic_key
+        .as_deref()
+        .is_some_and(|key| !key.is_empty())
+    {
+        return generic;
+    }
+    similar
+        .iter()
+        .find(|s| !s.topic_key.is_empty())
+        .map(|s| {
+            format!(
+                "Similar memory has topic_key \"{}\": save again with that topic_key to update it instead of duplicating.",
+                s.topic_key
+            )
+        })
+        .or(generic)
 }
 
 impl SaiSpaceServer {
@@ -187,9 +212,7 @@ impl SaiSpaceServer {
             .similar_memories(&saved, 3)
             .await
             .unwrap_or_default();
-        let hint = (!similar.is_empty()).then_some(
-            "Similar memories exist: merge by saving again with the same topic_key, or delete_memory the stale one",
-        );
+        let hint = save_hint(&saved, &similar);
         format_success(&SaveResponse {
             memory: saved,
             similar,

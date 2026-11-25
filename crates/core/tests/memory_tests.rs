@@ -314,9 +314,67 @@ async fn search_falls_back_to_any_term_and_finds_similar_memories() {
         .expect("twin");
     let similar = db.similar_memories(&twin, 3).await.expect("similar");
     assert_eq!(
-        similar.iter().map(|h| h.id).collect::<Vec<_>>(),
+        similar.iter().map(|s| s.hit.id).collect::<Vec<_>>(),
         vec![vault.id]
     );
+}
+
+#[tokio::test]
+async fn topic_keys_normalize_on_save_and_update() {
+    let db = setup().await;
+
+    // Messy input, unknown project prefix: the stored key is kebab-case.
+    let saved = db
+        .save_memory(input("Norm", "c", Some(" Proj/My_Topic ")))
+        .await
+        .expect("save");
+    assert_eq!(saved.topic_key.as_deref(), Some("proj-my-topic"));
+
+    // Legacy engram keys name a row id, not a topic.
+    let legacy = db
+        .save_memory(input("Legacy", "c", Some("engram/14")))
+        .await
+        .expect("legacy");
+    assert_eq!(legacy.topic_key, None);
+
+    // Updates use the row's own project name to strip the prefix.
+    let project = db
+        .create_project(CreateProjectInput {
+            name: "Saispace".into(),
+            path: "/p/saispace".into(),
+            context_notes: None,
+        })
+        .await
+        .expect("project");
+    let in_project = db
+        .save_memory(SaveMemoryInput {
+            project_id: Some(project.id),
+            ..input("In project", "c", None)
+        })
+        .await
+        .expect("save");
+    let updated = db
+        .update_memory(
+            in_project.id,
+            UpdateMemoryInput {
+                topic_key: Some("Saispace/UI_Design.Rules".into()),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("update");
+    assert_eq!(updated.topic_key.as_deref(), Some("ui-design-rules"));
+
+    // The same topic written differently upserts instead of duplicating.
+    let again = db
+        .save_memory(SaveMemoryInput {
+            project_id: Some(project.id),
+            ..input("In project", "c2", Some("saispace/ui_design-rules"))
+        })
+        .await
+        .expect("upsert");
+    assert_eq!(again.id, updated.id);
+    assert_eq!(again.content, "c2");
 }
 
 #[tokio::test]
@@ -349,7 +407,7 @@ async fn update_memory_updates_fields_and_bumps_updated_at() {
     assert_eq!(updated.title, "Titulo editado");
     assert_eq!(updated.content, "Contenido editado");
     assert_eq!(updated.kind, MemoryKind::Bugfix);
-    assert_eq!(updated.topic_key.as_deref(), Some("tema/editado"));
+    assert_eq!(updated.topic_key.as_deref(), Some("tema-editado"));
     assert!(updated.updated_at > original.updated_at);
 
     let partial = db
@@ -368,7 +426,7 @@ async fn update_memory_updates_fields_and_bumps_updated_at() {
     assert_eq!(partial.title, "Solo titulo");
     assert_eq!(partial.content, "Contenido editado");
     assert_eq!(partial.kind, MemoryKind::Bugfix);
-    assert_eq!(partial.topic_key.as_deref(), Some("tema/editado"));
+    assert_eq!(partial.topic_key.as_deref(), Some("tema-editado"));
 }
 
 #[tokio::test]
@@ -378,7 +436,7 @@ async fn update_memory_clears_topic_key_when_empty_string() {
         .save_memory(input("Con tema", "Contenido", Some("tema/a_borrar")))
         .await
         .expect("save");
-    assert_eq!(original.topic_key.as_deref(), Some("tema/a_borrar"));
+    assert_eq!(original.topic_key.as_deref(), Some("tema-a-borrar"));
 
     let cleared = db
         .update_memory(
@@ -465,17 +523,18 @@ async fn update_memory_validations_and_not_found() {
         Err(CoreError::Validation(_))
     ));
 
-    assert!(matches!(
-        db.update_memory(
+    // Over-long keys no longer error: they are truncated at a `-` boundary.
+    let long = db
+        .update_memory(
             mem.id,
             UpdateMemoryInput {
-                topic_key: Some("a".repeat(121)),
+                topic_key: Some("ab-".repeat(23)),
                 ..Default::default()
-            }
+            },
         )
-        .await,
-        Err(CoreError::Validation(_))
-    ));
+        .await
+        .expect("long topic truncates");
+    assert_eq!(long.topic_key, Some(format!("{}ab", "ab-".repeat(20))));
 
     let missing = Uuid::now_v7();
     assert!(matches!(
@@ -536,7 +595,7 @@ async fn update_memory_conflict_on_unique_topic_returns_validation_error() {
 
     match conflict {
         Err(CoreError::Validation(msg)) => {
-            assert!(msg.contains("arch/dup"), "Message was: {msg}");
+            assert!(msg.contains("arch-dup"), "Message was: {msg}");
         }
         other => panic!("Expected Validation error, got {other:?}"),
     }

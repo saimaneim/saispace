@@ -12,7 +12,7 @@ pub use memory::{
     Memory, MemoryContext, MemoryKind, MemoryScope, SaveMemoryInput, UpdateMemoryInput,
 };
 pub use project::{CreateProjectInput, Project, ProjectStatus, UpdateProjectInput};
-pub use search::{SearchHit, SearchKind};
+pub use search::{SearchHit, SearchKind, SimilarMemory};
 pub use secret::{GrantStatus, SecretGrant, SecretMeta};
 pub use task::{CreateTaskInput, Task, TaskPriority, TaskStatus, UpdateTaskInput};
 pub use tech_rule::{TechRule, UpsertTechRuleInput};
