@@ -17,6 +17,7 @@ pub mod memory_stats;
 pub mod memory_topics;
 pub mod memory_usage;
 pub mod project;
+pub mod project_layout;
 pub mod search;
 pub mod secret;
 pub mod task;

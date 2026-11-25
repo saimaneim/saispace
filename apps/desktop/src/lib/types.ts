@@ -6,6 +6,8 @@ export interface Project {
   path: string;
   status: ProjectStatus;
   context_notes: string;
+  pinned: boolean;
+  sort_order: number;
   created_at: string;
   updated_at: string;
 }

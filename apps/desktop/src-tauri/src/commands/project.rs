@@ -134,6 +134,27 @@ pub async fn delete_project(id: Uuid, db: State<'_, Db>) -> CommandResult<()> {
     Ok(())
 }
 
+/// # Errors
+///
+/// Returns an error if the project does not exist or the update fails.
+#[tauri::command]
+pub async fn set_project_pinned(
+    id: Uuid,
+    pinned: bool,
+    db: State<'_, Db>,
+) -> CommandResult<Project> {
+    Ok(db.set_project_pinned(id, pinned).await?)
+}
+
+/// # Errors
+///
+/// Returns an error if the order cannot be stored.
+#[tauri::command]
+pub async fn reorder_projects(ids: Vec<Uuid>, db: State<'_, Db>) -> CommandResult<()> {
+    db.reorder_projects(&ids).await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

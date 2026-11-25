@@ -2,6 +2,7 @@ import { ExternalLink, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, formatError } from "../lib/api";
 import type { Project, Technology } from "../lib/types";
+import { cn } from "../lib/utils";
 import { TechIcon } from "./TechIcon";
 import { TechRulesSection } from "./TechRulesSection";
 import { Button } from "./ui/button";
@@ -16,6 +17,99 @@ const ECOSYSTEM_LABELS: Record<Technology["ecosystem"], string> = {
   pypi: "Python",
   go: "Go",
 };
+
+const SCOPE_FAMILY: Record<string, string> = {
+  "@vitejs": "vite",
+  "@tailwindcss": "tailwindcss",
+  "@biomejs": "biome",
+  "@tauri-apps": "tauri",
+  "@radix-ui": "radix-ui",
+};
+
+const FAMILY_LABELS: Record<string, string> = {
+  "radix-ui": "Radix UI",
+  "@types": "Tipos",
+  "@fontsource-variable": "Fuentes",
+  "@fontsource": "Fuentes",
+};
+
+interface Family {
+  key: string;
+  label: string;
+  icon: string;
+  members: Technology[];
+}
+
+/** Groups related packages: react + react-dom + @types/react, @radix-ui/*, serde + serde_json… */
+function groupFamilies(list: Technology[]): Family[] {
+  const names = new Set(list.map((t) => t.name));
+  const familyOf = (name: string): string => {
+    if (name.startsWith("@types/")) {
+      const base = name.slice("@types/".length);
+      return names.has(base) ? familyOf(base) : "@types";
+    }
+    const scope = name.match(/^(@[^/]+)\//)?.[1];
+    if (scope) return SCOPE_FAMILY[scope] ?? scope;
+    const prefix = name.split(/[-_]/)[0];
+    return prefix !== name && names.has(prefix) ? prefix : name;
+  };
+  const map = new Map<string, Technology[]>();
+  for (const tech of list) {
+    const key = familyOf(tech.name);
+    map.set(key, [...(map.get(key) ?? []), tech]);
+  }
+  return [...map.entries()]
+    .map(([key, members]) => {
+      const sorted = [...members].sort(
+        (a, b) =>
+          Number(b.name === key) - Number(a.name === key) ||
+          Number(a.name.startsWith("@types/")) - Number(b.name.startsWith("@types/")) ||
+          a.name.localeCompare(b.name),
+      );
+      return {
+        key,
+        label: FAMILY_LABELS[key] ?? key,
+        icon: sorted[0].name,
+        members: sorted,
+      };
+    })
+    .sort((a, b) => a.label.replace(/^@/, "").localeCompare(b.label.replace(/^@/, "")));
+}
+
+function TechRow({
+  tech,
+  nested,
+  onError,
+}: {
+  tech: Technology;
+  nested?: boolean;
+  onError: (message: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => api.openUrl(tech.docs_url).catch((e) => onError(formatError(e)))}
+      title={`Abrir documentación de ${tech.name} ${tech.version}`}
+      className={cn(
+        "group w-full flex items-center gap-2.5 px-2 rounded-md text-left hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+        nested ? "h-8" : "h-9",
+      )}
+    >
+      {nested ? (
+        <span className="w-5 flex-shrink-0" />
+      ) : (
+        <TechIcon name={tech.name} className="w-5 h-5" />
+      )}
+      <span className={cn("truncate flex-1", nested ? "text-xs text-mist" : "text-sm text-paper")}>
+        {tech.name}
+      </span>
+      <span className="text-xs text-fog tabular-nums group-hover:hidden group-focus-visible:hidden">
+        {tech.version}
+      </span>
+      <ExternalLink className="w-3.5 h-3.5 text-fog hidden group-hover:block group-focus-visible:block" />
+    </button>
+  );
+}
 
 export function TechnologiesTab({ project }: TechnologiesTabProps) {
   const [items, setItems] = useState<Technology[]>([]);
@@ -104,36 +198,51 @@ export function TechnologiesTab({ project }: TechnologiesTabProps) {
       <div className="flex-1 overflow-y-auto space-y-6 pr-1">
         <TechRulesSection projectId={project.id} stack={items} stackVersion={syncCount} />
 
-        {grouped.map(([ecosystem, list]) => (
-          <section key={ecosystem}>
-            <h3 className="text-xs text-fog px-3 mb-1">
-              {ECOSYSTEM_LABELS[ecosystem]} · {list.length}
-            </h3>
-            <ul>
-              {list.map((tech) => (
-                <li
-                  key={tech.id}
-                  className="group flex items-center gap-3 px-3 h-10 rounded-md hover:bg-obsidian transition-colors duration-[120ms]"
-                >
-                  <TechIcon name={tech.name} />
-                  <span className="text-sm text-paper truncate flex-1">{tech.name}</span>
-                  <span className="text-sm text-fog tabular-nums">{tech.version}</span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      api.openUrl(tech.docs_url).catch((e) => setError(formatError(e)))
-                    }
-                    aria-label={`Abrir documentación de ${tech.name} ${tech.version}`}
-                    title="Abrir documentación de esta versión"
-                    className="h-7 w-7 rounded-md flex items-center justify-center text-fog opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-paper hover:bg-elevated transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ))}
+        {grouped.map(([ecosystem, list]) => {
+          const families = groupFamilies(list);
+          const multi = families.filter((f) => f.members.length > 1);
+          const singles = families.filter((f) => f.members.length === 1).map((f) => f.members[0]);
+          return (
+            <section key={ecosystem} className="space-y-2">
+              <h3 className="text-xs font-semibold text-fog px-1">
+                {ECOSYSTEM_LABELS[ecosystem]} · {list.length} paquetes
+              </h3>
+              {multi.length > 0 && (
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-2 items-start">
+                  {multi.map((family) => (
+                    <div key={family.key} className="bg-carbon rounded-lg p-1.5 min-w-0">
+                      <div className="flex items-center gap-2.5 px-2 pt-1 pb-1.5">
+                        <TechIcon name={family.icon} className="w-5 h-5" />
+                        <span className="text-sm font-medium text-paper truncate flex-1">
+                          {family.label}
+                        </span>
+                        <span className="text-xs text-fog tabular-nums">
+                          {family.members.length}
+                        </span>
+                      </div>
+                      <ul>
+                        {family.members.map((tech) => (
+                          <li key={tech.id}>
+                            <TechRow tech={tech} nested onError={setError} />
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {singles.length > 0 && (
+                <ul className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-x-2">
+                  {singles.map((tech) => (
+                    <li key={tech.id}>
+                      <TechRow tech={tech} onError={setError} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          );
+        })}
 
         {isLoaded && !isScanning && grouped.length === 0 && (
           <div className="py-16 text-center text-sm text-fog">

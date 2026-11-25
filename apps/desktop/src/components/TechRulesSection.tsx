@@ -26,7 +26,7 @@ export function TechRulesSection({ projectId, stackVersion }: TechRulesSectionPr
 
   return (
     <section aria-label="Reglas por tecnología">
-      <h3 className="text-xs text-fog px-3 mb-1">Reglas · {rules.length}</h3>
+      <h3 className="text-xs font-semibold text-fog px-1 mb-2">Reglas · {rules.length}</h3>
 
       {error && (
         <div
@@ -53,8 +53,8 @@ export function TechRulesSection({ projectId, stackVersion }: TechRulesSectionPr
           </li>
         ))}
         {rules.length === 0 && (
-          <li className="px-3 py-3 text-xs text-fog">
-            Pídele a tu IA: «añade una regla para &lt;tecnología&gt;»
+          <li className="px-3 py-2.5 rounded-lg bg-carbon text-xs text-fog">
+            Sin reglas. Pídele a tu IA: «añade una regla para &lt;tecnología&gt;».
           </li>
         )}
       </ul>

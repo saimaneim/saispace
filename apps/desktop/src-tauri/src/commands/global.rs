@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 const SVGL_API: &str = "https://api.svgl.app";
 const MAX_SVG_BYTES: usize = 256 * 1024;
+const MISS_TTL: std::time::Duration = std::time::Duration::from_hours(7 * 24);
 
 /// # Errors
 ///
@@ -118,8 +119,17 @@ pub async fn tech_icon(name: String) -> CommandResult<Option<String>> {
     if let Ok(svg) = tokio::fs::read_to_string(&hit).await {
         return Ok(Some(svg));
     }
-    if tokio::fs::metadata(&miss).await.is_ok() {
-        return Ok(None);
+    // Misses expire so an icon added to svgl later (or a better alias)
+    // is picked up without clearing the cache by hand.
+    if let Ok(meta) = tokio::fs::metadata(&miss).await {
+        let fresh = meta
+            .modified()
+            .ok()
+            .and_then(|m| m.elapsed().ok())
+            .is_some_and(|age| age < MISS_TTL);
+        if fresh {
+            return Ok(None);
+        }
     }
     let icon = fetch_icon(&name).await?;
     tokio::fs::create_dir_all(&dir).await?;

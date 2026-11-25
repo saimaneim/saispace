@@ -178,6 +178,8 @@ mod tests {
             path: "/home/user/mi-proyecto".to_string(),
             status: ProjectStatus::Active,
             context_notes: String::new(),
+            pinned: false,
+            sort_order: 0,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };

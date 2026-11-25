@@ -12,7 +12,10 @@ use commands::{
         list_orphan_memory_groups, memory_duplicates, memory_stale, memory_usage_stats,
         set_memory_pinned, update_memory,
     },
-    project::{create_project, delete_project, get_project, list_projects, update_project},
+    project::{
+        create_project, delete_project, get_project, list_projects, reorder_projects,
+        set_project_pinned, update_project,
+    },
     secret::{
         decide_secret_grant, delete_secret, list_secret_grants, list_secrets, revoke_secret_grant,
         set_secret,
@@ -85,6 +88,8 @@ pub fn run() {
             create_project,
             update_project,
             delete_project,
+            set_project_pinned,
+            reorder_projects,
             list_tasks,
             create_task,
             update_task,

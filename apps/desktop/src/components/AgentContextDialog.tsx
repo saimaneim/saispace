@@ -62,7 +62,7 @@ export function AgentContextDialog({ open, onOpenChange, projectId }: AgentConte
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl w-full p-6 bg-elevated">
+      <DialogContent className="max-w-2xl p-6 bg-elevated">
         <DialogHeader>
           <DialogTitle className="text-base font-semibold text-paper">
             Lo que ve el agente al empezar
@@ -83,8 +83,8 @@ export function AgentContextDialog({ open, onOpenChange, projectId }: AgentConte
         )}
 
         {!loading && !error && context && (
-          <div className="relative mt-2">
-            <pre className="font-mono text-xs text-paper bg-carbon p-4 rounded-lg overflow-x-auto overflow-y-auto max-h-[60vh] whitespace-pre select-text leading-relaxed">
+          <div className="relative mt-2 min-w-0">
+            <pre className="font-mono text-xs text-paper bg-carbon p-4 rounded-lg overflow-y-auto max-h-[60vh] whitespace-pre-wrap break-words select-text leading-relaxed">
               {context.text}
             </pre>
           </div>

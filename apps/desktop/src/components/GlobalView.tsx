@@ -1,4 +1,5 @@
 import { Brain, FileText, KeyRound, Plug, Sparkles } from "lucide-react";
+import type React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, formatError } from "../lib/api";
 import type { AiInventory } from "../lib/types";
@@ -26,8 +27,24 @@ const EMPTY: AiInventory = {
   warnings: [],
 };
 
-function SectionTitle({ children }: { children: string }) {
-  return <h3 className="text-xs font-semibold text-fog px-1 pt-4 pb-2 first:pt-0">{children}</h3>;
+function SectionTitle({ children, className }: { children: string; className?: string }) {
+  return (
+    <h3 className={cn("text-xs font-semibold text-fog px-1 pt-5 pb-2", className)}>{children}</h3>
+  );
+}
+
+/** Agent logo (Claude, OpenCode…) with its name as tooltip. */
+function ToolBadge({ tool, disabled }: { tool: string; disabled?: boolean }) {
+  return (
+    <span
+      className="flex items-center gap-1.5 flex-shrink-0"
+      title={disabled ? `${tool} · desactivado` : tool}
+    >
+      {disabled && <span className="text-xs text-fog">desactivado</span>}
+      <TechIcon name={tool} className="w-4 h-4" />
+      <span className="sr-only">{tool}</span>
+    </span>
+  );
 }
 
 function InstructionsPanel({ inventory }: { inventory: AiInventory }) {
@@ -83,20 +100,26 @@ function SkillsPanel({ inventory }: { inventory: AiInventory }) {
   }, [inventory.skills, query]);
 
   return (
-    <div className="flex-1 overflow-y-auto px-6 pb-6">
+    <div className="flex-1 overflow-y-auto px-6 pt-3 pb-6">
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder={`Filtrar ${inventory.skills.length} skills…`}
         aria-label="Filtrar skills"
-        className="w-full max-w-sm h-9 px-3 mb-2 text-sm bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+        className="w-full max-w-sm h-9 px-3 mb-4 text-sm bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
       />
-      {groups.map(([source, skills]) => (
+      {groups.map(([source, skills], index) => (
         <section key={source}>
-          <SectionTitle>{`${source} · ${skills.length}`}</SectionTitle>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-2">
+          <SectionTitle className={index === 0 ? "pt-1" : "pt-6"}>
+            {`${source} · ${skills.length}`}
+          </SectionTitle>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
             {skills.map((skill) => (
-              <div key={skill.path} className="bg-carbon rounded-lg px-4 py-3" title={skill.path}>
+              <div
+                key={skill.path}
+                className="bg-carbon rounded-lg px-4 py-3.5 min-w-0"
+                title={skill.path}
+              >
                 <p className="text-sm font-medium text-paper truncate">{skill.name}</p>
                 <p className="text-xs text-fog line-clamp-2 mt-1 leading-relaxed">
                   {skill.description || "Sin descripción"}
@@ -120,7 +143,7 @@ function Row({
   icon: string;
   title: string;
   detail: string;
-  meta?: string;
+  meta?: React.ReactNode;
   muted?: boolean;
 }) {
   return (
@@ -133,22 +156,22 @@ function Row({
       <TechIcon name={icon} className="w-5 h-5" />
       <span className="text-sm font-medium text-paper w-44 truncate flex-shrink-0">{title}</span>
       <span className="text-xs text-fog font-mono truncate flex-1 select-text">{detail}</span>
-      {meta && <span className="text-xs text-fog flex-shrink-0">{meta}</span>}
+      {meta}
     </div>
   );
 }
 
 function ConnectionsPanel({ inventory }: { inventory: AiInventory }) {
   return (
-    <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-1.5">
-      <SectionTitle>Servidores MCP</SectionTitle>
+    <div className="flex-1 overflow-y-auto px-6 pt-2 pb-6 space-y-1.5">
+      <SectionTitle className="pt-1">Servidores MCP</SectionTitle>
       {inventory.mcp_servers.map((server) => (
         <Row
           key={`${server.tool}-${server.name}`}
           icon={server.name}
           title={server.name}
           detail={server.target}
-          meta={server.enabled ? server.tool : `${server.tool} · desactivado`}
+          meta={<ToolBadge tool={server.tool} disabled={!server.enabled} />}
           muted={!server.enabled}
         />
       ))}
@@ -159,7 +182,7 @@ function ConnectionsPanel({ inventory }: { inventory: AiInventory }) {
           icon={plugin.name.split("@")[0]}
           title={plugin.name.split("@")[0]}
           detail={plugin.version ? `v${plugin.version}` : ""}
-          meta={plugin.enabled ? plugin.tool : `${plugin.tool} · desactivado`}
+          meta={<ToolBadge tool={plugin.tool} disabled={!plugin.enabled} />}
           muted={!plugin.enabled}
         />
       ))}
@@ -170,7 +193,7 @@ function ConnectionsPanel({ inventory }: { inventory: AiInventory }) {
           icon={hook.tool}
           title={hook.event}
           detail={hook.command}
-          meta={hook.tool}
+          meta={<ToolBadge tool={hook.tool} />}
         />
       ))}
       {inventory.warnings.map((warning) => (
