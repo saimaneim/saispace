@@ -833,6 +833,7 @@ fn memory_usage_tracks_get_search_and_ignores_list_and_context() {
         find_memory_by_title(&sb, &repo, "Preferencia global")["use_count"],
         0
     );
+}
 
 #[test]
 fn memory_context_compact_notice_via_stdin_and_flag() {

@@ -151,11 +151,11 @@ export function createSaispacePlugin(
       state.compactPending = false;
       const task = (async () => {
         let res = await runSafe(
-          useCompact ? ["memory", "context", "--source", "compact"] : ["memory", "context"],
+          useCompact ? ["memory", "context", "--source", "compact"] : ["memory", "context", "--source", "startup"],
           cwd,
         );
         if (useCompact && res.exitCode !== 0 && !res.timedOut) {
-          res = await runSafe(["memory", "context"], cwd);
+          res = await runSafe(["memory", "context", "--source", "startup"], cwd);
         }
         const text = res.exitCode === 0 ? truncateUtf8(res.stdout ?? "", maxBytes) : "";
         if (sessions.get(sessionID) === state && state.gen === gen) state.cached = text;

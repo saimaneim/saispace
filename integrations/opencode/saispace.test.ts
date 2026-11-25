@@ -49,7 +49,7 @@ describe("saispace OpenCode plugin", () => {
 
     expect(calls).toHaveLength(1);
     expect(calls[0]).toEqual({
-      args: ["memory", "context"],
+      args: ["memory", "context", "--source", "startup"],
       cwd: "/repo/project",
       timeoutMs: 3000,
     });
@@ -73,7 +73,7 @@ describe("saispace OpenCode plugin", () => {
   it("refreshes with --source compact after session.compacted and falls back to plain on error", async () => {
     let failCompact = true;
     const { runner, calls } = makeRunner(async (args) => {
-      if (args.includes("--source")) {
+      if (args.includes("compact")) {
         if (failCompact) return { exitCode: 2, stdout: "" };
         return { exitCode: 0, stdout: "Post-compact notice\n# Memoria" };
       }
@@ -108,9 +108,9 @@ describe("saispace OpenCode plugin", () => {
     expect(out4.system[0]).toBe("Sys\n\nPost-compact notice\n# Memoria");
 
     expect(calls.map((c) => c.args)).toEqual([
-      ["memory", "context"],
+      ["memory", "context", "--source", "startup"],
       ["memory", "context", "--source", "compact"],
-      ["memory", "context"],
+      ["memory", "context", "--source", "startup"],
       ["memory", "context", "--source", "compact"],
     ]);
   });
@@ -218,7 +218,7 @@ describe("saispace OpenCode plugin", () => {
     await hooks["experimental.chat.system.transform"]({ sessionID: "s-shell" }, output);
 
     expect(output.system).toEqual(["Shell context"]);
-    expect(recorded).toEqual([{ exprs: [["memory", "context"]], cwd: "/repo/project" }]);
+    expect(recorded).toEqual([{ exprs: [["memory", "context", "--source", "startup"]], cwd: "/repo/project" }]);
   });
 
   it("cleans session state on session.deleted so a new lifecycle fetches fresh context", async () => {
