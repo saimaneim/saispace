@@ -56,6 +56,22 @@ fn text_json(result: &rmcp::model::CallToolResult) -> serde_json::Value {
     serde_json::from_str(text).expect("valid json response")
 }
 
+#[tokio::test]
+async fn test_server_instructions_describe_memory_protocol() {
+    let server = setup_test_server().await;
+    let (client, server_task) = connect(server).await;
+
+    let peer_info = client.peer_info().expect("server peer info");
+    let instructions = peer_info.instructions.as_deref().expect("instructions");
+    assert_ne!(instructions, "");
+    assert!(instructions.len() < 1000);
+    assert!(instructions.contains("save_memory"));
+    assert!(instructions.contains("topic_key"));
+
+    client.cancel().await.expect("cancel client failed");
+    let _ = server_task.await;
+}
+
 async fn assert_expected_tools(
     client: &rmcp::service::RunningService<rmcp::RoleClient, TestClientHandler>,
 ) {

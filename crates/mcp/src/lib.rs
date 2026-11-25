@@ -1,4 +1,5 @@
 pub mod config;
+mod instructions;
 pub mod server;
 pub mod tools;
 
