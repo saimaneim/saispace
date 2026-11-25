@@ -203,6 +203,8 @@ mod tests {
                 pinned: false,
                 created_at: now,
                 updated_at: now,
+                last_used_at: None,
+                use_count: 0,
             });
         }
         let context = MemoryContext {

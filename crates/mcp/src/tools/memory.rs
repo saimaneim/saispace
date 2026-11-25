@@ -221,6 +221,7 @@ impl SaiSpaceServer {
             Ok(context) => context,
             Err(err) => return format_error(&err),
         };
+        self.touch_memories(&context.listed_ids()).await;
         format_success(&ContextResponse {
             project,
             preferences: context
@@ -253,7 +254,10 @@ impl SaiSpaceServer {
             Err(err) => return format_error(&err),
         };
         match self.db.get_memory(id).await {
-            Ok(memory) => format_success(&memory),
+            Ok(memory) => {
+                self.touch_memories(&[memory.id]).await;
+                format_success(&memory)
+            }
             Err(err) => format_error(&err),
         }
     }

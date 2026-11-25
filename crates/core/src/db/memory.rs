@@ -12,7 +12,7 @@ pub const MAX_MEMORY_TITLE_CHARS: usize = 200;
 pub const MAX_MEMORY_CONTENT_CHARS: usize = 20_000;
 pub const MAX_TOPIC_KEY_CHARS: usize = 120;
 
-pub(crate) const MEMORY_COLUMNS: &str = "id, project_id, NULLIF(project_name, '') AS project_name, kind, title, content, NULLIF(topic_key, '') AS topic_key, pinned, created_at, updated_at";
+pub(crate) const MEMORY_COLUMNS: &str = "id, project_id, NULLIF(project_name, '') AS project_name, kind, title, content, NULLIF(topic_key, '') AS topic_key, pinned, created_at, updated_at, last_used_at, use_count";
 
 /// Share of meaningful title words two memories must have in common (Jaccard)
 /// to count as possible duplicates. One shared word such as a client name

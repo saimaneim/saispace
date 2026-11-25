@@ -584,3 +584,36 @@ async fn update_memory_conflict_on_unique_topic_returns_validation_error() {
         .await;
     assert!(cross_update.is_ok());
 }
+
+#[tokio::test]
+async fn core_reads_do_not_auto_touch_usage() {
+    let db = setup().await;
+    let mem = db
+        .save_memory(input("Lectura pasiva", "Contenido desktop_pasivo", None))
+        .await
+        .expect("save");
+
+    let fetched = db.get_memory(mem.id).await.expect("get");
+    let recent = db
+        .recent_memories(MemoryScope::All, 10)
+        .await
+        .expect("recent");
+    let hits = db
+        .search_scoped("desktop_pasivo", MemoryScope::All, Some(10))
+        .await
+        .expect("search");
+    let ctx = db
+        .memory_context(MemoryScope::All, 10)
+        .await
+        .expect("context");
+
+    assert_eq!(hits.len(), 1);
+    assert_eq!(recent.len(), 1);
+    assert_eq!(ctx.memories.len(), 1);
+    assert_eq!(fetched.use_count, 0);
+    assert!(fetched.last_used_at.is_none());
+
+    let after = db.get_memory(mem.id).await.expect("re-get");
+    assert_eq!(after.use_count, 0);
+    assert!(after.last_used_at.is_none());
+}

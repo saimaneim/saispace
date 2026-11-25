@@ -47,6 +47,8 @@ pub struct Memory {
     pub pinned: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub last_used_at: Option<DateTime<Utc>>,
+    pub use_count: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -98,4 +100,17 @@ pub struct MemoryContext {
     pub last_session: Option<Memory>,
     pub pinned: Vec<Memory>,
     pub memories: Vec<Memory>,
+}
+
+impl MemoryContext {
+    #[must_use]
+    pub fn listed_ids(&self) -> Vec<Uuid> {
+        self.preferences
+            .iter()
+            .chain(self.pinned.iter())
+            .chain(self.memories.iter())
+            .chain(self.last_session.iter())
+            .map(|m| m.id)
+            .collect()
+    }
 }

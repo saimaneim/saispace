@@ -719,3 +719,113 @@ fn memory_dupes_detects_and_prints_pairs() {
     assert!(out.contains("Database connection pooling"));
     assert!(out.contains("≈"));
 }
+
+fn find_memory_by_title(sb: &Sandbox, repo: &Path, title: &str) -> serde_json::Value {
+    let out = sb.sai(repo, &["memory", "list", "--json"]);
+    assert!(out.status.success());
+    let items: serde_json::Value = serde_json::from_slice(&out.stdout).expect("list json");
+    items
+        .as_array()
+        .expect("array")
+        .iter()
+        .find(|m| m["title"] == title)
+        .cloned()
+        .expect("memory found")
+}
+
+#[test]
+fn memory_usage_tracks_get_search_context_and_ignores_list() {
+    let sb = Sandbox::new("memory-usage");
+    let repo = sb.repo();
+
+    for args in [
+        &[
+            "memory",
+            "save",
+            "--global",
+            "--kind",
+            "preference",
+            "--title",
+            "Preferencia global",
+            "--content",
+            "Usar biome siempre",
+        ][..],
+        &[
+            "memory",
+            "save",
+            "--kind",
+            "decision",
+            "--title",
+            "Cola eventos",
+            "--content",
+            "Token unico usage_cli_marker",
+        ][..],
+        &[
+            "memory",
+            "save",
+            "--kind",
+            "note",
+            "--title",
+            "Fijada",
+            "--content",
+            "Detalle importante fijado",
+        ][..],
+    ] {
+        assert!(sb.sai(&repo, args).status.success());
+    }
+
+    let decision = find_memory_by_title(&sb, &repo, "Cola eventos");
+    let decision_id = decision["id"].as_str().expect("id");
+    let pinned_mem = find_memory_by_title(&sb, &repo, "Fijada");
+    let pinned_id = pinned_mem["id"].as_str().expect("pinned id");
+    assert!(
+        sb.sai(&repo, &["memory", "pin", pinned_id])
+            .status
+            .success()
+    );
+
+    let listed_again = find_memory_by_title(&sb, &repo, "Cola eventos");
+    assert_eq!(listed_again["use_count"], 0);
+    assert!(listed_again["last_used_at"].is_null());
+
+    assert!(
+        sb.sai(&repo, &["memory", "get", decision_id])
+            .status
+            .success()
+    );
+    assert!(
+        sb.sai(&repo, &["memory", "get", decision_id])
+            .status
+            .success()
+    );
+
+    let get_json_out = sb.sai(&repo, &["memory", "get", decision_id, "--json"]);
+    assert!(get_json_out.status.success());
+    let get_json: serde_json::Value =
+        serde_json::from_slice(&get_json_out.stdout).expect("get json");
+    assert_eq!(get_json["use_count"], 2);
+    assert!(get_json["last_used_at"].is_string());
+    assert_eq!(get_json["updated_at"], decision["updated_at"]);
+
+    assert!(
+        sb.sai(&repo, &["memory", "search", "usage_cli_marker"])
+            .status
+            .success()
+    );
+    assert_eq!(
+        find_memory_by_title(&sb, &repo, "Cola eventos")["use_count"],
+        4
+    );
+    assert_eq!(find_memory_by_title(&sb, &repo, "Fijada")["use_count"], 0);
+
+    assert!(sb.sai(&repo, &["memory", "context"]).status.success());
+    assert_eq!(
+        find_memory_by_title(&sb, &repo, "Cola eventos")["use_count"],
+        5
+    );
+    assert_eq!(find_memory_by_title(&sb, &repo, "Fijada")["use_count"], 1);
+    assert_eq!(
+        find_memory_by_title(&sb, &repo, "Preferencia global")["use_count"],
+        1
+    );
+}

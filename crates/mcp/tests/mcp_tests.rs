@@ -1068,3 +1068,115 @@ async fn test_save_memory_git_autoregistration_and_root_rejection() {
     client.cancel().await.expect("cancel client failed");
     let _ = server_task.await;
 }
+
+async fn save_usage_memory(
+    client: &rmcp::service::RunningService<rmcp::RoleClient, TestClientHandler>,
+    args: serde_json::Value,
+) -> (uuid::Uuid, String) {
+    let saved = text_json(&call(client, "save_memory", args).await);
+    assert_eq!(saved["memory"]["use_count"], 0);
+    assert!(saved["memory"]["last_used_at"].is_null());
+    let id_str = saved["memory"]["id"]
+        .as_str()
+        .expect("memory id")
+        .to_string();
+    let id = uuid::Uuid::parse_str(&id_str).expect("valid uuid");
+    (id, id_str)
+}
+
+async fn assert_use_count(db: &Db, id: uuid::Uuid, expected: i64) {
+    let mem = db.get_memory(id).await.expect("get memory");
+    assert_eq!(mem.use_count, expected);
+}
+
+#[tokio::test]
+async fn test_memory_usage_tracking_on_reads() {
+    let server = setup_test_server().await;
+    let db = server.db.clone();
+    let (client, server_task) = connect(server).await;
+    let project_id = register_test_project(&client, "Usage Proj", "/dev/usage-proj").await;
+
+    let (pref_id, _) = save_usage_memory(
+        &client,
+        json!({
+            "title": "Estilo código",
+            "content": "Evitar unwrap en producción",
+            "kind": "preference",
+            "global": true
+        }),
+    )
+    .await;
+    let (pinned_id, _) = save_usage_memory(
+        &client,
+        json!({
+            "project_id": project_id,
+            "title": "Invariant clave",
+            "content": "Nunca imprimir a stdout en MCP",
+            "kind": "pattern",
+            "pinned": true
+        }),
+    )
+    .await;
+    let (decision_id, decision_id_str) = save_usage_memory(
+        &client,
+        json!({
+            "project_id": project_id,
+            "title": "Motor caché",
+            "content": "Usar SQLite WAL con busy_timeout",
+            "kind": "decision"
+        }),
+    )
+    .await;
+    let original_updated_at = db
+        .get_memory(decision_id)
+        .await
+        .expect("initial")
+        .updated_at;
+
+    let get1 = call(&client, "get_memory", json!({ "id": decision_id_str })).await;
+    assert_eq!(get1.is_error, Some(false));
+    assert_eq!(text_json(&get1)["use_count"], 0);
+
+    let after_get1 = db.get_memory(decision_id).await.expect("after get1");
+    assert_eq!(after_get1.use_count, 1);
+    assert!(after_get1.last_used_at.is_some());
+    assert_eq!(after_get1.updated_at, original_updated_at);
+
+    let get2 = call(&client, "get_memory", json!({ "id": decision_id_str })).await;
+    assert_eq!(get2.is_error, Some(false));
+    assert_eq!(text_json(&get2)["use_count"], 1);
+    assert_use_count(&db, decision_id, 2).await;
+
+    let search = call(
+        &client,
+        "search_memory",
+        json!({ "query": "busy_timeout", "project_id": project_id }),
+    )
+    .await;
+    assert_eq!(search.is_error, Some(false));
+    assert_eq!(text_json(&search).as_array().expect("hits").len(), 1);
+    assert_use_count(&db, decision_id, 3).await;
+    assert_use_count(&db, pinned_id, 0).await;
+
+    let ctx = call(
+        &client,
+        "memory_context",
+        json!({ "project_id": project_id }),
+    )
+    .await;
+    assert_eq!(ctx.is_error, Some(false));
+    assert_use_count(&db, decision_id, 4).await;
+    assert_use_count(&db, pinned_id, 1).await;
+    assert_use_count(&db, pref_id, 1).await;
+
+    let missing = call(
+        &client,
+        "get_memory",
+        json!({ "id": uuid::Uuid::now_v7().to_string() }),
+    )
+    .await;
+    assert_eq!(missing.is_error, Some(true));
+
+    client.cancel().await.expect("cancel client failed");
+    let _ = server_task.await;
+}

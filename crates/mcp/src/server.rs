@@ -49,6 +49,12 @@ impl SaiSpaceServer {
         }
     }
 
+    pub async fn touch_memories(&self, ids: &[Uuid]) {
+        if let Err(err) = self.db.touch_memories(ids).await {
+            tracing::warn!(error = %err, "failed to touch memory usage");
+        }
+    }
+
     pub async fn sync_stack(&self, project_id: Uuid) -> Result<Vec<Technology>, CoreError> {
         let stack = self.db.sync_project_stack(project_id).await?;
         self.record(RecordActivityInput {

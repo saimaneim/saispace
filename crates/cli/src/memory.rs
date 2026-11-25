@@ -3,7 +3,7 @@ use clap::Subcommand;
 use saispace_core::memory_render::{excerpt, kind_label, render_context, render_memory};
 use saispace_core::models::{
     ActionKind, Actor, EntityKind, Memory, MemoryKind, MemoryScope, Project, RecordActivityInput,
-    SaveMemoryInput, UpdateMemoryInput,
+    SaveMemoryInput, SearchKind, UpdateMemoryInput,
 };
 use saispace_core::{Db, default_db_path};
 use std::path::PathBuf;
@@ -262,6 +262,12 @@ async fn list(db: &Db, kind: Option<String>, all: bool, limit: i64, json: bool) 
     Ok(())
 }
 
+async fn touch_memories_or_warn(db: &Db, ids: &[Uuid]) {
+    if let Err(err) = db.touch_memories(ids).await {
+        eprintln!("aviso: no se pudo actualizar el uso de memoria: {err}");
+    }
+}
+
 async fn search(db: &Db, query: &str, all: bool, limit: i64, json: bool) -> CliResult<()> {
     let scope = if all {
         MemoryScope::All
@@ -269,6 +275,12 @@ async fn search(db: &Db, query: &str, all: bool, limit: i64, json: bool) -> CliR
         MemoryScope::for_project(current_project(db, false).await?.map(|p| p.id))
     };
     let hits = db.search_scoped(query, scope, Some(limit)).await?;
+    let memory_ids: Vec<Uuid> = hits
+        .iter()
+        .filter(|h| h.kind == SearchKind::Memory)
+        .map(|h| h.id)
+        .collect();
+    touch_memories_or_warn(db, &memory_ids).await;
     if json {
         crate::out!("{}", serde_json::to_string_pretty(&hits)?);
     } else {
@@ -439,6 +451,7 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
             let project = current_project(&db, false).await?;
             let scope = MemoryScope::for_project(project.as_ref().map(|p| p.id));
             let context = db.memory_context(scope, limit).await?;
+            touch_memories_or_warn(&db, &context.listed_ids()).await;
             if json {
                 crate::out!("{}", serde_json::to_string_pretty(&context)?);
             } else {
@@ -447,6 +460,7 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
         }
         MemoryCommand::Get { id, json } => {
             let memory = db.get_memory(id).await?;
+            touch_memories_or_warn(&db, &[memory.id]).await;
             if json {
                 crate::out!("{}", serde_json::to_string_pretty(&memory)?);
             } else {

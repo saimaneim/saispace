@@ -12,6 +12,7 @@ pub mod memory_dupes;
 pub mod memory_edit;
 pub mod memory_orphans;
 pub mod memory_pin;
+pub mod memory_usage;
 pub mod project;
 pub mod search;
 pub mod secret;
