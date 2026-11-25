@@ -84,6 +84,35 @@ export function App() {
     }
   }, [reportError]);
 
+  const toggleProjectPin = useCallback(
+    async (id: string, pinned: boolean) => {
+      try {
+        await api.setProjectPinned(id, pinned);
+        setProjects(await api.listProjects());
+      } catch (err) {
+        reportError(err);
+      }
+    },
+    [reportError],
+  );
+
+  const reorderProjects = useCallback(
+    async (ids: string[]) => {
+      setProjects((prev) => {
+        const byId = new Map(prev.map((p) => [p.id, p]));
+        const ordered = ids.flatMap((id) => byId.get(id) ?? []);
+        return [...ordered, ...prev.filter((p) => !ids.includes(p.id))];
+      });
+      try {
+        await api.reorderProjects(ids);
+      } catch (err) {
+        reportError(err);
+        refreshAll();
+      }
+    },
+    [reportError, refreshAll],
+  );
+
   const refreshPending = useCallback(async () => {
     try {
       const grants = await api.listSecretGrants();
@@ -243,6 +272,8 @@ export function App() {
         pendingRequests={pendingRequests}
         onOpenDirectoryPicker={() => setIsPickerOpen(true)}
         taskCounts={taskCounts}
+        onTogglePin={toggleProjectPin}
+        onReorder={reorderProjects}
         isOpen={isSidebarOpen}
       />
 

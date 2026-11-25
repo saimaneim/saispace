@@ -7,6 +7,9 @@ use chrono::Utc;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
+pub(crate) const PROJECT_COLUMNS: &str =
+    "id, name, path, status, context_notes, pinned, sort_order, created_at, updated_at";
+
 impl Db {
     /// # Errors
     ///
@@ -18,13 +21,13 @@ impl Db {
         let now = Utc::now();
         let context_notes = input.context_notes.unwrap_or_default();
 
-        let project = sqlx::query_as::<_, Project>(
+        let project = sqlx::query_as::<_, Project>(&format!(
             r"
             INSERT INTO projects (id, name, path, status, context_notes, created_at, updated_at)
             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-            RETURNING id, name, path, status, context_notes, created_at, updated_at
+            RETURNING {PROJECT_COLUMNS}
             ",
-        )
+        ))
         .bind(id)
         .bind(name)
         .bind(path)
@@ -43,13 +46,13 @@ impl Db {
     ///
     /// Returns an error if the query fails.
     pub async fn get_project(&self, id: Uuid) -> CoreResult<Option<Project>> {
-        let project = sqlx::query_as::<_, Project>(
+        let project = sqlx::query_as::<_, Project>(&format!(
             r"
-            SELECT id, name, path, status, context_notes, created_at, updated_at
+            SELECT {PROJECT_COLUMNS}
             FROM projects
             WHERE id = ?1
             ",
-        )
+        ))
         .bind(id)
         .fetch_optional(&self.pool)
         .await?;
@@ -61,13 +64,13 @@ impl Db {
     ///
     /// Returns an error if the query fails.
     pub async fn get_project_by_path(&self, path: &str) -> CoreResult<Option<Project>> {
-        let project = sqlx::query_as::<_, Project>(
+        let project = sqlx::query_as::<_, Project>(&format!(
             r"
-            SELECT id, name, path, status, context_notes, created_at, updated_at
+            SELECT {PROJECT_COLUMNS}
             FROM projects
             WHERE path = ?1
             ",
-        )
+        ))
         .bind(path)
         .fetch_optional(&self.pool)
         .await?;
@@ -79,13 +82,13 @@ impl Db {
     ///
     /// Returns an error if the projects cannot be loaded.
     pub async fn list_projects(&self) -> CoreResult<Vec<Project>> {
-        let projects = sqlx::query_as::<_, Project>(
+        let projects = sqlx::query_as::<_, Project>(&format!(
             r"
-            SELECT id, name, path, status, context_notes, created_at, updated_at
+            SELECT {PROJECT_COLUMNS}
             FROM projects
-            ORDER BY updated_at DESC
+            ORDER BY pinned DESC, sort_order ASC, updated_at DESC
             ",
-        )
+        ))
         .fetch_all(&self.pool)
         .await?;
 
@@ -108,7 +111,7 @@ impl Db {
             .transpose()?;
         let now = Utc::now();
 
-        let updated = sqlx::query_as::<_, Project>(
+        let updated = sqlx::query_as::<_, Project>(&format!(
             r"
             UPDATE projects
             SET name = COALESCE(?1, name),
@@ -117,9 +120,9 @@ impl Db {
                 context_notes = COALESCE(?4, context_notes),
                 updated_at = ?5
             WHERE id = ?6
-            RETURNING id, name, path, status, context_notes, created_at, updated_at
+            RETURNING {PROJECT_COLUMNS}
             ",
-        )
+        ))
         .bind(name)
         .bind(path)
         .bind(input.status)

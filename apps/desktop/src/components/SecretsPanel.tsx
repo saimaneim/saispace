@@ -216,10 +216,13 @@ export function SecretsPanel({ onChanged }: SecretsPanelProps) {
                   <KeyRound className="w-4 h-4 text-fog flex-shrink-0" />
                   <span className="font-mono text-sm text-paper">{secret.name}</span>
                   <span className="text-xs text-fog truncate flex-1">{secret.description}</span>
-                  <span className="text-xs text-fog flex-shrink-0">
+                  <span
+                    className="text-xs text-fog flex-shrink-0"
+                    title="Cuenta solo cuando un agente la usa con sai secret run"
+                  >
                     {secret.last_used_at
                       ? `usada ${formatTimeAgo(secret.last_used_at)}`
-                      : "sin usar"}
+                      : "sin usar vía sai"}
                   </span>
                   <button
                     type="button"

@@ -19,6 +19,8 @@ pub struct Project {
     pub path: String,
     pub status: ProjectStatus,
     pub context_notes: String,
+    pub pinned: bool,
+    pub sort_order: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

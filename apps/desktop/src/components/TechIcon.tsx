@@ -19,7 +19,8 @@ const ALIASES: Record<string, string> = {
   serde: "rust",
   serde_json: "rust",
   rmcp: "mcp",
-  claude: "claude",
+  claude: "claude ai",
+  "claude code": "claude ai",
   opencode: "opencode",
 };
 

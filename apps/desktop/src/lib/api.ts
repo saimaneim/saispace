@@ -76,6 +76,12 @@ export const api = {
 
   deleteProject: (id: string) => invokeOrFallback<void>("delete_project", { id }),
 
+  setProjectPinned: (id: string, pinned: boolean) =>
+    invokeOrFallback<Project>("set_project_pinned", { id, pinned }),
+
+  reorderProjects: (ids: string[]) =>
+    invokeOrFallback<void>("reorder_projects", { ids }, undefined),
+
   listTasks: (projectId: string) => invokeOrFallback<Task[]>("list_tasks", { projectId }, []),
 
   createTask: (input: CreateTaskInput) => invokeOrFallback<Task>("create_task", { input }),
