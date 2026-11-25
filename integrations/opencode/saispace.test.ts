@@ -103,15 +103,17 @@ describe("saispace OpenCode plugin", () => {
     await hooks["experimental.chat.system.transform"]({ sessionID: "s-3" }, out3);
     expect(out3.system[0]).toBe("Sys\n\nPost-compact notice\n# Memoria");
 
+    // The post-compaction notice is one-shot: the next turn gets the plain index.
     const out4 = { system: ["Sys"] };
     await hooks["experimental.chat.system.transform"]({ sessionID: "s-3" }, out4);
-    expect(out4.system[0]).toBe("Sys\n\nPost-compact notice\n# Memoria");
+    expect(out4.system[0]).toBe("Sys\n\nPlain context");
 
     expect(calls.map((c) => c.args)).toEqual([
       ["memory", "context", "--source", "startup"],
       ["memory", "context", "--source", "compact"],
       ["memory", "context", "--source", "startup"],
       ["memory", "context", "--source", "compact"],
+      ["memory", "context", "--source", "startup"],
     ]);
   });
 
@@ -285,5 +287,22 @@ describe("saispace OpenCode plugin", () => {
     const outReclassified = { system: ["Child"] };
     await hooks["experimental.chat.system.transform"]({ sessionID: "s-race" }, outReclassified);
     expect(outReclassified.system).toEqual(["Child"]);
+  });
+  it("retries after a failed fetch instead of caching the failure", async () => {
+    let fail = true;
+    const { runner, calls } = makeRunner(async () =>
+      fail ? { exitCode: 1, stdout: "" } : { exitCode: 0, stdout: "Memoria" },
+    );
+    const hooks = await createSaispacePlugin(runner)(makeInput());
+
+    const first = { system: ["Sys"] };
+    await hooks["experimental.chat.system.transform"]({ sessionID: "s-retry" }, first);
+    expect(first.system[0]).toBe("Sys");
+
+    fail = false;
+    const second = { system: ["Sys"] };
+    await hooks["experimental.chat.system.transform"]({ sessionID: "s-retry" }, second);
+    expect(second.system[0]).toBe("Sys\n\nMemoria");
+    expect(calls).toHaveLength(2);
   });
 });

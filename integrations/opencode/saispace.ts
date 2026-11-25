@@ -157,8 +157,13 @@ export function createSaispacePlugin(
         if (useCompact && res.exitCode !== 0 && !res.timedOut) {
           res = await runSafe(["memory", "context", "--source", "startup"], cwd);
         }
-        const text = res.exitCode === 0 ? truncateUtf8(res.stdout ?? "", maxBytes) : "";
-        if (sessions.get(sessionID) === state && state.gen === gen) state.cached = text;
+        const ok = res.exitCode === 0;
+        const text = ok ? truncateUtf8(res.stdout ?? "", maxBytes) : "";
+        // Failures stay retryable. The post-compaction notice is one-shot: the
+        // next turn fetches (and caches) the plain startup index instead.
+        if (ok && !useCompact && sessions.get(sessionID) === state && state.gen === gen) {
+          state.cached = text;
+        }
         return text;
       })().finally(() => {
         if (state.inFlight === task) state.inFlight = undefined;
@@ -194,7 +199,8 @@ export function createSaispacePlugin(
           if (!sessionID || (await isChildSession(sessionID))) return;
           const state = getState(sessionID);
           const context = state.cached !== undefined ? state.cached : await fetchContext(sessionID);
-          if (!context) return;
+          // The session may have been reclassified as a child while `sai` ran.
+          if (!context || state.isChild) return;
           const last = output.system.length - 1;
           if (last >= 0) {
             output.system[last] = output.system[last]

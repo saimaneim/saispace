@@ -135,7 +135,9 @@ impl Db {
                 COALESCE(SUM(CASE WHEN m.use_count > 0 THEN 1 ELSE 0 END), 0) AS used
             FROM memories m
             LEFT JOIN projects p ON p.id = m.project_id
-            GROUP BY 1
+            -- One row per registered project (by id, so same-name projects stay
+            -- apart), then one per orphan folder name, then the global bucket.
+            GROUP BY m.project_id, CASE WHEN m.project_id IS NULL THEN m.project_name END
             ORDER BY total DESC, used DESC, project_name ASC
             ",
         )

@@ -75,6 +75,24 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
     if (focusId) setSelectedId(focusId);
   }, [focusId]);
 
+  // A focused memory (e.g. from "Más consultadas") may be older than the 200
+  // loaded rows: fetch it by id and add it to the list.
+  useEffect(() => {
+    if (!focusId || memories.length === 0 || memories.some((m) => m.id === focusId)) return;
+    let cancelled = false;
+    api
+      .getMemory(focusId)
+      .then((memory) => {
+        if (!cancelled && memory) {
+          setMemories((prev) => (prev.some((m) => m.id === memory.id) ? prev : [memory, ...prev]));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [focusId, memories]);
+
   // Review panels belong to one project: close them when switching.
   useEffect(() => {
     setShowStale(false);
