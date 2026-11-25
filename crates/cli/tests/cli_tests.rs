@@ -438,9 +438,13 @@ fn memory_list_scoping_and_cross_project() {
 }
 
 fn sai_with_stdin(sb: &Sandbox, args: &[&str], input: &str) -> Output {
+    sai_with_stdin_in(sb, &sb.repo(), args, input)
+}
+
+fn sai_with_stdin_in(sb: &Sandbox, cwd: &Path, args: &[&str], input: &str) -> Output {
     let mut child = Command::new(env!("CARGO_BIN_EXE_sai"))
         .args(args)
-        .current_dir(sb.repo())
+        .current_dir(cwd)
         .env("SAISPACE_DB_PATH", sb.root.join("db/saispace.db"))
         .env("SAISPACE_AGENT_NAME", "cli-test")
         .stdin(std::process::Stdio::piped())
@@ -734,7 +738,7 @@ fn find_memory_by_title(sb: &Sandbox, repo: &Path, title: &str) -> serde_json::V
 }
 
 #[test]
-fn memory_usage_tracks_get_search_context_and_ignores_list() {
+fn memory_usage_tracks_get_search_and_ignores_list_and_context() {
     let sb = Sandbox::new("memory-usage");
     let repo = sb.repo();
 
@@ -818,14 +822,123 @@ fn memory_usage_tracks_get_search_context_and_ignores_list() {
     );
     assert_eq!(find_memory_by_title(&sb, &repo, "Fijada")["use_count"], 0);
 
+    // The session-start index only lists memories: it does not count as use.
     assert!(sb.sai(&repo, &["memory", "context"]).status.success());
     assert_eq!(
         find_memory_by_title(&sb, &repo, "Cola eventos")["use_count"],
-        5
+        4
     );
-    assert_eq!(find_memory_by_title(&sb, &repo, "Fijada")["use_count"], 1);
+    assert_eq!(find_memory_by_title(&sb, &repo, "Fijada")["use_count"], 0);
     assert_eq!(
         find_memory_by_title(&sb, &repo, "Preferencia global")["use_count"],
-        1
+        0
     );
+
+#[test]
+fn memory_context_compact_notice_via_stdin_and_flag() {
+    let sb = Sandbox::new("ctx-compact");
+    let repo = sb.repo();
+
+    let saved = sb.sai(
+        &repo,
+        &[
+            "memory",
+            "save",
+            "--title",
+            "Una decisión",
+            "--content",
+            "Contenido de prueba",
+            "--kind",
+            "decision",
+        ],
+    );
+    assert!(saved.status.success());
+
+    // Piped compact -> notice prepended before the index.
+    let compact = sai_with_stdin(&sb, &["memory", "context"], r#"{"source":"compact"}"#);
+    assert!(compact.status.success());
+    let compact_txt = stdout(&compact);
+    assert!(
+        compact_txt.contains("## Primera acción tras compactar"),
+        "{compact_txt}"
+    );
+    assert!(compact_txt.contains("session_summary"), "{compact_txt}");
+    assert!(compact_txt.contains("# Memoria de "), "{compact_txt}");
+
+    // Piped startup -> no notice.
+    let startup = sai_with_stdin(&sb, &["memory", "context"], r#"{"source":"startup"}"#);
+    let startup_txt = stdout(&startup);
+    assert!(
+        !startup_txt.contains("Primera acción tras compactar"),
+        "{startup_txt}"
+    );
+    assert!(startup_txt.starts_with("# Memoria de "), "{startup_txt}");
+
+    // Invalid stdin is ignored: the index still renders, no notice.
+    let invalid = sai_with_stdin(&sb, &["memory", "context"], "esto no es json");
+    assert!(invalid.status.success());
+    let invalid_txt = stdout(&invalid);
+    assert!(invalid_txt.starts_with("# Memoria de "), "{invalid_txt}");
+    assert!(
+        !invalid_txt.contains("Primera acción tras compactar"),
+        "{invalid_txt}"
+    );
+
+    // Explicit --source compact flag -> notice present.
+    let flag = sb.sai(&repo, &["memory", "context", "--source", "compact"]);
+    assert!(flag.status.success());
+    assert!(stdout(&flag).contains("## Primera acción tras compactar"));
+
+    // --json with compact adds a "notice" field.
+    let json = sai_with_stdin(
+        &sb,
+        &["memory", "context", "--json"],
+        r#"{"source":"compact"}"#,
+    );
+    let json_val: serde_json::Value = serde_json::from_slice(&json.stdout).expect("json");
+    let notice = json_val["notice"].as_str().expect("notice field");
+    assert!(notice.contains("Primera acción tras compactar"), "{notice}");
+
+    // --json without compact has no notice field.
+    let plain_json = sb.sai(&repo, &["memory", "context", "--json"]);
+    let plain_val: serde_json::Value = serde_json::from_slice(&plain_json.stdout).expect("json");
+    assert!(plain_val.get("notice").is_none());
+}
+
+#[test]
+fn memory_context_cwd_from_json_selects_project() {
+    let sb = Sandbox::new("ctx-cwd");
+    let repo = sb.repo();
+
+    let repo2 = sb.root.join("project-b");
+    fs::create_dir_all(repo2.join(".git")).expect("mkdir repo2");
+
+    let saved = sb.sai(
+        &repo2,
+        &[
+            "memory",
+            "save",
+            "--title",
+            "Memoria de project-b",
+            "--content",
+            "Contenido del otro proyecto",
+            "--kind",
+            "note",
+        ],
+    );
+    assert!(saved.status.success());
+
+    // Running from `repo` but with cwd pointing at project-b must resolve
+    // project-b, not the process cwd.
+    let input = format!(r#"{{"source":"startup","cwd":"{}"}}"#, repo2.display());
+    let out = sai_with_stdin_in(&sb, &repo, &["memory", "context"], &input);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let txt = stdout(&out);
+    assert!(txt.contains("# Memoria de project-b"), "{txt}");
+    assert!(txt.contains("Memoria de project-b"), "{txt}");
+    assert!(!txt.contains("# Memoria global"), "{txt}");
 }

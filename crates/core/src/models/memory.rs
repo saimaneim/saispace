@@ -101,16 +101,3 @@ pub struct MemoryContext {
     pub pinned: Vec<Memory>,
     pub memories: Vec<Memory>,
 }
-
-impl MemoryContext {
-    #[must_use]
-    pub fn listed_ids(&self) -> Vec<Uuid> {
-        self.preferences
-            .iter()
-            .chain(self.pinned.iter())
-            .chain(self.memories.iter())
-            .chain(self.last_session.iter())
-            .map(|m| m.id)
-            .collect()
-    }
-}

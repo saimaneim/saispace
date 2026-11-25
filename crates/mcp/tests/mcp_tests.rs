@@ -1165,9 +1165,10 @@ async fn test_memory_usage_tracking_on_reads() {
     )
     .await;
     assert_eq!(ctx.is_error, Some(false));
-    assert_use_count(&db, decision_id, 4).await;
-    assert_use_count(&db, pinned_id, 1).await;
-    assert_use_count(&db, pref_id, 1).await;
+    // Listing in the session-start index is not a use: only get/search count.
+    assert_use_count(&db, decision_id, 3).await;
+    assert_use_count(&db, pinned_id, 0).await;
+    assert_use_count(&db, pref_id, 0).await;
 
     let missing = call(
         &client,

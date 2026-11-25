@@ -221,7 +221,6 @@ impl SaiSpaceServer {
             Ok(context) => context,
             Err(err) => return format_error(&err),
         };
-        self.touch_memories(&context.listed_ids()).await;
         format_success(&ContextResponse {
             project,
             preferences: context
