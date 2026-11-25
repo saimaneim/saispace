@@ -55,6 +55,9 @@ impl ActivityEventRow {
 }
 
 impl Db {
+    /// # Errors
+    ///
+    /// Returns an error if the activity row cannot be inserted.
     pub async fn record_activity(&self, input: RecordActivityInput) -> CoreResult<ActivityEvent> {
         let id = Uuid::now_v7();
         let now = Utc::now();
@@ -91,6 +94,9 @@ impl Db {
         Ok(row.into_event())
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the activity rows cannot be loaded.
     pub async fn list_activity(&self, limit: i64) -> CoreResult<Vec<ActivityEvent>> {
         let rows = sqlx::query_as::<_, ActivityEventRow>(
             r"
@@ -111,6 +117,9 @@ impl Db {
         Ok(events)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the activity rows cannot be loaded.
     pub async fn list_activity_by_project(
         &self,
         project_id: Uuid,
@@ -137,6 +146,9 @@ impl Db {
         Ok(events)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the activity rows cannot be loaded.
     pub async fn list_activity_by_entity(
         &self,
         entity: EntityKind,

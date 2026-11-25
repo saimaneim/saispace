@@ -8,6 +8,9 @@ use saispace_core::{CoreError, Db};
 use tauri::State;
 use uuid::Uuid;
 
+/// # Errors
+///
+/// Returns an error if the technologies cannot be loaded.
 #[tauri::command]
 pub async fn list_technologies(
     project_id: Uuid,
@@ -16,6 +19,9 @@ pub async fn list_technologies(
     Ok(db.list_technologies(project_id).await?)
 }
 
+/// # Errors
+///
+/// Returns an error if the project does not exist or its stack cannot be synced.
 #[tauri::command]
 pub async fn sync_project_stack(
     project_id: Uuid,
@@ -38,6 +44,9 @@ pub async fn sync_project_stack(
     Ok(stored)
 }
 
+/// # Errors
+///
+/// Returns an error if the rules cannot be loaded.
 #[tauri::command]
 pub async fn list_tech_rules(
     technology: Option<String>,
@@ -46,6 +55,9 @@ pub async fn list_tech_rules(
     Ok(db.list_tech_rules(technology.as_deref()).await?)
 }
 
+/// # Errors
+///
+/// Returns an error if the rules cannot be loaded.
 #[tauri::command]
 pub async fn list_project_tech_rules(
     project_id: Uuid,
@@ -54,6 +66,9 @@ pub async fn list_project_tech_rules(
     Ok(db.tech_rules_for_project(project_id).await?)
 }
 
+/// # Errors
+///
+/// Returns an error if the input is invalid or the rule cannot be stored.
 #[tauri::command]
 pub async fn upsert_tech_rule(
     input: UpsertTechRuleInput,
@@ -79,6 +94,9 @@ pub async fn upsert_tech_rule(
     Ok(saved)
 }
 
+/// # Errors
+///
+/// Returns an error if the rule does not exist or cannot be deleted.
 #[tauri::command]
 pub async fn delete_tech_rule(id: Uuid, db: State<'_, Db>) -> CommandResult<()> {
     db.delete_tech_rule(id).await?;
@@ -98,6 +116,9 @@ pub async fn delete_tech_rule(id: Uuid, db: State<'_, Db>) -> CommandResult<()> 
     Ok(())
 }
 
+/// # Errors
+///
+/// Returns an error if the search query fails.
 #[tauri::command]
 pub async fn search_memory(
     query: String,
@@ -108,6 +129,9 @@ pub async fn search_memory(
     Ok(db.search(&query, project_id, limit).await?)
 }
 
+/// # Errors
+///
+/// Returns an error if the URL is not http(s) or the browser cannot be opened.
 #[tauri::command]
 pub fn open_url(url: String) -> CommandResult<()> {
     if !(url.starts_with("https://") || url.starts_with("http://")) {

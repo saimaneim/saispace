@@ -17,6 +17,9 @@ pub fn canonicalize_path(path: &str) -> String {
     }
 }
 
+/// # Errors
+///
+/// Returns an error if the string is not a valid UUID.
 pub fn parse_uuid(id: &str) -> Result<Uuid, CoreError> {
     Uuid::parse_str(id).map_err(|e| CoreError::Validation(format!("Invalid UUID '{id}': {e}")))
 }

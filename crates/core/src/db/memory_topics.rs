@@ -21,6 +21,10 @@ impl Db {
     /// skipped instead of violating `idx_memories_topic`, so the caller
     /// can merge those by hand. Returns how many rows changed. Data
     /// migration for `sai memory normalize-topics`; never run on startup.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the memories cannot be read or rewritten.
     pub async fn normalize_existing_topic_keys(&self) -> CoreResult<usize> {
         let rows: Vec<(Uuid, String, String)> = sqlx::query_as(
             "SELECT id, project_name, topic_key FROM memories WHERE topic_key <> ''",

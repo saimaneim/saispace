@@ -42,6 +42,10 @@ fn build_match_query(query: &str, any: bool) -> CoreResult<String> {
 
 impl Db {
     /// Searches everything (`None`) or one project plus global rows.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the search query fails.
     pub async fn search(
         &self,
         query: &str,
@@ -54,6 +58,10 @@ impl Db {
 
     /// Matches every term first; when nothing matches, retries with any term
     /// ranked by relevance, so one missing word does not hide the answer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the search query fails.
     pub async fn search_scoped(
         &self,
         query: &str,

@@ -53,6 +53,9 @@ pub struct RuleDef {
 }
 
 impl RuleDef {
+    /// # Errors
+    ///
+    /// Returns an error if a required field is empty or malformed.
     pub fn validate(&self) -> RulesResult<()> {
         let invalid = |msg: &str| Err(RulesError::Invalid(self.id.clone(), msg.to_string()));
         if self.id.is_empty()

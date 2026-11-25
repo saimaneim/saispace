@@ -42,6 +42,10 @@ impl Db {
     /// Memories whose last activity (update or use) is older than `days`
     /// days, oldest first. Preferences, pinned memories and session
     /// summaries are never listed here: summaries have their own keep rule.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the memories cannot be loaded.
     pub async fn stale_memories(&self, scope: MemoryScope, days: i64) -> CoreResult<Vec<Memory>> {
         let cutoff = Utc::now() - Duration::days(days.clamp(0, MAX_STALE_DAYS));
         let (mode, project_id) = scope_parts(scope);
@@ -72,6 +76,10 @@ impl Db {
     /// Session summaries beyond the newest `keep` of each project (global
     /// ones form their own group), oldest first. Pinned summaries are kept. These are the only
     /// candidates `sai memory stale --prune-sessions` may delete.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the summaries cannot be loaded.
     pub async fn surplus_session_summaries(
         &self,
         scope: MemoryScope,
@@ -111,6 +119,9 @@ impl Db {
         Ok(surplus)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying queries fail.
     pub async fn stale_report(
         &self,
         scope: MemoryScope,

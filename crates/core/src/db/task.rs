@@ -6,6 +6,9 @@ use chrono::Utc;
 use uuid::Uuid;
 
 impl Db {
+    /// # Errors
+    ///
+    /// Returns an error if the input is invalid or the task cannot be stored.
     pub async fn create_task(&self, input: CreateTaskInput) -> CoreResult<Task> {
         let title = limited_text("title", &input.title)?;
         let id = Uuid::now_v7();
@@ -36,6 +39,9 @@ impl Db {
         Ok(task)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
     pub async fn get_task(&self, id: Uuid) -> CoreResult<Option<Task>> {
         let task = sqlx::query_as::<_, Task>(
             r"
@@ -51,6 +57,9 @@ impl Db {
         Ok(task)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the tasks cannot be loaded.
     pub async fn list_tasks_by_project(&self, project_id: Uuid) -> CoreResult<Vec<Task>> {
         let tasks = sqlx::query_as::<_, Task>(
             r"
@@ -67,6 +76,9 @@ impl Db {
         Ok(tasks)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the input is invalid, the task does not exist, or the update fails.
     pub async fn update_task(&self, id: Uuid, input: UpdateTaskInput) -> CoreResult<Task> {
         let title = input
             .title
@@ -102,6 +114,9 @@ impl Db {
         updated.ok_or(CoreError::NotFound { entity: "Task", id })
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the task does not exist or the delete fails.
     pub async fn delete_task(&self, id: Uuid) -> CoreResult<()> {
         let result = sqlx::query("DELETE FROM tasks WHERE id = ?1")
             .bind(id)

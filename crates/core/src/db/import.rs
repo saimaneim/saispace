@@ -42,6 +42,9 @@ pub(crate) fn parse_time(raw: &str) -> Option<DateTime<Utc>> {
 }
 
 impl Db {
+    /// # Errors
+    ///
+    /// Returns an error if the legacy database cannot be read or its rows cannot be imported.
     pub async fn import_engram(&self, engram_db: &Path) -> CoreResult<ImportReport> {
         let options = SqliteConnectOptions::new()
             .filename(engram_db)
