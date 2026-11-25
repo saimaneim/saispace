@@ -181,6 +181,11 @@ export interface DuplicatePair {
   b: Memory;
 }
 
+export interface StaleReport {
+  stale: Memory[];
+  surplus_sessions: Memory[];
+}
+
 export interface InstructionFile {
   tool: string;
   path: string;

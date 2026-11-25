@@ -1,9 +1,9 @@
 use crate::error::CommandResult;
 use crate::error_log::record_activity_or_log;
-use saispace_core::Db;
 use saispace_core::models::{
     ActionKind, Actor, EntityKind, Memory, MemoryScope, RecordActivityInput, UpdateMemoryInput,
 };
+use saispace_core::{CoreError, Db};
 use tauri::State;
 use uuid::Uuid;
 
@@ -152,4 +152,21 @@ pub async fn memory_duplicates(
 ) -> CommandResult<Vec<saispace_core::DuplicatePair>> {
     let scope = project_id.map_or(MemoryScope::All, MemoryScope::Project);
     Ok(db.duplicate_pairs(scope, 50).await?)
+}
+
+#[tauri::command]
+pub async fn memory_stale(
+    project_id: Option<String>,
+    days: Option<i64>,
+    db: State<'_, Db>,
+) -> CommandResult<saispace_core::StaleReport> {
+    let project_id = match project_id {
+        Some(raw) => Some(
+            Uuid::parse_str(&raw)
+                .map_err(|err| CoreError::Validation(format!("project_id inválido: {err}")))?,
+        ),
+        None => None,
+    };
+    let scope = project_id.map_or(MemoryScope::All, MemoryScope::Project);
+    Ok(db.stale_report(scope, days.unwrap_or(60), 3).await?)
 }

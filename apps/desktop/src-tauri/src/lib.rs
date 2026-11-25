@@ -9,7 +9,8 @@ use commands::{
     global::{global_ai_inventory, tech_icon},
     memory::{
         agent_memory_context, delete_memory, get_memory, link_orphan_memories, list_memories,
-        list_orphan_memory_groups, memory_duplicates, set_memory_pinned, update_memory,
+        list_orphan_memory_groups, memory_duplicates, memory_stale, set_memory_pinned,
+        update_memory,
     },
     project::{create_project, delete_project, get_project, list_projects, update_project},
     secret::{
@@ -111,6 +112,7 @@ pub fn run() {
             list_orphan_memory_groups,
             link_orphan_memories,
             memory_duplicates,
+            memory_stale,
             global_ai_inventory,
             tech_icon,
             list_secrets,

@@ -9,6 +9,7 @@ pub mod vault;
 
 pub use db::Db;
 pub use db::DuplicatePair;
+pub use db::StaleReport;
 pub use error::{CoreError, CoreResult};
 pub use models::*;
 pub use paths::{

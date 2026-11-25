@@ -15,6 +15,7 @@ import type {
   SearchHit,
   SecretGrant,
   SecretMeta,
+  StaleReport,
   Task,
   Technology,
   TechRule,
@@ -124,6 +125,13 @@ export const api = {
 
   memoryDuplicates: (projectId?: string | null) =>
     invokeOrFallback<DuplicatePair[]>("memory_duplicates", { projectId: projectId ?? null }, []),
+
+  memoryStale: (projectId?: string | null, days?: number) =>
+    invokeOrFallback<StaleReport>(
+      "memory_stale",
+      { projectId: projectId ?? null, days },
+      { stale: [], surplus_sessions: [] },
+    ),
 
   getMemory: (id: string) => invokeOrFallback<Memory>("get_memory", { id }),
 

@@ -107,6 +107,27 @@ pub enum MemoryCommand {
         #[arg(long)]
         all: bool,
     },
+    #[command(about = "Revisa memorias sin uso y resúmenes de sesión sobrantes")]
+    Stale {
+        #[arg(
+            help = "Días sin uso ni edición para marcar una memoria",
+            long,
+            default_value_t = 60
+        )]
+        days: i64,
+        #[arg(
+            help = "Resúmenes de sesión a conservar por proyecto",
+            long,
+            default_value_t = 3
+        )]
+        keep_sessions: i64,
+        #[arg(help = "Revisa todos los proyectos", long)]
+        all: bool,
+        #[arg(help = "Salida en formato JSON", long)]
+        json: bool,
+        #[arg(help = "Elimina solo los resúmenes de sesión sobrantes", long)]
+        prune_sessions: bool,
+    },
     #[command(about = "Importa las observaciones de engram (idempotente)")]
     ImportEngram {
         #[arg(help = "Ruta opcional a la base de datos de engram", long)]
@@ -363,6 +384,69 @@ async fn rm(db: &Db, id: Uuid) -> CliResult<()> {
     Ok(())
 }
 
+async fn stale(
+    db: &Db,
+    days: i64,
+    keep_sessions: i64,
+    all: bool,
+    json: bool,
+    prune_sessions: bool,
+) -> CliResult<()> {
+    let scope = if all {
+        MemoryScope::All
+    } else {
+        MemoryScope::for_project(current_project(db, false).await?.map(|p| p.id))
+    };
+    let mut report = db.stale_report(scope, days, keep_sessions).await?;
+    if prune_sessions {
+        for m in &report.surplus_sessions {
+            db.delete_memory(m.id).await?;
+            db.record_activity(RecordActivityInput {
+                project_id: m.project_id,
+                actor: actor(),
+                action: ActionKind::Delete,
+                entity: EntityKind::Memory,
+                entity_id: Some(m.id),
+                details: Some(serde_json::json!({ "title": m.title })),
+            })
+            .await?;
+            if !json {
+                crate::out!("eliminada {}  {}", m.id, m.title);
+            }
+        }
+        report.surplus_sessions.clear();
+    }
+    if json {
+        crate::out!("{}", serde_json::to_string_pretty(&report)?);
+        return Ok(());
+    }
+    if report.stale.is_empty() && report.surplus_sessions.is_empty() {
+        crate::out!("nada que revisar");
+        return Ok(());
+    }
+    crate::out!("# Sin uso en {days} días · {}", report.stale.len());
+    if report.stale.is_empty() {
+        crate::out!("ninguna");
+    } else {
+        for m in &report.stale {
+            print_memory_line(m);
+        }
+        crate::out!("revísala con `sai memory get <id>` o elimínala con `sai memory rm <id>`");
+    }
+    crate::out!(
+        "\n# Resúmenes de sesión sobrantes · {}",
+        report.surplus_sessions.len()
+    );
+    if report.surplus_sessions.is_empty() {
+        crate::out!("ninguno");
+    } else {
+        for m in &report.surplus_sessions {
+            print_memory_line(m);
+        }
+    }
+    Ok(())
+}
+
 async fn edit(
     db: &Db,
     id: Uuid,
@@ -573,6 +657,13 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
                 }
             }
         }
+        MemoryCommand::Stale {
+            days,
+            keep_sessions,
+            all,
+            json,
+            prune_sessions,
+        } => stale(&db, days, keep_sessions, all, json, prune_sessions).await?,
         MemoryCommand::ImportEngram { db: source } => {
             let source = match source {
                 Some(path) => path,

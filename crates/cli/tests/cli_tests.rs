@@ -943,3 +943,256 @@ fn memory_context_cwd_from_json_selects_project() {
     assert!(txt.contains("Memoria de project-b"), "{txt}");
     assert!(!txt.contains("# Memoria global"), "{txt}");
 }
+
+fn seed_stale_memories(sb: &Sandbox, repo: &Path) {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("rt");
+    runtime.block_on(async {
+        let db = saispace_core::Db::open(&sb.root.join("db/saispace.db"))
+            .await
+            .expect("db");
+        let project = db
+            .project_for_path(&repo.canonicalize().expect("canonical repo"), false)
+            .await
+            .expect("project lookup")
+            .expect("project registered");
+        let now = chrono::Utc::now();
+        let entries: &[(
+            saispace_core::models::MemoryKind,
+            &str,
+            Option<uuid::Uuid>,
+            i64,
+        )] = &[
+            (
+                saispace_core::models::MemoryKind::Decision,
+                "Decisión olvidada",
+                Some(project.id),
+                100,
+            ),
+            (
+                saispace_core::models::MemoryKind::Preference,
+                "Preferencia vieja",
+                Some(project.id),
+                200,
+            ),
+            (
+                saispace_core::models::MemoryKind::SessionSummary,
+                "Sesión proyecto 1",
+                Some(project.id),
+                1,
+            ),
+            (
+                saispace_core::models::MemoryKind::SessionSummary,
+                "Sesión proyecto 2",
+                Some(project.id),
+                2,
+            ),
+            (
+                saispace_core::models::MemoryKind::SessionSummary,
+                "Sesión proyecto 3",
+                Some(project.id),
+                3,
+            ),
+            (
+                saispace_core::models::MemoryKind::SessionSummary,
+                "Sesión proyecto 4",
+                Some(project.id),
+                4,
+            ),
+            (
+                saispace_core::models::MemoryKind::SessionSummary,
+                "Sesión global 1",
+                None,
+                1,
+            ),
+            (
+                saispace_core::models::MemoryKind::SessionSummary,
+                "Sesión global 2",
+                None,
+                2,
+            ),
+            (
+                saispace_core::models::MemoryKind::SessionSummary,
+                "Sesión global 3",
+                None,
+                3,
+            ),
+            (
+                saispace_core::models::MemoryKind::SessionSummary,
+                "Sesión global 4",
+                None,
+                4,
+            ),
+        ];
+        for (kind, title, project_id, age_days) in entries {
+            let ts = now - chrono::Duration::days(*age_days);
+            db.save_memory_at(
+                saispace_core::models::SaveMemoryInput {
+                    project_id: *project_id,
+                    project_name: None,
+                    kind: *kind,
+                    title: (*title).to_string(),
+                    content: "Contenido de prueba".to_string(),
+                    topic_key: None,
+                },
+                ts,
+                Some(ts),
+            )
+            .await
+            .expect("save old memory");
+        }
+    });
+}
+
+fn stale_json(sb: &Sandbox, repo: &Path, extra: &[&str]) -> serde_json::Value {
+    let mut args = vec!["memory", "stale", "--json"];
+    args.extend_from_slice(extra);
+    let out = sb.sai(repo, &args);
+    assert!(out.status.success());
+    serde_json::from_slice(&out.stdout).expect("stale json")
+}
+
+fn memory_delete_events(sb: &Sandbox) -> usize {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("rt");
+    runtime.block_on(async {
+        let db = saispace_core::Db::open(&sb.root.join("db/saispace.db"))
+            .await
+            .expect("db");
+        let activity = db.list_activity(20).await.expect("activity");
+        activity
+            .iter()
+            .filter(|e| {
+                e.action == saispace_core::models::ActionKind::Delete
+                    && e.entity == saispace_core::models::EntityKind::Memory
+            })
+            .count()
+    })
+}
+
+#[test]
+fn memory_stale_lists_and_prunes_only_surplus_sessions() {
+    let sb = Sandbox::new("memory-stale");
+    let repo = sb.repo();
+
+    let initial = sb.sai(&repo, &["memory", "stale"]);
+    assert_eq!(initial.status.code(), Some(0));
+    assert!(stdout(&initial).contains("nada que revisar"));
+
+    // A fresh memory registers the project and must never show up as stale.
+    assert!(
+        sb.sai(
+            &repo,
+            &[
+                "memory",
+                "save",
+                "--title",
+                "Nota reciente",
+                "--content",
+                "Al día"
+            ],
+        )
+        .status
+        .success()
+    );
+    seed_stale_memories(&sb, &repo);
+
+    let listed = sb.sai(&repo, &["memory", "stale"]);
+    assert_eq!(listed.status.code(), Some(0));
+    let out = stdout(&listed);
+    assert!(out.contains("Sin uso en 60 días"), "{out}");
+    assert!(out.contains("Decisión olvidada"), "{out}");
+    assert!(!out.contains("Preferencia vieja"), "{out}");
+    assert!(!out.contains("Nota reciente"), "{out}");
+    assert!(out.contains("Resúmenes de sesión sobrantes"), "{out}");
+    assert!(out.contains("Sesión proyecto 4"), "{out}");
+    assert!(out.contains("Sesión global 4"), "{out}");
+    assert!(!out.contains("Sesión proyecto 3"), "{out}");
+
+    let report = stale_json(&sb, &repo, &[]);
+    assert_eq!(report["stale"].as_array().expect("stale array").len(), 1);
+    assert_eq!(
+        report["surplus_sessions"]
+            .as_array()
+            .expect("surplus array")
+            .len(),
+        2
+    );
+
+    let keep1 = stale_json(&sb, &repo, &["--keep-sessions", "1"]);
+    assert_eq!(
+        keep1["surplus_sessions"]
+            .as_array()
+            .expect("surplus array")
+            .len(),
+        6
+    );
+
+    let wide = stale_json(&sb, &repo, &["--days", "200"]);
+    assert_eq!(wide["stale"].as_array().expect("stale array").len(), 0);
+
+    let pruned = sb.sai(&repo, &["memory", "stale", "--prune-sessions"]);
+    assert_eq!(pruned.status.code(), Some(0));
+    let pout = stdout(&pruned);
+    assert!(pout.contains("eliminada"), "{pout}");
+    assert!(pout.contains("Sesión proyecto 4"), "{pout}");
+    assert!(pout.contains("Sesión global 4"), "{pout}");
+    // Stale memories are listed for review but never auto-deleted.
+    assert!(pout.contains("Decisión olvidada"), "{pout}");
+    assert_eq!(
+        find_memory_by_title(&sb, &repo, "Decisión olvidada")["title"],
+        "Decisión olvidada"
+    );
+
+    let after = stale_json(&sb, &repo, &[]);
+    assert_eq!(after["stale"].as_array().expect("stale array").len(), 1);
+    assert_eq!(
+        after["surplus_sessions"]
+            .as_array()
+            .expect("surplus array")
+            .len(),
+        0
+    );
+    assert_eq!(memory_delete_events(&sb), 2);
+}
+
+#[test]
+fn memory_stale_prune_json_stays_parseable() {
+    let sb = Sandbox::new("memory-stale-json");
+    let repo = sb.repo();
+    assert!(
+        sb.sai(
+            &repo,
+            &[
+                "memory",
+                "save",
+                "--title",
+                "Nota base",
+                "--content",
+                "Registra el proyecto"
+            ],
+        )
+        .status
+        .success()
+    );
+    seed_stale_memories(&sb, &repo);
+
+    let pruned = sb.sai(&repo, &["memory", "stale", "--prune-sessions", "--json"]);
+    assert_eq!(pruned.status.code(), Some(0));
+    let out = stdout(&pruned);
+    assert!(!out.contains("eliminada"), "{out}");
+    let report: serde_json::Value = serde_json::from_slice(&pruned.stdout).expect("prune json");
+    assert_eq!(report["stale"].as_array().expect("stale array").len(), 1);
+    assert_eq!(
+        report["surplus_sessions"]
+            .as_array()
+            .expect("surplus array")
+            .len(),
+        0
+    );
+    assert_eq!(memory_delete_events(&sb), 2);
+}

@@ -1,13 +1,14 @@
 import { Brain, Eye, Pencil, Pin, PinOff, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, formatError } from "../lib/api";
-import type { DuplicatePair, Memory, MemoryKind, Project } from "../lib/types";
+import type { DuplicatePair, Memory, MemoryKind, Project, StaleReport } from "../lib/types";
 import { cn, formatTimeAgo } from "../lib/utils";
 import { AgentContextDialog } from "./AgentContextDialog";
 import { DuplicatesPanel } from "./DuplicatesPanel";
 import { Markdown } from "./Markdown";
 import { MemoryEditor } from "./MemoryEditor";
 import { OrphanMemories } from "./OrphanMemories";
+import { StalePanel } from "./StalePanel";
 import { Button } from "./ui/button";
 import {
   Dialog,
@@ -41,6 +42,8 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
   const [duplicates, setDuplicates] = useState<DuplicatePair[]>([]);
   const [dismissedPairKeys, setDismissedPairKeys] = useState<Set<string>>(new Set());
   const [showDuplicates, setShowDuplicates] = useState(false);
+  const [staleReport, setStaleReport] = useState<StaleReport>({ stale: [], surplus_sessions: [] });
+  const [showStale, setShowStale] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(focusId ?? null);
   const [filter, setFilter] = useState("");
   const [scopeFilter, setScopeFilter] = useState<"all" | "global" | "orphans">("all");
@@ -51,12 +54,14 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
 
   const load = useCallback(async () => {
     try {
-      const [mems, dupes] = await Promise.all([
+      const [mems, dupes, stale] = await Promise.all([
         api.listMemories(project?.id ?? null, 200),
         api.memoryDuplicates(project?.id ?? null),
+        api.memoryStale(project?.id ?? null),
       ]);
       setMemories(mems);
       setDuplicates(dupes);
+      setStaleReport(stale);
     } catch (err) {
       setError(formatError(err));
     }
@@ -97,6 +102,8 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
   const activeDuplicates = useMemo(() => {
     return duplicates.filter((pair) => !dismissedPairKeys.has(`${pair.a.id}:${pair.b.id}`));
   }, [duplicates, dismissedPairKeys]);
+
+  const staleCount = staleReport.stale.length + staleReport.surplus_sessions.length;
 
   const selected = memories.find((m) => m.id === selectedId) ?? visible[0] ?? null;
 
@@ -216,7 +223,10 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
         {scopeFilter !== "orphans" && activeDuplicates.length > 0 && (
           <button
             type="button"
-            onClick={() => setShowDuplicates(true)}
+            onClick={() => {
+              setShowDuplicates(true);
+              setShowStale(false);
+            }}
             className="flex items-center justify-between px-3 py-2 text-xs font-medium rounded-md bg-status-amber/10 text-status-amber hover:bg-status-amber/20 transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
           >
             <span>
@@ -224,6 +234,19 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
                 ? "1 posible duplicado"
                 : `${activeDuplicates.length} posibles duplicados`}
             </span>
+          </button>
+        )}
+
+        {scopeFilter !== "orphans" && staleCount > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowStale(true);
+              setShowDuplicates(false);
+            }}
+            className="flex items-center justify-between px-3 py-2 text-xs font-medium rounded-md bg-status-amber/10 text-status-amber hover:bg-status-amber/20 transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+          >
+            <span>{staleCount === 1 ? "1 para revisar" : `${staleCount} para revisar`}</span>
           </button>
         )}
 
@@ -236,6 +259,7 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
                   onClick={() => {
                     setSelectedId(m.id);
                     setShowDuplicates(false);
+                    setShowStale(false);
                   }}
                   className={cn(
                     "w-full text-left px-3 py-2 rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
@@ -259,6 +283,19 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
 
       {scopeFilter === "orphans" ? (
         <OrphanMemories onLinked={load} />
+      ) : showStale ? (
+        <StalePanel
+          report={staleReport}
+          onOpenMemory={(id) => {
+            setSelectedId(id);
+            setShowStale(false);
+          }}
+          onDeleteMemory={async (id) => {
+            await api.deleteMemory(id);
+            await load();
+          }}
+          onClose={() => setShowStale(false)}
+        />
       ) : showDuplicates ? (
         <DuplicatesPanel
           pairs={activeDuplicates}
