@@ -1,11 +1,14 @@
 use crate::{CliError, CliResult};
 use clap::Subcommand;
-use saispace_core::memory_render::{excerpt, kind_label, render_context, render_memory};
+use saispace_core::memory_render::{
+    excerpt, kind_label, render_compact_notice, render_context, render_memory,
+};
 use saispace_core::models::{
     ActionKind, Actor, EntityKind, Memory, MemoryKind, MemoryScope, Project, RecordActivityInput,
     SaveMemoryInput, UpdateMemoryInput,
 };
 use saispace_core::{Db, default_db_path};
+use std::io::{IsTerminal, Read};
 use std::path::PathBuf;
 use uuid::Uuid;
 
@@ -75,6 +78,12 @@ pub enum MemoryCommand {
         limit: i64,
         #[arg(help = "Salida en formato JSON", long)]
         json: bool,
+        #[arg(
+            help = "Origen de la sesión (startup, resume, clear, compact)",
+            long,
+            value_parser = ["startup", "resume", "clear", "compact"]
+        )]
+        source: Option<String>,
     },
     #[command(about = "Contenido completo de una memoria")]
     Get {
@@ -122,9 +131,56 @@ fn actor() -> Actor {
 /// Project for the current directory. `register` creates it on first save;
 /// reads only pick up folders that imported memories already name.
 async fn current_project(db: &Db, register: bool) -> CliResult<Option<Project>> {
-    let cwd = std::env::current_dir()?;
+    current_project_at(db, register, std::env::current_dir()?).await
+}
+
+/// Project for an explicit directory, used when Claude Code's hook passes a
+/// `cwd` that overrides the process working directory.
+async fn current_project_at(db: &Db, register: bool, cwd: PathBuf) -> CliResult<Option<Project>> {
     let cwd = cwd.canonicalize().unwrap_or(cwd);
     Ok(db.project_for_path(&cwd, register).await?)
+}
+
+/// Upper bound on how much stdin we read when sniffing for the Claude Code
+/// hook payload, so a stray pipe can't feed us unbounded data.
+const STDIN_MAX_BYTES: u64 = 64 * 1024;
+
+struct HookInput {
+    source: Option<String>,
+    cwd: Option<PathBuf>,
+}
+
+/// Reads the Claude Code hook JSON from stdin. Claude Code runs
+/// `sai memory context` on `SessionStart` (including after compaction) and
+/// always closes stdin once the hook payload is written, so reading never
+/// blocks. When stdin is a TTY (an interactive shell) we skip it entirely, so
+/// the command never hangs waiting for input that won't come. A missing,
+/// empty or non-JSON payload is ignored silently.
+fn read_hook_input() -> Option<HookInput> {
+    let stdin = std::io::stdin();
+    if stdin.is_terminal() {
+        return None;
+    }
+    let mut buf = Vec::new();
+    stdin
+        .lock()
+        .take(STDIN_MAX_BYTES)
+        .read_to_end(&mut buf)
+        .ok()?;
+    if buf.is_empty() {
+        return None;
+    }
+    let value: serde_json::Value = serde_json::from_slice(&buf).ok()?;
+    let source = value
+        .get("source")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let cwd = value
+        .get("cwd")
+        .and_then(serde_json::Value::as_str)
+        .map(PathBuf::from)
+        .filter(|p| p.is_dir());
+    Some(HookInput { source, cwd })
 }
 
 fn print_memory_line(m: &Memory) {
@@ -406,6 +462,43 @@ async fn set_pinned(db: &Db, id: Uuid, pinned: bool) -> CliResult<()> {
     Ok(())
 }
 
+async fn context(db: &Db, limit: i64, json: bool, source: Option<String>) -> CliResult<()> {
+    // An explicit --source flag wins; otherwise sniff the hook payload that
+    // Claude Code pipes on stdin.
+    let hook = if source.is_some() {
+        None
+    } else {
+        read_hook_input()
+    };
+    let source = source.or_else(|| hook.as_ref().and_then(|h| h.source.clone()));
+    let is_compact = source.as_deref() == Some("compact");
+    let project = match hook.as_ref().and_then(|h| h.cwd.clone()) {
+        Some(cwd) => current_project_at(db, false, cwd).await?,
+        None => current_project(db, false).await?,
+    };
+    let scope = MemoryScope::for_project(project.as_ref().map(|p| p.id));
+    let context = db.memory_context(scope, limit).await?;
+    if json {
+        let mut value = serde_json::to_value(&context)?;
+        if is_compact && let Some(obj) = value.as_object_mut() {
+            obj.insert(
+                "notice".to_string(),
+                serde_json::Value::String(render_compact_notice().trim_end().to_string()),
+            );
+        }
+        crate::out!("{}", serde_json::to_string_pretty(&value)?);
+    } else if is_compact {
+        crate::out!(
+            "{}\n{}",
+            render_compact_notice(),
+            render_context(project.as_ref(), &context).trim_end()
+        );
+    } else {
+        crate::out!("{}", render_context(project.as_ref(), &context).trim_end());
+    }
+    Ok(())
+}
+
 async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
     let db = Db::open(&default_db_path()?).await?;
     match cmd {
@@ -435,16 +528,11 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
             limit,
             json,
         } => search(&db, &query, all, limit, json).await?,
-        MemoryCommand::Context { limit, json } => {
-            let project = current_project(&db, false).await?;
-            let scope = MemoryScope::for_project(project.as_ref().map(|p| p.id));
-            let context = db.memory_context(scope, limit).await?;
-            if json {
-                crate::out!("{}", serde_json::to_string_pretty(&context)?);
-            } else {
-                crate::out!("{}", render_context(project.as_ref(), &context).trim_end());
-            }
-        }
+        MemoryCommand::Context {
+            limit,
+            json,
+            source,
+        } => context(&db, limit, json, source).await?,
         MemoryCommand::Get { id, json } => {
             let memory = db.get_memory(id).await?;
             if json {

@@ -3,6 +3,15 @@ use std::fmt::Write as _;
 
 pub const CONTEXT_BUDGET: usize = 6_000;
 
+/// Notice prepended to the session-start index after Claude Code compacts the
+/// conversation, reminding the agent to persist what it worked on.
+pub const COMPACT_NOTICE: &str = "## Primera acción tras compactar\nGuarda un `session_summary` con lo trabajado antes de compactar (Goal, Discoveries, Accomplished, Next steps): `save_memory` con kind session_summary, o `sai memory save --kind session_summary`. Usa el mismo topic_key de la sesión si ya guardaste uno.\n";
+
+#[must_use]
+pub fn render_compact_notice() -> &'static str {
+    COMPACT_NOTICE
+}
+
 #[must_use]
 pub fn excerpt(text: &str, max: usize) -> String {
     let flat = text
