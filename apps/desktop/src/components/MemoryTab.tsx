@@ -75,6 +75,12 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
     if (focusId) setSelectedId(focusId);
   }, [focusId]);
 
+  // Review panels belong to one project: close them when switching.
+  useEffect(() => {
+    setShowStale(false);
+    setShowDuplicates(false);
+  }, [project?.id]);
+
   const visible = useMemo(() => {
     let list = memories;
     if (!project && scopeFilter === "global") {
@@ -105,7 +111,13 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
 
   const staleCount = staleReport.stale.length + staleReport.surplus_sessions.length;
 
-  const selected = memories.find((m) => m.id === selectedId) ?? visible[0] ?? null;
+  // Stale memories can be older than the 200 loaded ones: the report carries them whole.
+  const selected =
+    memories.find((m) => m.id === selectedId) ??
+    staleReport.stale.find((m) => m.id === selectedId) ??
+    staleReport.surplus_sessions.find((m) => m.id === selectedId) ??
+    visible[0] ??
+    null;
 
   const togglePin = async (memory: Memory) => {
     try {

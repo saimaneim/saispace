@@ -283,7 +283,9 @@ async fn save(
             "parecidas (actualiza con el mismo --topic o borra la sobrante con `sai memory rm <id>`):"
         );
         for s in &similar {
-            if s.topic_key.is_empty() {
+            // Reusing a topic only updates within the same scope: a global
+            // memory's key saved from a project would create a new row.
+            if s.topic_key.is_empty() || s.hit.project_id != saved.project_id {
                 crate::out!("  {}  {}", s.hit.id, s.hit.title);
             } else {
                 crate::out!(

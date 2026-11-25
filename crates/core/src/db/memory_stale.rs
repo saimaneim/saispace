@@ -30,7 +30,12 @@ fn scope_parts(scope: MemoryScope) -> (i64, Option<Uuid>) {
 /// Group key for session summaries: one project, one orphan folder name,
 /// or the global bucket. Memories of the same project always share its id.
 fn session_group(m: &Memory) -> (Option<Uuid>, String) {
-    (m.project_id, m.project_name.clone().unwrap_or_default())
+    // A registered project groups by id alone: renaming it does not rewrite
+    // `memories.project_name`, so the name would split one project in two.
+    match m.project_id {
+        Some(id) => (Some(id), String::new()),
+        None => (None, m.project_name.clone().unwrap_or_default()),
+    }
 }
 
 impl Db {
@@ -65,7 +70,7 @@ impl Db {
     }
 
     /// Session summaries beyond the newest `keep` of each project (global
-    /// ones form their own group), oldest first. These are the only
+    /// ones form their own group), oldest first. Pinned summaries are kept. These are the only
     /// candidates `sai memory stale --prune-sessions` may delete.
     pub async fn surplus_session_summaries(
         &self,
@@ -79,6 +84,7 @@ impl Db {
             SELECT {MEMORY_COLUMNS}
             FROM memories
             WHERE kind = 'session_summary'
+              AND pinned = 0
               AND (?1 = 0
                    OR (project_id IS NULL AND project_name = '')
                    OR (?1 = 2 AND project_id = ?2))

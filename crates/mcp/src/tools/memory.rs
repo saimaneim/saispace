@@ -96,7 +96,9 @@ fn save_hint(saved: &Memory, similar: &[SimilarMemory]) -> Option<String> {
     }
     similar
         .iter()
-        .find(|s| !s.topic_key.is_empty())
+        // Only same-scope topics update in place; another scope's key would
+        // create a new row.
+        .find(|s| !s.topic_key.is_empty() && s.hit.project_id == saved.project_id)
         .map(|s| {
             format!(
                 "Similar memory has topic_key \"{}\": save again with that topic_key to update it instead of duplicating.",

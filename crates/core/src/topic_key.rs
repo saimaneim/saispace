@@ -66,7 +66,10 @@ fn collapse_dashes(raw: &str) -> String {
 /// name is written: `saispace/ui`, `Saispace UI` and `saispaceui-…` all
 /// count as the project "saispace".
 fn strip_project_prefix(key: &str, project_name: &str) -> String {
-    for prefix in [project_key(project_name), slug_chars(project_name)] {
+    for prefix in [
+        project_key(project_name),
+        collapse_dashes(&slug_chars(project_name)),
+    ] {
         if let Some(rest) = key.strip_prefix(&(prefix + "-"))
             && !rest.is_empty()
         {

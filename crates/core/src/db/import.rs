@@ -1,6 +1,7 @@
 use crate::db::Db;
 use crate::error::CoreResult;
 use crate::models::{MemoryKind, SaveMemoryInput};
+use crate::topic_key::normalize_topic_key;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::Serialize;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
@@ -86,7 +87,7 @@ impl Db {
             let topic = row
                 .topic_key
                 .clone()
-                .filter(|t| !t.trim().is_empty())
+                .filter(|t| !normalize_topic_key(t, name.as_deref().unwrap_or_default()).is_empty())
                 // Stable and non-empty after topic_key normalization, so
                 // re-importing upserts instead of duplicating.
                 .unwrap_or_else(|| format!("engram-obs-{}", row.id));
