@@ -9,7 +9,8 @@ pub mod technology;
 
 pub use activity::{ActionKind, ActivityEvent, Actor, EntityKind, RecordActivityInput};
 pub use memory::{
-    Memory, MemoryContext, MemoryKind, MemoryScope, SaveMemoryInput, UpdateMemoryInput,
+    AgentMemorySaves, Memory, MemoryContext, MemoryKind, MemoryScope, MemoryUsageStats,
+    MostUsedMemory, ProjectMemoryUsage, SaveMemoryInput, UpdateMemoryInput,
 };
 pub use project::{CreateProjectInput, Project, ProjectStatus, UpdateProjectInput};
 pub use search::{SearchHit, SearchKind};

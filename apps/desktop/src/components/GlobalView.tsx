@@ -5,6 +5,7 @@ import type { AiInventory } from "../lib/types";
 import { cn } from "../lib/utils";
 import { Markdown } from "./Markdown";
 import { MemoryTab } from "./MemoryTab";
+import { MemoryUsagePanel } from "./MemoryUsagePanel";
 import { SecretsPanel } from "./SecretsPanel";
 import { TechIcon } from "./TechIcon";
 
@@ -184,6 +185,7 @@ function ConnectionsPanel({ inventory }: { inventory: AiInventory }) {
 export function GlobalView({ refreshKey, pendingRequests, onSecretsChanged }: GlobalViewProps) {
   const [tab, setTab] = useState<GlobalTab>("memory");
   const [inventory, setInventory] = useState<AiInventory>(EMPTY);
+  const [focusMemoryId, setFocusMemoryId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadInventory = useCallback(async () => {
@@ -243,7 +245,12 @@ export function GlobalView({ refreshKey, pendingRequests, onSecretsChanged }: Gl
       </div>
       {error && <p className="px-6 text-sm text-coral-red">{error}</p>}
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-        {tab === "memory" && <MemoryTab project={null} refreshKey={refreshKey} focusId={null} />}
+        {tab === "memory" && (
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            <MemoryUsagePanel refreshKey={refreshKey} onSelectMemory={setFocusMemoryId} />
+            <MemoryTab project={null} refreshKey={refreshKey} focusId={focusMemoryId} />
+          </div>
+        )}
         {tab === "instructions" && <InstructionsPanel inventory={inventory} />}
         {tab === "skills" && <SkillsPanel inventory={inventory} />}
         {tab === "connections" && <ConnectionsPanel inventory={inventory} />}

@@ -10,6 +10,7 @@ import type {
   DirectoryListing,
   DuplicatePair,
   Memory,
+  MemoryUsageStats,
   OrphanGroup,
   Project,
   SearchHit,
@@ -124,6 +125,15 @@ export const api = {
 
   memoryDuplicates: (projectId?: string | null) =>
     invokeOrFallback<DuplicatePair[]>("memory_duplicates", { projectId: projectId ?? null }, []),
+
+  memoryUsageStats: () =>
+    invokeOrFallback<MemoryUsageStats>("memory_usage_stats", undefined, {
+      saves_by_agent: [],
+      most_used: [],
+      never_used: 0,
+      total: 0,
+      by_project: [],
+    }),
 
   getMemory: (id: string) => invokeOrFallback<Memory>("get_memory", { id }),
 

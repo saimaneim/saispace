@@ -2,7 +2,8 @@ use crate::error::CommandResult;
 use crate::error_log::record_activity_or_log;
 use saispace_core::Db;
 use saispace_core::models::{
-    ActionKind, Actor, EntityKind, Memory, MemoryScope, RecordActivityInput, UpdateMemoryInput,
+    ActionKind, Actor, EntityKind, Memory, MemoryScope, MemoryUsageStats, RecordActivityInput,
+    UpdateMemoryInput,
 };
 use tauri::State;
 use uuid::Uuid;
@@ -152,4 +153,9 @@ pub async fn memory_duplicates(
 ) -> CommandResult<Vec<saispace_core::DuplicatePair>> {
     let scope = project_id.map_or(MemoryScope::All, MemoryScope::Project);
     Ok(db.duplicate_pairs(scope, 50).await?)
+}
+
+#[tauri::command]
+pub async fn memory_usage_stats(db: State<'_, Db>) -> CommandResult<MemoryUsageStats> {
+    Ok(db.memory_usage_stats().await?)
 }
