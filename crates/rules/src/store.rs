@@ -30,6 +30,9 @@ fn io_err(path: &Path) -> impl FnOnce(std::io::Error) -> RulesError + '_ {
     }
 }
 
+/// # Errors
+///
+/// Returns an error if the directory cannot be read, a rule file is invalid, or two rules share an id.
 pub fn load_rules(root: &Path) -> RulesResult<Vec<RuleDef>> {
     let dir = rules_dir(root);
     if !dir.is_dir() {
@@ -65,6 +68,9 @@ pub fn load_rules(root: &Path) -> RulesResult<Vec<RuleDef>> {
     Ok(rules)
 }
 
+/// # Errors
+///
+/// Returns an error if the rule is invalid, already exists without `force`, or cannot be written.
 pub fn write_rule(root: &Path, rule: &RuleDef, force: bool) -> RulesResult<PathBuf> {
     rule.validate()?;
     crate::engine::Engine::new(std::slice::from_ref(rule))?;
@@ -85,6 +91,9 @@ pub fn write_rule(root: &Path, rule: &RuleDef, force: bool) -> RulesResult<PathB
     Ok(path)
 }
 
+/// # Errors
+///
+/// Returns an error if the rule does not exist or cannot be removed.
 pub fn remove_rule(root: &Path, id: &str) -> RulesResult<PathBuf> {
     let path = rules_dir(root).join(format!("{id}.toml"));
     if !path.is_file() {

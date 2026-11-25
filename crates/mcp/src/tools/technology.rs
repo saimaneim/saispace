@@ -4,10 +4,12 @@ use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, ContentBlock};
 use rmcp::{tool, tool_router};
 use saispace_core::models::{
-    ActionKind, EntityKind, MemoryScope, Project, RecordActivityInput, UpsertTechRuleInput,
+    ActionKind, EntityKind, MemoryScope, Project, RecordActivityInput, SearchKind,
+    UpsertTechRuleInput,
 };
 use schemars::JsonSchema;
 use serde::Deserialize;
+use uuid::Uuid;
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct SyncProjectStackParams {
@@ -114,7 +116,7 @@ impl SaiSpaceServer {
 
     #[tool(
         name = "search_memory",
-        description = "Full-text search (SQLite FTS5) across memories, project context notes, task titles and tech rules. Scope: the current project (project_id, path, or the working directory) plus global entries; all=true searches every project. Falls back to matching any word"
+        description = "Search memories, project context notes, task titles and tech rules with SQLite FTS5. Defaults to the current project (project_id, path, or working directory) plus global entries; all=true searches every project. Retries with any term when all terms have no match"
     )]
     async fn search_memory(
         &self,
@@ -139,6 +141,12 @@ impl SaiSpaceServer {
             Ok(hits) => hits,
             Err(err) => return format_error(&err),
         };
+        let memory_ids: Vec<Uuid> = hits
+            .iter()
+            .filter(|h| h.kind == SearchKind::Memory)
+            .map(|h| h.id)
+            .collect();
+        self.touch_memories(&memory_ids).await;
         let scope = match scope {
             MemoryScope::Project(id) => Some(id),
             _ => None,

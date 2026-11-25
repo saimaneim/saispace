@@ -1,4 +1,10 @@
-use rmcp::{ServerHandler, handler::server::router::tool::ToolRouter, tool_handler};
+use crate::instructions::INSTRUCTIONS;
+use rmcp::{
+    ServerHandler,
+    handler::server::router::tool::ToolRouter,
+    model::{Implementation, ServerCapabilities, ServerConfig},
+    tool_handler,
+};
 use saispace_core::models::{
     ActionKind, Actor, EntityKind, Project, RecordActivityInput, Technology,
 };
@@ -12,13 +18,17 @@ pub struct SaiSpaceServer {
     tool_router: ToolRouter<Self>,
 }
 
-#[tool_handler(
-    router = self.tool_router,
-    name = "saispace",
-    version = "0.1.0",
-    instructions = "Local project and context command center for AI agents"
-)]
-impl ServerHandler for SaiSpaceServer {}
+// The generated handlers return immediately, so the macro emits an `async`
+// trait impl without any `.await`; pedantic flags that expansion.
+#[allow(clippy::unused_async_trait_impl)]
+#[tool_handler(router = self.tool_router)]
+impl ServerHandler for SaiSpaceServer {
+    fn get_info(&self) -> ServerConfig {
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
+            .with_server_info(Implementation::new("saispace", "0.1.0"))
+            .with_instructions(INSTRUCTIONS)
+    }
+}
 
 impl SaiSpaceServer {
     #[must_use]
@@ -49,6 +59,15 @@ impl SaiSpaceServer {
         }
     }
 
+    pub async fn touch_memories(&self, ids: &[Uuid]) {
+        if let Err(err) = self.db.touch_memories(ids).await {
+            tracing::warn!(error = %err, "failed to touch memory usage");
+        }
+    }
+
+    /// # Errors
+    ///
+    /// Returns an error if the project does not exist or its stack cannot be synced.
     pub async fn sync_stack(&self, project_id: Uuid) -> Result<Vec<Technology>, CoreError> {
         let stack = self.db.sync_project_stack(project_id).await?;
         self.record(RecordActivityInput {
@@ -63,6 +82,9 @@ impl SaiSpaceServer {
         Ok(stack)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the project cannot be looked up.
     pub async fn resolve_project(
         &self,
         project_id: Option<Uuid>,

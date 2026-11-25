@@ -17,6 +17,9 @@ pub fn canonicalize_path(path: &str) -> String {
     }
 }
 
+/// # Errors
+///
+/// Returns an error if the path does not exist or is not a directory.
 pub fn validate_project_path(path: &str) -> Result<String, CoreError> {
     let canonical = canonicalize_path(path);
     if !std::path::Path::new(&canonical).is_dir() {
@@ -27,18 +30,27 @@ pub fn validate_project_path(path: &str) -> Result<String, CoreError> {
     Ok(canonical)
 }
 
+/// # Errors
+///
+/// Returns an error if the projects cannot be loaded.
 #[tauri::command]
 pub async fn list_projects(db: State<'_, Db>) -> CommandResult<Vec<Project>> {
     let projects = db.list_projects().await?;
     Ok(projects)
 }
 
+/// # Errors
+///
+/// Returns an error if the query fails.
 #[tauri::command]
 pub async fn get_project(id: Uuid, db: State<'_, Db>) -> CommandResult<Option<Project>> {
     let project = db.get_project(id).await?;
     Ok(project)
 }
 
+/// # Errors
+///
+/// Returns an error if the input is invalid or the project cannot be stored.
 #[tauri::command]
 pub async fn create_project(
     input: CreateProjectInput,
@@ -67,6 +79,9 @@ pub async fn create_project(
     Ok(project)
 }
 
+/// # Errors
+///
+/// Returns an error if the input is invalid, the project does not exist, or the update fails.
 #[tauri::command]
 pub async fn update_project(
     id: Uuid,
@@ -97,6 +112,9 @@ pub async fn update_project(
     Ok(project)
 }
 
+/// # Errors
+///
+/// Returns an error if the project does not exist or cannot be deleted.
 #[tauri::command]
 pub async fn delete_project(id: Uuid, db: State<'_, Db>) -> CommandResult<()> {
     db.delete_project(id).await?;

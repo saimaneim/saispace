@@ -438,9 +438,13 @@ fn memory_list_scoping_and_cross_project() {
 }
 
 fn sai_with_stdin(sb: &Sandbox, args: &[&str], input: &str) -> Output {
+    sai_with_stdin_in(sb, &sb.repo(), args, input)
+}
+
+fn sai_with_stdin_in(sb: &Sandbox, cwd: &Path, args: &[&str], input: &str) -> Output {
     let mut child = Command::new(env!("CARGO_BIN_EXE_sai"))
         .args(args)
-        .current_dir(sb.repo())
+        .current_dir(cwd)
         .env("SAISPACE_DB_PATH", sb.root.join("db/saispace.db"))
         .env("SAISPACE_AGENT_NAME", "cli-test")
         .stdin(std::process::Stdio::piped())
@@ -596,7 +600,7 @@ fn memory_edit_updates_fields_and_validates_input() {
     let mem: serde_json::Value = serde_json::from_slice(&get.stdout).expect("json");
     assert_eq!(mem["title"], "Nuevo titulo");
     assert_eq!(mem["kind"], "bugfix");
-    assert_eq!(mem["topic_key"], "arch/nuevo");
+    assert_eq!(mem["topic_key"], "arch-nuevo");
     assert_eq!(mem["content"], "Contenido inicial");
 
     let stdin_edit = sai_with_stdin(
@@ -630,6 +634,80 @@ fn memory_edit_updates_fields_and_validates_input() {
         });
         assert!(update_event.is_some(), "Update activity event was recorded");
     });
+}
+
+#[test]
+fn memory_save_normalizes_topic_and_hints_similar() {
+    let sb = Sandbox::new("mem-topic");
+    let repo = sb.repo();
+
+    let first = sb.sai(
+        &repo,
+        &[
+            "memory",
+            "save",
+            "--title",
+            "Reglas del panel de UI",
+            "--content",
+            "Paleta estilo Vercel",
+            "--topic",
+            "arch/auth",
+        ],
+    );
+    assert!(
+        first.status.success(),
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+
+    // Same title saved without a topic: the CLI points at the topic the
+    // similar memory already has.
+    let twin = sb.sai(
+        &repo,
+        &[
+            "memory",
+            "save",
+            "--title",
+            "Reglas panel UI v2",
+            "--content",
+            "Duplicada",
+        ],
+    );
+    assert!(twin.status.success());
+    let twin_out = stdout(&twin);
+    assert!(
+        twin_out.contains("usa --topic arch-auth para actualizarla"),
+        "{twin_out}"
+    );
+
+    // A messy key is stored with the convention.
+    let saved = sb.sai(
+        &repo,
+        &[
+            "memory",
+            "save",
+            "--title",
+            "Exportación PDF",
+            "--content",
+            "Usamos printcss",
+            "--topic",
+            "Proj/My_Topic",
+        ],
+    );
+    assert!(
+        saved.status.success(),
+        "{}",
+        String::from_utf8_lossy(&saved.stderr)
+    );
+    let list = sb.sai(&repo, &["memory", "list", "--json"]);
+    let memories: serde_json::Value = serde_json::from_slice(&list.stdout).expect("json");
+    let row = memories
+        .as_array()
+        .expect("array")
+        .iter()
+        .find(|m| m["title"] == "Exportación PDF")
+        .expect("saved row");
+    assert_eq!(row["topic_key"], "proj-my-topic");
 }
 
 #[test]
@@ -718,4 +796,477 @@ fn memory_dupes_detects_and_prints_pairs() {
     assert!(!out.contains("sin duplicados"));
     assert!(out.contains("Database connection pooling"));
     assert!(out.contains("≈"));
+}
+
+fn find_memory_by_title(sb: &Sandbox, repo: &Path, title: &str) -> serde_json::Value {
+    let out = sb.sai(repo, &["memory", "list", "--json"]);
+    assert!(out.status.success());
+    let items: serde_json::Value = serde_json::from_slice(&out.stdout).expect("list json");
+    items
+        .as_array()
+        .expect("array")
+        .iter()
+        .find(|m| m["title"] == title)
+        .cloned()
+        .expect("memory found")
+}
+
+#[test]
+fn memory_usage_tracks_get_search_and_ignores_list_and_context() {
+    let sb = Sandbox::new("memory-usage");
+    let repo = sb.repo();
+
+    for args in [
+        &[
+            "memory",
+            "save",
+            "--global",
+            "--kind",
+            "preference",
+            "--title",
+            "Preferencia global",
+            "--content",
+            "Usar biome siempre",
+        ][..],
+        &[
+            "memory",
+            "save",
+            "--kind",
+            "decision",
+            "--title",
+            "Cola eventos",
+            "--content",
+            "Token unico usage_cli_marker",
+        ][..],
+        &[
+            "memory",
+            "save",
+            "--kind",
+            "note",
+            "--title",
+            "Fijada",
+            "--content",
+            "Detalle importante fijado",
+        ][..],
+    ] {
+        assert!(sb.sai(&repo, args).status.success());
+    }
+
+    let decision = find_memory_by_title(&sb, &repo, "Cola eventos");
+    let decision_id = decision["id"].as_str().expect("id");
+    let pinned_mem = find_memory_by_title(&sb, &repo, "Fijada");
+    let pinned_id = pinned_mem["id"].as_str().expect("pinned id");
+    assert!(
+        sb.sai(&repo, &["memory", "pin", pinned_id])
+            .status
+            .success()
+    );
+
+    let listed_again = find_memory_by_title(&sb, &repo, "Cola eventos");
+    assert_eq!(listed_again["use_count"], 0);
+    assert!(listed_again["last_used_at"].is_null());
+
+    assert!(
+        sb.sai(&repo, &["memory", "get", decision_id])
+            .status
+            .success()
+    );
+    assert!(
+        sb.sai(&repo, &["memory", "get", decision_id])
+            .status
+            .success()
+    );
+
+    let get_json_out = sb.sai(&repo, &["memory", "get", decision_id, "--json"]);
+    assert!(get_json_out.status.success());
+    let get_json: serde_json::Value =
+        serde_json::from_slice(&get_json_out.stdout).expect("get json");
+    assert_eq!(get_json["use_count"], 2);
+    assert!(get_json["last_used_at"].is_string());
+    assert_eq!(get_json["updated_at"], decision["updated_at"]);
+
+    assert!(
+        sb.sai(&repo, &["memory", "search", "usage_cli_marker"])
+            .status
+            .success()
+    );
+    assert_eq!(
+        find_memory_by_title(&sb, &repo, "Cola eventos")["use_count"],
+        4
+    );
+    assert_eq!(find_memory_by_title(&sb, &repo, "Fijada")["use_count"], 0);
+
+    // The session-start index only lists memories: it does not count as use.
+    assert!(sb.sai(&repo, &["memory", "context"]).status.success());
+    assert_eq!(
+        find_memory_by_title(&sb, &repo, "Cola eventos")["use_count"],
+        4
+    );
+    assert_eq!(find_memory_by_title(&sb, &repo, "Fijada")["use_count"], 0);
+    assert_eq!(
+        find_memory_by_title(&sb, &repo, "Preferencia global")["use_count"],
+        0
+    );
+}
+
+#[test]
+fn memory_context_compact_notice_via_stdin_and_flag() {
+    let sb = Sandbox::new("ctx-compact");
+    let repo = sb.repo();
+
+    let saved = sb.sai(
+        &repo,
+        &[
+            "memory",
+            "save",
+            "--title",
+            "Una decisión",
+            "--content",
+            "Contenido de prueba",
+            "--kind",
+            "decision",
+        ],
+    );
+    assert!(saved.status.success());
+
+    // Piped compact -> notice prepended before the index.
+    let compact = sai_with_stdin(&sb, &["memory", "context"], r#"{"source":"compact"}"#);
+    assert!(compact.status.success());
+    let compact_txt = stdout(&compact);
+    assert!(
+        compact_txt.contains("## Primera acción tras compactar"),
+        "{compact_txt}"
+    );
+    assert!(compact_txt.contains("session_summary"), "{compact_txt}");
+    assert!(compact_txt.contains("# Memoria de "), "{compact_txt}");
+
+    // Piped startup -> no notice.
+    let startup = sai_with_stdin(&sb, &["memory", "context"], r#"{"source":"startup"}"#);
+    let startup_txt = stdout(&startup);
+    assert!(
+        !startup_txt.contains("Primera acción tras compactar"),
+        "{startup_txt}"
+    );
+    assert!(startup_txt.starts_with("# Memoria de "), "{startup_txt}");
+
+    // Invalid stdin is ignored: the index still renders, no notice.
+    let invalid = sai_with_stdin(&sb, &["memory", "context"], "esto no es json");
+    assert!(invalid.status.success());
+    let invalid_txt = stdout(&invalid);
+    assert!(invalid_txt.starts_with("# Memoria de "), "{invalid_txt}");
+    assert!(
+        !invalid_txt.contains("Primera acción tras compactar"),
+        "{invalid_txt}"
+    );
+
+    // Explicit --source compact flag -> notice present.
+    let flag = sb.sai(&repo, &["memory", "context", "--source", "compact"]);
+    assert!(flag.status.success());
+    assert!(stdout(&flag).contains("## Primera acción tras compactar"));
+
+    // --json with compact adds a "notice" field.
+    let json = sai_with_stdin(
+        &sb,
+        &["memory", "context", "--json"],
+        r#"{"source":"compact"}"#,
+    );
+    let json_val: serde_json::Value = serde_json::from_slice(&json.stdout).expect("json");
+    let notice = json_val["notice"].as_str().expect("notice field");
+    assert!(notice.contains("Primera acción tras compactar"), "{notice}");
+
+    // --json without compact has no notice field.
+    let plain_json = sb.sai(&repo, &["memory", "context", "--json"]);
+    let plain_val: serde_json::Value = serde_json::from_slice(&plain_json.stdout).expect("json");
+    assert!(plain_val.get("notice").is_none());
+}
+
+#[test]
+fn memory_context_cwd_from_json_selects_project() {
+    let sb = Sandbox::new("ctx-cwd");
+    let repo = sb.repo();
+
+    let repo2 = sb.root.join("project-b");
+    fs::create_dir_all(repo2.join(".git")).expect("mkdir repo2");
+
+    let saved = sb.sai(
+        &repo2,
+        &[
+            "memory",
+            "save",
+            "--title",
+            "Memoria de project-b",
+            "--content",
+            "Contenido del otro proyecto",
+            "--kind",
+            "note",
+        ],
+    );
+    assert!(saved.status.success());
+
+    // Running from `repo` but with cwd pointing at project-b must resolve
+    // project-b, not the process cwd.
+    let input = format!(r#"{{"source":"startup","cwd":"{}"}}"#, repo2.display());
+    let out = sai_with_stdin_in(&sb, &repo, &["memory", "context"], &input);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let txt = stdout(&out);
+    assert!(txt.contains("# Memoria de project-b"), "{txt}");
+    assert!(txt.contains("Memoria de project-b"), "{txt}");
+    assert!(!txt.contains("# Memoria global"), "{txt}");
+}
+
+fn seed_stale_memories(sb: &Sandbox, repo: &Path) {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("rt");
+    runtime.block_on(async {
+        let db = saispace_core::Db::open(&sb.root.join("db/saispace.db"))
+            .await
+            .expect("db");
+        let project = db
+            .project_for_path(&repo.canonicalize().expect("canonical repo"), false)
+            .await
+            .expect("project lookup")
+            .expect("project registered");
+        let now = chrono::Utc::now();
+        let entries: &[(
+            saispace_core::models::MemoryKind,
+            &str,
+            Option<uuid::Uuid>,
+            i64,
+        )] = &[
+            (
+                saispace_core::models::MemoryKind::Decision,
+                "Decisión olvidada",
+                Some(project.id),
+                100,
+            ),
+            (
+                saispace_core::models::MemoryKind::Preference,
+                "Preferencia vieja",
+                Some(project.id),
+                200,
+            ),
+            (
+                saispace_core::models::MemoryKind::SessionSummary,
+                "Sesión proyecto 1",
+                Some(project.id),
+                1,
+            ),
+            (
+                saispace_core::models::MemoryKind::SessionSummary,
+                "Sesión proyecto 2",
+                Some(project.id),
+                2,
+            ),
+            (
+                saispace_core::models::MemoryKind::SessionSummary,
+                "Sesión proyecto 3",
+                Some(project.id),
+                3,
+            ),
+            (
+                saispace_core::models::MemoryKind::SessionSummary,
+                "Sesión proyecto 4",
+                Some(project.id),
+                4,
+            ),
+            (
+                saispace_core::models::MemoryKind::SessionSummary,
+                "Sesión global 1",
+                None,
+                1,
+            ),
+            (
+                saispace_core::models::MemoryKind::SessionSummary,
+                "Sesión global 2",
+                None,
+                2,
+            ),
+            (
+                saispace_core::models::MemoryKind::SessionSummary,
+                "Sesión global 3",
+                None,
+                3,
+            ),
+            (
+                saispace_core::models::MemoryKind::SessionSummary,
+                "Sesión global 4",
+                None,
+                4,
+            ),
+        ];
+        for (kind, title, project_id, age_days) in entries {
+            let ts = now - chrono::Duration::days(*age_days);
+            db.save_memory_at(
+                saispace_core::models::SaveMemoryInput {
+                    project_id: *project_id,
+                    project_name: None,
+                    kind: *kind,
+                    title: (*title).to_string(),
+                    content: "Contenido de prueba".to_string(),
+                    topic_key: None,
+                },
+                ts,
+                Some(ts),
+            )
+            .await
+            .expect("save old memory");
+        }
+    });
+}
+
+fn stale_json(sb: &Sandbox, repo: &Path, extra: &[&str]) -> serde_json::Value {
+    let mut args = vec!["memory", "stale", "--json"];
+    args.extend_from_slice(extra);
+    let out = sb.sai(repo, &args);
+    assert!(out.status.success());
+    serde_json::from_slice(&out.stdout).expect("stale json")
+}
+
+fn memory_delete_events(sb: &Sandbox) -> usize {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("rt");
+    runtime.block_on(async {
+        let db = saispace_core::Db::open(&sb.root.join("db/saispace.db"))
+            .await
+            .expect("db");
+        let activity = db.list_activity(20).await.expect("activity");
+        activity
+            .iter()
+            .filter(|e| {
+                e.action == saispace_core::models::ActionKind::Delete
+                    && e.entity == saispace_core::models::EntityKind::Memory
+            })
+            .count()
+    })
+}
+
+#[test]
+fn memory_stale_lists_and_prunes_only_surplus_sessions() {
+    let sb = Sandbox::new("memory-stale");
+    let repo = sb.repo();
+
+    let initial = sb.sai(&repo, &["memory", "stale"]);
+    assert_eq!(initial.status.code(), Some(0));
+    assert!(stdout(&initial).contains("nada que revisar"));
+
+    // A fresh memory registers the project and must never show up as stale.
+    assert!(
+        sb.sai(
+            &repo,
+            &[
+                "memory",
+                "save",
+                "--title",
+                "Nota reciente",
+                "--content",
+                "Al día"
+            ],
+        )
+        .status
+        .success()
+    );
+    seed_stale_memories(&sb, &repo);
+
+    let listed = sb.sai(&repo, &["memory", "stale"]);
+    assert_eq!(listed.status.code(), Some(0));
+    let out = stdout(&listed);
+    assert!(out.contains("Sin uso en 60 días"), "{out}");
+    assert!(out.contains("Decisión olvidada"), "{out}");
+    assert!(!out.contains("Preferencia vieja"), "{out}");
+    assert!(!out.contains("Nota reciente"), "{out}");
+    assert!(out.contains("Resúmenes de sesión sobrantes"), "{out}");
+    assert!(out.contains("Sesión proyecto 4"), "{out}");
+    assert!(out.contains("Sesión global 4"), "{out}");
+    assert!(!out.contains("Sesión proyecto 3"), "{out}");
+
+    let report = stale_json(&sb, &repo, &[]);
+    assert_eq!(report["stale"].as_array().expect("stale array").len(), 1);
+    assert_eq!(
+        report["surplus_sessions"]
+            .as_array()
+            .expect("surplus array")
+            .len(),
+        2
+    );
+
+    let keep1 = stale_json(&sb, &repo, &["--keep-sessions", "1"]);
+    assert_eq!(
+        keep1["surplus_sessions"]
+            .as_array()
+            .expect("surplus array")
+            .len(),
+        6
+    );
+
+    let wide = stale_json(&sb, &repo, &["--days", "200"]);
+    assert_eq!(wide["stale"].as_array().expect("stale array").len(), 0);
+
+    let pruned = sb.sai(&repo, &["memory", "stale", "--prune-sessions"]);
+    assert_eq!(pruned.status.code(), Some(0));
+    let pout = stdout(&pruned);
+    assert!(pout.contains("eliminada"), "{pout}");
+    assert!(pout.contains("Sesión proyecto 4"), "{pout}");
+    assert!(pout.contains("Sesión global 4"), "{pout}");
+    // Stale memories are listed for review but never auto-deleted.
+    assert!(pout.contains("Decisión olvidada"), "{pout}");
+    assert_eq!(
+        find_memory_by_title(&sb, &repo, "Decisión olvidada")["title"],
+        "Decisión olvidada"
+    );
+
+    let after = stale_json(&sb, &repo, &[]);
+    assert_eq!(after["stale"].as_array().expect("stale array").len(), 1);
+    assert_eq!(
+        after["surplus_sessions"]
+            .as_array()
+            .expect("surplus array")
+            .len(),
+        0
+    );
+    assert_eq!(memory_delete_events(&sb), 2);
+}
+
+#[test]
+fn memory_stale_prune_json_stays_parseable() {
+    let sb = Sandbox::new("memory-stale-json");
+    let repo = sb.repo();
+    assert!(
+        sb.sai(
+            &repo,
+            &[
+                "memory",
+                "save",
+                "--title",
+                "Nota base",
+                "--content",
+                "Registra el proyecto"
+            ],
+        )
+        .status
+        .success()
+    );
+    seed_stale_memories(&sb, &repo);
+
+    let pruned = sb.sai(&repo, &["memory", "stale", "--prune-sessions", "--json"]);
+    assert_eq!(pruned.status.code(), Some(0));
+    let out = stdout(&pruned);
+    assert!(!out.contains("eliminada"), "{out}");
+    let report: serde_json::Value = serde_json::from_slice(&pruned.stdout).expect("prune json");
+    assert_eq!(report["stale"].as_array().expect("stale array").len(), 1);
+    assert_eq!(
+        report["surplus_sessions"]
+            .as_array()
+            .expect("surplus array")
+            .len(),
+        0
+    );
+    assert_eq!(memory_delete_events(&sb), 2);
 }

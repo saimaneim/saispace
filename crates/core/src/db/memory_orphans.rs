@@ -12,6 +12,9 @@ pub struct OrphanGroup {
 }
 
 impl Db {
+    /// # Errors
+    ///
+    /// Returns an error if the groups cannot be loaded.
     pub async fn orphan_memory_groups(&self) -> CoreResult<Vec<OrphanGroup>> {
         let groups = sqlx::query_as::<_, OrphanGroup>(
             r"
@@ -28,6 +31,9 @@ impl Db {
         Ok(groups)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the memories cannot be updated.
     pub async fn link_orphans_to_project(
         &self,
         project_name: &str,

@@ -52,6 +52,9 @@ fn create_key_file(path: &Path) -> CoreResult<()> {
 }
 
 impl Vault {
+    /// # Errors
+    ///
+    /// Returns an error if the key file cannot be created, read, or parsed.
     pub fn open(key_path: &Path) -> CoreResult<Self> {
         if !key_path.exists() {
             create_key_file(key_path)?;
@@ -67,6 +70,9 @@ impl Vault {
         Ok(Self { cipher })
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if random bytes cannot be generated or encryption fails.
     pub fn seal(&self, name: &str, plaintext: &[u8]) -> CoreResult<(Vec<u8>, Vec<u8>)> {
         let nonce = random_bytes::<NONCE_LEN>()?;
         let ciphertext = self
@@ -82,6 +88,9 @@ impl Vault {
         Ok((nonce.to_vec(), ciphertext))
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the nonce is corrupt or decryption fails.
     pub fn unseal(&self, name: &str, nonce: &[u8], ciphertext: &[u8]) -> CoreResult<Vec<u8>> {
         if nonce.len() != NONCE_LEN {
             return Err(CoreError::Vault("corrupt nonce".to_string()));

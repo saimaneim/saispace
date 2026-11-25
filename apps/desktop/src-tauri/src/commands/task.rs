@@ -7,12 +7,18 @@ use saispace_core::models::{
 use tauri::State;
 use uuid::Uuid;
 
+/// # Errors
+///
+/// Returns an error if the tasks cannot be loaded.
 #[tauri::command]
 pub async fn list_tasks(project_id: Uuid, db: State<'_, Db>) -> CommandResult<Vec<Task>> {
     let tasks = db.list_tasks_by_project(project_id).await?;
     Ok(tasks)
 }
 
+/// # Errors
+///
+/// Returns an error if the input is invalid or the task cannot be stored.
 #[tauri::command]
 pub async fn create_task(input: CreateTaskInput, db: State<'_, Db>) -> CommandResult<Task> {
     let project_id = input.project_id;
@@ -33,6 +39,9 @@ pub async fn create_task(input: CreateTaskInput, db: State<'_, Db>) -> CommandRe
     Ok(task)
 }
 
+/// # Errors
+///
+/// Returns an error if the input is invalid, the task does not exist, or the update fails.
 #[tauri::command]
 pub async fn update_task(
     id: Uuid,
@@ -56,6 +65,9 @@ pub async fn update_task(
     Ok(task)
 }
 
+/// # Errors
+///
+/// Returns an error if the task does not exist or cannot be deleted.
 #[tauri::command]
 pub async fn delete_task(id: Uuid, db: State<'_, Db>) -> CommandResult<()> {
     let existing = db.get_task(id).await?;

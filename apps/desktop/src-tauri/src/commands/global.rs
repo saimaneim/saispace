@@ -7,6 +7,9 @@ use std::path::PathBuf;
 const SVGL_API: &str = "https://api.svgl.app";
 const MAX_SVG_BYTES: usize = 256 * 1024;
 
+/// # Errors
+///
+/// Returns an error if `HOME` is not set or the inventory scan fails.
 #[tauri::command]
 pub async fn global_ai_inventory() -> CommandResult<AiInventory> {
     let home = std::env::var_os("HOME")
@@ -100,6 +103,9 @@ async fn fetch_icon(query: &str) -> CommandResult<Option<String>> {
     Ok(text.contains("<svg").then_some(text))
 }
 
+/// # Errors
+///
+/// Returns an error if the icon cache or the remote lookup fails.
 #[tauri::command]
 pub async fn tech_icon(name: String) -> CommandResult<Option<String>> {
     let key = normalize(&name);

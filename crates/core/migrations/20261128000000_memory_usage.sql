@@ -1,0 +1,2 @@
+ALTER TABLE memories ADD COLUMN last_used_at TEXT NULL;
+ALTER TABLE memories ADD COLUMN use_count INTEGER NOT NULL DEFAULT 0;

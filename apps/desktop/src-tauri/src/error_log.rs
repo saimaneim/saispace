@@ -6,6 +6,9 @@ use std::path::Path;
 
 const MAX_LOG_BYTES: u64 = 1024 * 1024;
 
+/// # Errors
+///
+/// Returns an error if the log metadata cannot be read or the file cannot be rotated.
 pub fn rotate_if_needed(path: &Path, max_bytes: u64) -> std::io::Result<()> {
     let metadata = match std::fs::metadata(path) {
         Ok(meta) => meta,

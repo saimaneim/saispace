@@ -19,6 +19,9 @@ const IGNORED_DIRS: &[&str] = &[
 const MAX_DEPTH: usize = 4;
 const MAX_MANIFESTS: usize = 64;
 
+/// # Errors
+///
+/// Returns an error if the path is not a directory or its manifests cannot be read.
 pub fn detect_technologies(root: &Path) -> CoreResult<Vec<DetectedTechnology>> {
     if !root.is_dir() {
         return Err(CoreError::Validation(format!(

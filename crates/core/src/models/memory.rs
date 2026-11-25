@@ -47,6 +47,8 @@ pub struct Memory {
     pub pinned: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub last_used_at: Option<DateTime<Utc>>,
+    pub use_count: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -98,4 +100,36 @@ pub struct MemoryContext {
     pub last_session: Option<Memory>,
     pub pinned: Vec<Memory>,
     pub memories: Vec<Memory>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentMemorySaves {
+    pub actor_name: String,
+    pub last_7d: i64,
+    pub last_30d: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::FromRow)]
+pub struct MostUsedMemory {
+    pub id: Uuid,
+    pub title: String,
+    pub project_name: Option<String>,
+    pub use_count: i64,
+    pub last_used_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::FromRow)]
+pub struct ProjectMemoryUsage {
+    pub project_name: String,
+    pub total: i64,
+    pub used: i64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MemoryUsageStats {
+    pub saves_by_agent: Vec<AgentMemorySaves>,
+    pub most_used: Vec<MostUsedMemory>,
+    pub never_used: i64,
+    pub total: i64,
+    pub by_project: Vec<ProjectMemoryUsage>,
 }

@@ -4,6 +4,9 @@ use saispace_core::models::ActivityEvent;
 use tauri::State;
 use uuid::Uuid;
 
+/// # Errors
+///
+/// Returns an error if the activity rows cannot be loaded.
 #[tauri::command]
 pub async fn list_activity(
     limit: Option<i64>,
@@ -14,6 +17,9 @@ pub async fn list_activity(
     Ok(activities)
 }
 
+/// # Errors
+///
+/// Returns an error if the activity rows cannot be loaded.
 #[tauri::command]
 pub async fn list_activity_by_project(
     project_id: Uuid,

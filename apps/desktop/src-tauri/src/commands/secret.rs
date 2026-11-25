@@ -23,11 +23,17 @@ async fn record(db: &Db, action: ActionKind, details: serde_json::Value) {
     .await;
 }
 
+/// # Errors
+///
+/// Returns an error if the secrets cannot be loaded.
 #[tauri::command]
 pub async fn list_secrets(db: State<'_, Db>) -> CommandResult<Vec<SecretMeta>> {
     Ok(db.list_secrets().await?)
 }
 
+/// # Errors
+///
+/// Returns an error if the name is invalid, the value is too large, or the secret cannot be stored.
 #[tauri::command]
 pub async fn set_secret(
     name: String,
@@ -48,6 +54,9 @@ pub async fn set_secret(
     Ok(meta)
 }
 
+/// # Errors
+///
+/// Returns an error if the secret does not exist or cannot be deleted.
 #[tauri::command]
 pub async fn delete_secret(name: String, db: State<'_, Db>) -> CommandResult<()> {
     db.delete_secret(&name).await?;
@@ -55,11 +64,17 @@ pub async fn delete_secret(name: String, db: State<'_, Db>) -> CommandResult<()>
     Ok(())
 }
 
+/// # Errors
+///
+/// Returns an error if the grants cannot be loaded.
 #[tauri::command]
 pub async fn list_secret_grants(db: State<'_, Db>) -> CommandResult<Vec<SecretGrant>> {
     Ok(db.list_secret_grants().await?)
 }
 
+/// # Errors
+///
+/// Returns an error if the grant does not exist or cannot be updated.
 #[tauri::command]
 pub async fn decide_secret_grant(id: Uuid, approve: bool, db: State<'_, Db>) -> CommandResult<()> {
     db.decide_secret_grant(id, approve).await?;
@@ -72,6 +87,9 @@ pub async fn decide_secret_grant(id: Uuid, approve: bool, db: State<'_, Db>) -> 
     Ok(())
 }
 
+/// # Errors
+///
+/// Returns an error if the grant does not exist or cannot be deleted.
 #[tauri::command]
 pub async fn revoke_secret_grant(id: Uuid, db: State<'_, Db>) -> CommandResult<()> {
     db.revoke_secret_grant(id).await?;

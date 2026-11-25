@@ -3,16 +3,16 @@ use crate::db::search::STOPWORDS;
 use crate::db::validation::text_with_limit;
 use crate::error::{CoreError, CoreResult};
 use crate::models::{
-    Memory, MemoryContext, MemoryKind, MemoryScope, SaveMemoryInput, SearchHit, SearchKind,
+    Memory, MemoryContext, MemoryKind, MemoryScope, SaveMemoryInput, SearchKind, SimilarMemory,
 };
+use crate::topic_key::normalize_topic_key;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 pub const MAX_MEMORY_TITLE_CHARS: usize = 200;
 pub const MAX_MEMORY_CONTENT_CHARS: usize = 20_000;
-pub const MAX_TOPIC_KEY_CHARS: usize = 120;
 
-pub(crate) const MEMORY_COLUMNS: &str = "id, project_id, NULLIF(project_name, '') AS project_name, kind, title, content, NULLIF(topic_key, '') AS topic_key, pinned, created_at, updated_at";
+pub(crate) const MEMORY_COLUMNS: &str = "id, project_id, NULLIF(project_name, '') AS project_name, kind, title, content, NULLIF(topic_key, '') AS topic_key, pinned, created_at, updated_at, last_used_at, use_count";
 
 /// Share of meaningful title words two memories must have in common (Jaccard)
 /// to count as possible duplicates. One shared word such as a client name
@@ -41,10 +41,16 @@ pub fn title_similarity(a: &str, b: &str) -> f64 {
 }
 
 impl Db {
+    /// # Errors
+    ///
+    /// Returns an error if the input is invalid or the memory cannot be stored.
     pub async fn save_memory(&self, input: SaveMemoryInput) -> CoreResult<Memory> {
         self.save_memory_at(input, Utc::now(), None).await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the input is invalid or the memory cannot be stored.
     pub async fn save_memory_at(
         &self,
         input: SaveMemoryInput,
@@ -53,10 +59,6 @@ impl Db {
     ) -> CoreResult<Memory> {
         let title = text_with_limit("title", &input.title, MAX_MEMORY_TITLE_CHARS)?;
         let content = text_with_limit("content", &input.content, MAX_MEMORY_CONTENT_CHARS)?;
-        let topic_key = match input.topic_key.as_deref().map(str::trim) {
-            None | Some("") => String::new(),
-            Some(key) => text_with_limit("topic_key", key, MAX_TOPIC_KEY_CHARS)?,
-        };
         let project_name = match (input.project_id, input.project_name.as_deref()) {
             (Some(id), _) => {
                 self.get_project(id)
@@ -69,6 +71,11 @@ impl Db {
             }
             (None, Some(name)) => name.trim().to_string(),
             (None, None) => String::new(),
+        };
+        // Empty result = no topic: the upsert below only matches non-empty keys.
+        let topic_key = match input.topic_key.as_deref() {
+            None => String::new(),
+            Some(raw) => normalize_topic_key(raw, &project_name),
         };
 
         let sql = format!(
@@ -96,6 +103,9 @@ impl Db {
         Ok(memory)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the memory does not exist or the query fails.
     pub async fn get_memory(&self, id: Uuid) -> CoreResult<Memory> {
         let sql = format!("SELECT {MEMORY_COLUMNS} FROM memories WHERE id = ?1");
         sqlx::query_as::<_, Memory>(&sql)
@@ -108,6 +118,9 @@ impl Db {
             })
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the memories cannot be loaded.
     pub async fn recent_memories(&self, scope: MemoryScope, limit: i64) -> CoreResult<Vec<Memory>> {
         let (mode, project_id) = match scope {
             MemoryScope::All => (0, None),
@@ -136,6 +149,10 @@ impl Db {
 
     /// Session-start context: every preference, pinned memories, the newest
     /// session summary (older ones are superseded) and up to `limit` others.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the memories cannot be loaded.
     pub async fn memory_context(
         &self,
         scope: MemoryScope,
@@ -162,11 +179,15 @@ impl Db {
     /// Memories in the same scope whose title shares words with `memory`'s
     /// title, so the caller can merge or delete duplicates instead of piling
     /// them up. Session summaries are history, never duplicates.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the search or the follow-up lookups fail.
     pub async fn similar_memories(
         &self,
         memory: &Memory,
         limit: i64,
-    ) -> CoreResult<Vec<SearchHit>> {
+    ) -> CoreResult<Vec<SimilarMemory>> {
         if memory.kind == MemoryKind::SessionSummary {
             return Ok(Vec::new());
         }
@@ -182,10 +203,14 @@ impl Db {
             {
                 continue;
             }
-            if self.get_memory(hit.id).await?.kind == MemoryKind::SessionSummary {
+            let other = self.get_memory(hit.id).await?;
+            if other.kind == MemoryKind::SessionSummary {
                 continue;
             }
-            similar.push(hit);
+            similar.push(SimilarMemory {
+                topic_key: other.topic_key.clone().unwrap_or_default(),
+                hit,
+            });
             if similar.len() >= usize::try_from(limit).unwrap_or(0) {
                 break;
             }
@@ -193,6 +218,9 @@ impl Db {
         Ok(similar)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the memory does not exist or the delete fails.
     pub async fn delete_memory(&self, id: Uuid) -> CoreResult<()> {
         let result = sqlx::query("DELETE FROM memories WHERE id = ?1")
             .bind(id)
@@ -207,6 +235,9 @@ impl Db {
         Ok(())
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the memories cannot be updated.
     pub async fn link_memories_by_name(&self, project_id: Uuid, name: &str) -> CoreResult<u64> {
         let result = sqlx::query(
             "UPDATE memories SET project_id = ?1 WHERE project_id IS NULL AND project_name = ?2",

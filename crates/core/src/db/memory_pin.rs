@@ -5,6 +5,9 @@ use crate::models::Memory;
 use uuid::Uuid;
 
 impl Db {
+    /// # Errors
+    ///
+    /// Returns an error if the memory does not exist or the update fails.
     pub async fn set_memory_pinned(&self, id: Uuid, pinned: bool) -> CoreResult<Memory> {
         let sql =
             format!("UPDATE memories SET pinned = ?1 WHERE id = ?2 RETURNING {MEMORY_COLUMNS}");

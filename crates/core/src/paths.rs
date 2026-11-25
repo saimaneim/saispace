@@ -1,6 +1,9 @@
 use crate::error::{CoreError, CoreResult};
 use std::path::{Path, PathBuf};
 
+/// # Errors
+///
+/// Returns an error if `HOME` is not set and no explicit path is configured.
 pub fn default_db_path() -> CoreResult<PathBuf> {
     if let Some(value) = std::env::var_os("SAISPACE_DB_PATH").filter(|v| !v.is_empty()) {
         return Ok(PathBuf::from(value));

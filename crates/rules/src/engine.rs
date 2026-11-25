@@ -112,6 +112,9 @@ fn snippet(line: &str) -> String {
 }
 
 impl Engine {
+    /// # Errors
+    ///
+    /// Returns an error if a rule is invalid or one of its patterns cannot be compiled.
     pub fn new(defs: &[RuleDef]) -> RulesResult<Self> {
         let rules = defs
             .iter()

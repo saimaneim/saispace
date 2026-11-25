@@ -7,7 +7,7 @@ use rmcp::{tool, tool_router};
 use saispace_core::CoreError;
 use saispace_core::models::{
     ActionKind, EntityKind, Memory, MemoryKind, MemoryScope, Project, RecordActivityInput,
-    SaveMemoryInput, SearchHit,
+    SaveMemoryInput, SimilarMemory,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -77,8 +77,35 @@ struct ContextResponse {
 #[derive(Debug, Serialize)]
 struct SaveResponse {
     memory: Memory,
-    similar: Vec<SearchHit>,
-    hint: Option<&'static str>,
+    similar: Vec<SimilarMemory>,
+    hint: Option<String>,
+}
+
+/// When the agent saved without a `topic_key` and a similar memory already
+/// carries one, the cheapest fix is to save again reusing it.
+fn save_hint(saved: &Memory, similar: &[SimilarMemory]) -> Option<String> {
+    let generic = (!similar.is_empty()).then(|| {
+        "Similar memories exist: merge by saving again with the same topic_key, or delete_memory the stale one".to_string()
+    });
+    if saved
+        .topic_key
+        .as_deref()
+        .is_some_and(|key| !key.is_empty())
+    {
+        return generic;
+    }
+    similar
+        .iter()
+        // Only same-scope topics update in place; another scope's key would
+        // create a new row.
+        .find(|s| !s.topic_key.is_empty() && s.hit.project_id == saved.project_id)
+        .map(|s| {
+            format!(
+                "Similar memory has topic_key \"{}\": save again with that topic_key to update it instead of duplicating.",
+                s.topic_key
+            )
+        })
+        .or(generic)
 }
 
 impl SaiSpaceServer {
@@ -119,7 +146,7 @@ impl SaiSpaceServer {
 impl SaiSpaceServer {
     #[tool(
         name = "save_memory",
-        description = "Persist a durable memory (decision, architecture, bugfix, pattern, config, discovery, preference, session_summary, note). Same topic_key in the same project replaces the previous memory. Scope: the current project (project_id, path, or the working directory); global=true for cross-project knowledge"
+        description = "Save durable knowledge (decision, architecture, bugfix, pattern, config, discovery, preference, session_summary, note). Reusing topic_key in the same scope updates rather than duplicates. Scope: project_id, path, or the working directory; global=true for cross-project knowledge"
     )]
     async fn save_memory(
         &self,
@@ -187,9 +214,7 @@ impl SaiSpaceServer {
             .similar_memories(&saved, 3)
             .await
             .unwrap_or_default();
-        let hint = (!similar.is_empty()).then_some(
-            "Similar memories exist: merge by saving again with the same topic_key, or delete_memory the stale one",
-        );
+        let hint = save_hint(&saved, &similar);
         format_success(&SaveResponse {
             memory: saved,
             similar,
@@ -199,7 +224,7 @@ impl SaiSpaceServer {
 
     #[tool(
         name = "memory_context",
-        description = "Session-start memory index for the current project (defaults to the working directory): user preferences, the last session summary and recent memories with short previews. Open one with get_memory"
+        description = "Read the session-start memory index for the current project (project_id, path, or working directory): preferences, pinned memories, the latest session summary and recent previews. Open items with get_memory"
     )]
     async fn memory_context(
         &self,
@@ -253,7 +278,10 @@ impl SaiSpaceServer {
             Err(err) => return format_error(&err),
         };
         match self.db.get_memory(id).await {
-            Ok(memory) => format_success(&memory),
+            Ok(memory) => {
+                self.touch_memories(&[memory.id]).await;
+                format_success(&memory)
+            }
             Err(err) => format_error(&err),
         }
     }

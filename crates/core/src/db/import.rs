@@ -1,6 +1,7 @@
 use crate::db::Db;
 use crate::error::CoreResult;
 use crate::models::{MemoryKind, SaveMemoryInput};
+use crate::topic_key::normalize_topic_key;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::Serialize;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
@@ -41,6 +42,9 @@ pub(crate) fn parse_time(raw: &str) -> Option<DateTime<Utc>> {
 }
 
 impl Db {
+    /// # Errors
+    ///
+    /// Returns an error if the legacy database cannot be read or its rows cannot be imported.
     pub async fn import_engram(&self, engram_db: &Path) -> CoreResult<ImportReport> {
         let options = SqliteConnectOptions::new()
             .filename(engram_db)
@@ -86,8 +90,10 @@ impl Db {
             let topic = row
                 .topic_key
                 .clone()
-                .filter(|t| !t.trim().is_empty())
-                .unwrap_or_else(|| format!("engram/{}", row.id));
+                .filter(|t| !normalize_topic_key(t, name.as_deref().unwrap_or_default()).is_empty())
+                // Stable and non-empty after topic_key normalization, so
+                // re-importing upserts instead of duplicating.
+                .unwrap_or_else(|| format!("engram-obs-{}", row.id));
             let updated = parse_time(&row.updated_at).unwrap_or_else(Utc::now);
             let created = parse_time(&row.created_at);
             let input = SaveMemoryInput {

@@ -7,6 +7,9 @@ use std::path::PathBuf;
 use uuid::Uuid;
 
 impl Db {
+    /// # Errors
+    ///
+    /// Returns an error if the technologies cannot be loaded.
     pub async fn list_technologies(&self, project_id: Uuid) -> CoreResult<Vec<Technology>> {
         let items = sqlx::query_as::<_, Technology>(
             r"
@@ -22,6 +25,9 @@ impl Db {
         Ok(items)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the stack cannot be replaced.
     pub async fn replace_technologies(
         &self,
         project_id: Uuid,
@@ -56,6 +62,9 @@ impl Db {
         self.list_technologies(project_id).await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the project does not exist or its stack cannot be detected and stored.
     pub async fn sync_project_stack(&self, project_id: Uuid) -> CoreResult<Vec<Technology>> {
         let project = self
             .get_project(project_id)

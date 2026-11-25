@@ -1,11 +1,14 @@
 use crate::{CliError, CliResult};
 use clap::Subcommand;
-use saispace_core::memory_render::{excerpt, kind_label, render_context, render_memory};
+use saispace_core::memory_render::{
+    excerpt, kind_label, render_compact_notice, render_context, render_memory,
+};
 use saispace_core::models::{
     ActionKind, Actor, EntityKind, Memory, MemoryKind, MemoryScope, Project, RecordActivityInput,
-    SaveMemoryInput, UpdateMemoryInput,
+    SaveMemoryInput, SearchKind, UpdateMemoryInput,
 };
 use saispace_core::{Db, default_db_path};
+use std::io::{IsTerminal, Read};
 use std::path::PathBuf;
 use uuid::Uuid;
 
@@ -75,6 +78,12 @@ pub enum MemoryCommand {
         limit: i64,
         #[arg(help = "Salida en formato JSON", long)]
         json: bool,
+        #[arg(
+            help = "Origen de la sesión (startup, resume, clear, compact)",
+            long,
+            value_parser = ["startup", "resume", "clear", "compact"]
+        )]
+        source: Option<String>,
     },
     #[command(about = "Contenido completo de una memoria")]
     Get {
@@ -98,6 +107,27 @@ pub enum MemoryCommand {
         #[arg(long)]
         all: bool,
     },
+    #[command(about = "Revisa memorias sin uso y resúmenes de sesión sobrantes")]
+    Stale {
+        #[arg(
+            help = "Días sin uso ni edición para marcar una memoria",
+            long,
+            default_value_t = 60
+        )]
+        days: i64,
+        #[arg(
+            help = "Resúmenes de sesión a conservar por proyecto",
+            long,
+            default_value_t = 3
+        )]
+        keep_sessions: i64,
+        #[arg(help = "Revisa todos los proyectos", long)]
+        all: bool,
+        #[arg(help = "Salida en formato JSON", long)]
+        json: bool,
+        #[arg(help = "Elimina solo los resúmenes de sesión sobrantes", long)]
+        prune_sessions: bool,
+    },
     #[command(about = "Importa las observaciones de engram (idempotente)")]
     ImportEngram {
         #[arg(help = "Ruta opcional a la base de datos de engram", long)]
@@ -111,6 +141,10 @@ pub enum MemoryCommand {
     },
     #[command(about = "Lista grupos de memorias sin proyecto")]
     Orphans,
+    #[command(
+        about = "Normaliza los topic_key guardados a la convención actual (migración de datos)"
+    )]
+    NormalizeTopics,
 }
 
 fn actor() -> Actor {
@@ -122,9 +156,56 @@ fn actor() -> Actor {
 /// Project for the current directory. `register` creates it on first save;
 /// reads only pick up folders that imported memories already name.
 async fn current_project(db: &Db, register: bool) -> CliResult<Option<Project>> {
-    let cwd = std::env::current_dir()?;
+    current_project_at(db, register, std::env::current_dir()?).await
+}
+
+/// Project for an explicit directory, used when Claude Code's hook passes a
+/// `cwd` that overrides the process working directory.
+async fn current_project_at(db: &Db, register: bool, cwd: PathBuf) -> CliResult<Option<Project>> {
     let cwd = cwd.canonicalize().unwrap_or(cwd);
     Ok(db.project_for_path(&cwd, register).await?)
+}
+
+/// Upper bound on how much stdin we read when sniffing for the Claude Code
+/// hook payload, so a stray pipe can't feed us unbounded data.
+const STDIN_MAX_BYTES: u64 = 64 * 1024;
+
+struct HookInput {
+    source: Option<String>,
+    cwd: Option<PathBuf>,
+}
+
+/// Reads the Claude Code hook JSON from stdin. Claude Code runs
+/// `sai memory context` on `SessionStart` (including after compaction) and
+/// always closes stdin once the hook payload is written, so reading never
+/// blocks. When stdin is a TTY (an interactive shell) we skip it entirely, so
+/// the command never hangs waiting for input that won't come. A missing,
+/// empty or non-JSON payload is ignored silently.
+fn read_hook_input() -> Option<HookInput> {
+    let stdin = std::io::stdin();
+    if stdin.is_terminal() {
+        return None;
+    }
+    let mut buf = Vec::new();
+    stdin
+        .lock()
+        .take(STDIN_MAX_BYTES)
+        .read_to_end(&mut buf)
+        .ok()?;
+    if buf.is_empty() {
+        return None;
+    }
+    let value: serde_json::Value = serde_json::from_slice(&buf).ok()?;
+    let source = value
+        .get("source")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let cwd = value
+        .get("cwd")
+        .and_then(serde_json::Value::as_str)
+        .map(PathBuf::from)
+        .filter(|p| p.is_dir());
+    Some(HookInput { source, cwd })
 }
 
 fn print_memory_line(m: &Memory) {
@@ -201,8 +282,19 @@ async fn save(
         crate::out!(
             "parecidas (actualiza con el mismo --topic o borra la sobrante con `sai memory rm <id>`):"
         );
-        for h in &similar {
-            crate::out!("  {}  {}", h.id, h.title);
+        for s in &similar {
+            // Reusing a topic only updates within the same scope: a global
+            // memory's key saved from a project would create a new row.
+            if s.topic_key.is_empty() || s.hit.project_id != saved.project_id {
+                crate::out!("  {}  {}", s.hit.id, s.hit.title);
+            } else {
+                crate::out!(
+                    "  {}  {}  (usa --topic {} para actualizarla)",
+                    s.hit.id,
+                    s.hit.title,
+                    s.topic_key
+                );
+            }
         }
     }
     Ok(())
@@ -262,6 +354,12 @@ async fn list(db: &Db, kind: Option<String>, all: bool, limit: i64, json: bool) 
     Ok(())
 }
 
+async fn touch_memories_or_warn(db: &Db, ids: &[Uuid]) {
+    if let Err(err) = db.touch_memories(ids).await {
+        eprintln!("aviso: no se pudo actualizar el uso de memoria: {err}");
+    }
+}
+
 async fn search(db: &Db, query: &str, all: bool, limit: i64, json: bool) -> CliResult<()> {
     let scope = if all {
         MemoryScope::All
@@ -269,6 +367,12 @@ async fn search(db: &Db, query: &str, all: bool, limit: i64, json: bool) -> CliR
         MemoryScope::for_project(current_project(db, false).await?.map(|p| p.id))
     };
     let hits = db.search_scoped(query, scope, Some(limit)).await?;
+    let memory_ids: Vec<Uuid> = hits
+        .iter()
+        .filter(|h| h.kind == SearchKind::Memory)
+        .map(|h| h.id)
+        .collect();
+    touch_memories_or_warn(db, &memory_ids).await;
     if json {
         crate::out!("{}", serde_json::to_string_pretty(&hits)?);
     } else {
@@ -292,6 +396,69 @@ async fn rm(db: &Db, id: Uuid) -> CliResult<()> {
     let memory = db.get_memory(id).await?;
     db.delete_memory(id).await?;
     crate::out!("eliminada {}  {}", memory.id, memory.title);
+    Ok(())
+}
+
+async fn stale(
+    db: &Db,
+    days: i64,
+    keep_sessions: i64,
+    all: bool,
+    json: bool,
+    prune_sessions: bool,
+) -> CliResult<()> {
+    let scope = if all {
+        MemoryScope::All
+    } else {
+        MemoryScope::for_project(current_project(db, false).await?.map(|p| p.id))
+    };
+    let mut report = db.stale_report(scope, days, keep_sessions).await?;
+    if prune_sessions {
+        for m in &report.surplus_sessions {
+            db.delete_memory(m.id).await?;
+            db.record_activity(RecordActivityInput {
+                project_id: m.project_id,
+                actor: actor(),
+                action: ActionKind::Delete,
+                entity: EntityKind::Memory,
+                entity_id: Some(m.id),
+                details: Some(serde_json::json!({ "title": m.title })),
+            })
+            .await?;
+            if !json {
+                crate::out!("eliminada {}  {}", m.id, m.title);
+            }
+        }
+        report.surplus_sessions.clear();
+    }
+    if json {
+        crate::out!("{}", serde_json::to_string_pretty(&report)?);
+        return Ok(());
+    }
+    if report.stale.is_empty() && report.surplus_sessions.is_empty() {
+        crate::out!("nada que revisar");
+        return Ok(());
+    }
+    crate::out!("# Sin uso en {days} días · {}", report.stale.len());
+    if report.stale.is_empty() {
+        crate::out!("ninguna");
+    } else {
+        for m in &report.stale {
+            print_memory_line(m);
+        }
+        crate::out!("revísala con `sai memory get <id>` o elimínala con `sai memory rm <id>`");
+    }
+    crate::out!(
+        "\n# Resúmenes de sesión sobrantes · {}",
+        report.surplus_sessions.len()
+    );
+    if report.surplus_sessions.is_empty() {
+        crate::out!("ninguno");
+    } else {
+        for m in &report.surplus_sessions {
+            print_memory_line(m);
+        }
+    }
     Ok(())
 }
 
@@ -406,6 +573,43 @@ async fn set_pinned(db: &Db, id: Uuid, pinned: bool) -> CliResult<()> {
     Ok(())
 }
 
+async fn context(db: &Db, limit: i64, json: bool, source: Option<String>) -> CliResult<()> {
+    // An explicit --source flag wins; otherwise sniff the hook payload that
+    // Claude Code pipes on stdin.
+    let hook = if source.is_some() {
+        None
+    } else {
+        read_hook_input()
+    };
+    let source = source.or_else(|| hook.as_ref().and_then(|h| h.source.clone()));
+    let is_compact = source.as_deref() == Some("compact");
+    let project = match hook.as_ref().and_then(|h| h.cwd.clone()) {
+        Some(cwd) => current_project_at(db, false, cwd).await?,
+        None => current_project(db, false).await?,
+    };
+    let scope = MemoryScope::for_project(project.as_ref().map(|p| p.id));
+    let context = db.memory_context(scope, limit).await?;
+    if json {
+        let mut value = serde_json::to_value(&context)?;
+        if is_compact && let Some(obj) = value.as_object_mut() {
+            obj.insert(
+                "notice".to_string(),
+                serde_json::Value::String(render_compact_notice().trim_end().to_string()),
+            );
+        }
+        crate::out!("{}", serde_json::to_string_pretty(&value)?);
+    } else if is_compact {
+        crate::out!(
+            "{}\n{}",
+            render_compact_notice(),
+            render_context(project.as_ref(), &context).trim_end()
+        );
+    } else {
+        crate::out!("{}", render_context(project.as_ref(), &context).trim_end());
+    }
+    Ok(())
+}
+
 async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
     let db = Db::open(&default_db_path()?).await?;
     match cmd {
@@ -435,18 +639,14 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
             limit,
             json,
         } => search(&db, &query, all, limit, json).await?,
-        MemoryCommand::Context { limit, json } => {
-            let project = current_project(&db, false).await?;
-            let scope = MemoryScope::for_project(project.as_ref().map(|p| p.id));
-            let context = db.memory_context(scope, limit).await?;
-            if json {
-                crate::out!("{}", serde_json::to_string_pretty(&context)?);
-            } else {
-                crate::out!("{}", render_context(project.as_ref(), &context).trim_end());
-            }
-        }
+        MemoryCommand::Context {
+            limit,
+            json,
+            source,
+        } => context(&db, limit, json, source).await?,
         MemoryCommand::Get { id, json } => {
             let memory = db.get_memory(id).await?;
+            touch_memories_or_warn(&db, &[memory.id]).await;
             if json {
                 crate::out!("{}", serde_json::to_string_pretty(&memory)?);
             } else {
@@ -472,6 +672,13 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
                 }
             }
         }
+        MemoryCommand::Stale {
+            days,
+            keep_sessions,
+            all,
+            json,
+            prune_sessions,
+        } => stale(&db, days, keep_sessions, all, json, prune_sessions).await?,
         MemoryCommand::ImportEngram { db: source } => {
             let source = match source {
                 Some(path) => path,
@@ -485,6 +692,10 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
         MemoryCommand::Orphans => list_orphans(&db).await?,
         MemoryCommand::Link { project_name, path } => {
             link_orphans(&db, &project_name, path).await?;
+        }
+        MemoryCommand::NormalizeTopics => {
+            let changed = db.normalize_existing_topic_keys().await?;
+            crate::out!("{changed} claves de tema normalizadas");
         }
     }
     Ok(())

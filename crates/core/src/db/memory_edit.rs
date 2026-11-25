@@ -1,14 +1,13 @@
 use crate::db::Db;
-use crate::db::memory::{
-    MAX_MEMORY_CONTENT_CHARS, MAX_MEMORY_TITLE_CHARS, MAX_TOPIC_KEY_CHARS, MEMORY_COLUMNS,
-};
+use crate::db::memory::{MAX_MEMORY_CONTENT_CHARS, MAX_MEMORY_TITLE_CHARS, MEMORY_COLUMNS};
 use crate::db::validation::text_with_limit;
 use crate::error::{CoreError, CoreResult};
 use crate::models::{Memory, UpdateMemoryInput};
+use crate::topic_key::normalize_topic_key;
 use chrono::Utc;
 use uuid::Uuid;
 
-fn is_unique_constraint_violation(err: &sqlx::Error) -> bool {
+pub(crate) fn is_unique_constraint_violation(err: &sqlx::Error) -> bool {
     if let sqlx::Error::Database(db_err) = err {
         if db_err.is_unique_violation() || db_err.message().contains("UNIQUE constraint failed") {
             return true;
@@ -22,6 +21,9 @@ fn is_unique_constraint_violation(err: &sqlx::Error) -> bool {
 }
 
 impl Db {
+    /// # Errors
+    ///
+    /// Returns an error if the input is invalid, the memory does not exist, or the update fails.
     pub async fn update_memory(&self, id: Uuid, input: UpdateMemoryInput) -> CoreResult<Memory> {
         let title = input
             .title
@@ -35,11 +37,17 @@ impl Db {
             .map(|value| text_with_limit("content", value, MAX_MEMORY_CONTENT_CHARS))
             .transpose()?;
 
-        let topic_key = match input.topic_key.as_deref().map(str::trim) {
-            None => None,
-            Some("") => Some(String::new()),
-            Some(key) => Some(text_with_limit("topic_key", key, MAX_TOPIC_KEY_CHARS)?),
-        };
+        // The existing row's project name decides which prefix counts as
+        // redundant in the new topic_key, and gives us NotFound for free.
+        let existing = self.get_memory(id).await?;
+        let project_name = existing.project_name.clone().unwrap_or_default();
+
+        // Empty result = no topic: COALESCE below stores '' and the unique
+        // index ignores it.
+        let topic_key = input
+            .topic_key
+            .as_deref()
+            .map(|raw| normalize_topic_key(raw, &project_name));
 
         let now = Utc::now();
         let sql = format!(

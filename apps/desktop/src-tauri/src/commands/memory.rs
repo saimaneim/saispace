@@ -1,12 +1,16 @@
 use crate::error::CommandResult;
 use crate::error_log::record_activity_or_log;
-use saispace_core::Db;
 use saispace_core::models::{
-    ActionKind, Actor, EntityKind, Memory, MemoryScope, RecordActivityInput, UpdateMemoryInput,
+    ActionKind, Actor, EntityKind, Memory, MemoryScope, MemoryUsageStats, RecordActivityInput,
+    UpdateMemoryInput,
 };
+use saispace_core::{CoreError, Db};
 use tauri::State;
 use uuid::Uuid;
 
+/// # Errors
+///
+/// Returns an error if the memories cannot be loaded.
 #[tauri::command]
 pub async fn list_memories(
     project_id: Option<Uuid>,
@@ -21,11 +25,17 @@ pub async fn list_memories(
         .await?)
 }
 
+/// # Errors
+///
+/// Returns an error if the memory does not exist or the query fails.
 #[tauri::command]
 pub async fn get_memory(id: Uuid, db: State<'_, Db>) -> CommandResult<Memory> {
     Ok(db.get_memory(id).await?)
 }
 
+/// # Errors
+///
+/// Returns an error if the memory does not exist or cannot be deleted.
 #[tauri::command]
 pub async fn delete_memory(id: Uuid, db: State<'_, Db>) -> CommandResult<()> {
     let memory = db.get_memory(id).await?;
@@ -46,6 +56,9 @@ pub async fn delete_memory(id: Uuid, db: State<'_, Db>) -> CommandResult<()> {
     Ok(())
 }
 
+/// # Errors
+///
+/// Returns an error if the input is invalid, the memory does not exist, or the update fails.
 #[tauri::command]
 pub async fn update_memory(
     id: Uuid,
@@ -69,6 +82,9 @@ pub async fn update_memory(
     Ok(memory)
 }
 
+/// # Errors
+///
+/// Returns an error if the memory does not exist or the update fails.
 #[tauri::command]
 pub async fn set_memory_pinned(id: Uuid, pinned: bool, db: State<'_, Db>) -> CommandResult<Memory> {
     let memory = db.set_memory_pinned(id, pinned).await?;
@@ -94,6 +110,9 @@ pub struct AgentContext {
     pub bytes: usize,
 }
 
+/// # Errors
+///
+/// Returns an error if the context cannot be assembled.
 #[tauri::command]
 pub async fn agent_memory_context(
     project_id: Option<Uuid>,
@@ -110,6 +129,9 @@ pub async fn agent_memory_context(
     Ok(AgentContext { text, bytes })
 }
 
+/// # Errors
+///
+/// Returns an error if the groups cannot be loaded.
 #[tauri::command]
 pub async fn list_orphan_memory_groups(
     db: State<'_, Db>,
@@ -117,6 +139,9 @@ pub async fn list_orphan_memory_groups(
     Ok(db.orphan_memory_groups().await?)
 }
 
+/// # Errors
+///
+/// Returns an error if the memories cannot be updated.
 #[tauri::command]
 pub async fn link_orphan_memories(
     project_name: String,
@@ -145,6 +170,9 @@ pub async fn link_orphan_memories(
     Ok(linked)
 }
 
+/// # Errors
+///
+/// Returns an error if the duplicate pairs cannot be loaded.
 #[tauri::command]
 pub async fn memory_duplicates(
     project_id: Option<Uuid>,
@@ -152,4 +180,32 @@ pub async fn memory_duplicates(
 ) -> CommandResult<Vec<saispace_core::DuplicatePair>> {
     let scope = project_id.map_or(MemoryScope::All, MemoryScope::Project);
     Ok(db.duplicate_pairs(scope, 50).await?)
+}
+
+/// # Errors
+///
+/// Returns an error if the statistics cannot be computed.
+#[tauri::command]
+pub async fn memory_usage_stats(db: State<'_, Db>) -> CommandResult<MemoryUsageStats> {
+    Ok(db.memory_usage_stats().await?)
+}
+
+/// # Errors
+///
+/// Returns an error if the stale report cannot be computed.
+#[tauri::command]
+pub async fn memory_stale(
+    project_id: Option<String>,
+    days: Option<i64>,
+    db: State<'_, Db>,
+) -> CommandResult<saispace_core::StaleReport> {
+    let project_id = match project_id {
+        Some(raw) => Some(
+            Uuid::parse_str(&raw)
+                .map_err(|err| CoreError::Validation(format!("project_id inválido: {err}")))?,
+        ),
+        None => None,
+    };
+    let scope = project_id.map_or(MemoryScope::All, MemoryScope::Project);
+    Ok(db.stale_report(scope, days.unwrap_or(60), 3).await?)
 }

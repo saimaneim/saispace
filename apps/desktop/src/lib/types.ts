@@ -154,6 +154,8 @@ export interface Memory {
   pinned: boolean;
   created_at: string;
   updated_at: string;
+  last_used_at: string | null;
+  use_count: number;
 }
 
 export interface UpdateMemoryInput {
@@ -177,6 +179,39 @@ export interface OrphanGroup {
 export interface DuplicatePair {
   a: Memory;
   b: Memory;
+}
+
+export interface AgentMemorySaves {
+  actor_name: string;
+  last_7d: number;
+  last_30d: number;
+}
+
+export interface MostUsedMemory {
+  id: string;
+  title: string;
+  project_name: string | null;
+  use_count: number;
+  last_used_at: string | null;
+}
+
+export interface ProjectMemoryUsage {
+  project_name: string;
+  total: number;
+  used: number;
+}
+
+export interface MemoryUsageStats {
+  saves_by_agent: AgentMemorySaves[];
+  most_used: MostUsedMemory[];
+  never_used: number;
+  total: number;
+  by_project: ProjectMemoryUsage[];
+}
+
+export interface StaleReport {
+  stale: Memory[];
+  surplus_sessions: Memory[];
 }
 
 export interface InstructionFile {
