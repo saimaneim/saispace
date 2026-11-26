@@ -102,7 +102,7 @@ impl Db {
             r"
             SELECT id, project_id, actor_kind, actor_name, action, entity, entity_id, details, created_at
             FROM activity_events
-            ORDER BY created_at DESC
+            ORDER BY created_at DESC, id DESC
             LIMIT ?1
             ",
         )
@@ -130,7 +130,7 @@ impl Db {
             SELECT id, project_id, actor_kind, actor_name, action, entity, entity_id, details, created_at
             FROM activity_events
             WHERE project_id = ?1
-            ORDER BY created_at DESC
+            ORDER BY created_at DESC, id DESC
             LIMIT ?2
             ",
         )
@@ -160,7 +160,7 @@ impl Db {
             SELECT id, project_id, actor_kind, actor_name, action, entity, entity_id, details, created_at
             FROM activity_events
             WHERE entity = ?1 AND entity_id = ?2
-            ORDER BY created_at DESC
+            ORDER BY created_at DESC, id DESC
             LIMIT ?3
             ",
         )

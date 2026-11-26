@@ -54,3 +54,19 @@ jobs:
         run: bun run check
       - name: Lint
         run: bun run lint
+      - name: Build
+        run: bun run build
+
+  opencode-plugin:
+    name: OpenCode plugin
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: integrations/opencode
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Test
+        run: bun test
