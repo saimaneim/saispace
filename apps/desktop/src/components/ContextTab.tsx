@@ -10,7 +10,7 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, formatError } from "../lib/api";
 import type { ContextFile, Project } from "../lib/types";
 import { cn } from "../lib/utils";
@@ -130,6 +130,12 @@ export function ContextTab({ project, onSaveContext }: ContextTabProps) {
   const [content, setContent] = useState<string>(project.context_notes);
   const [savedContent, setSavedContent] = useState<string>(project.context_notes);
   const [isLoadingFile, setIsLoadingFile] = useState(false);
+  // Set when the selected file could not be read: editing is blocked so a
+  // save cannot overwrite it with the previous file's text.
+  const [loadFailed, setLoadFailed] = useState(false);
+  // Only the latest read may update the editor; an older, slower one would
+  // otherwise show (and later save) another file's content under this key.
+  const loadSeq = useRef(0);
   const [isSaving, setIsSaving] = useState(false);
   const [isPreview, setIsPreview] = useState(false);
   const [hasSaved, setHasSaved] = useState(false);
@@ -154,16 +160,23 @@ export function ContextTab({ project, onSaveContext }: ContextTabProps) {
 
   const loadFileContent = useCallback(
     async (path: string) => {
+      const seq = ++loadSeq.current;
       setIsLoadingFile(true);
+      setLoadFailed(false);
       setErrorMessage(null);
       try {
         const text = await api.readContextFile(project.id, path);
+        if (seq !== loadSeq.current) return;
         setContent(text);
         setSavedContent(text);
       } catch (err) {
+        if (seq !== loadSeq.current) return;
+        setContent("");
+        setSavedContent("");
+        setLoadFailed(true);
         setErrorMessage(formatError(err));
       } finally {
-        setIsLoadingFile(false);
+        if (seq === loadSeq.current) setIsLoadingFile(false);
       }
     },
     [project.id],
@@ -171,7 +184,7 @@ export function ContextTab({ project, onSaveContext }: ContextTabProps) {
 
   const selectItem = useCallback(
     (key: string) => {
-      if (key === selectedKey) return;
+      if (key === selectedKey && !loadFailed) return;
 
       if (content !== savedContent) {
         setPendingSwitchKey(key);
@@ -180,17 +193,21 @@ export function ContextTab({ project, onSaveContext }: ContextTabProps) {
 
       setSelectedKey(key);
       if (key === NOTES_KEY) {
+        loadSeq.current++;
+        setIsLoadingFile(false);
+        setLoadFailed(false);
         setContent(project.context_notes);
         setSavedContent(project.context_notes);
       } else {
         loadFileContent(key);
       }
     },
-    [selectedKey, content, savedContent, project.context_notes, loadFileContent],
+    [selectedKey, loadFailed, content, savedContent, project.context_notes, loadFileContent],
   );
 
-  const handleSave = useCallback(async () => {
-    if (content === savedContent || isSaving) return;
+  const handleSave = useCallback(async (): Promise<boolean> => {
+    if (content === savedContent) return true;
+    if (isSaving || isLoadingFile || loadFailed) return false;
     setIsSaving(true);
     setErrorMessage(null);
     try {
@@ -203,12 +220,24 @@ export function ContextTab({ project, onSaveContext }: ContextTabProps) {
       setHasSaved(true);
       setTimeout(() => setHasSaved(false), 2000);
       await loadFiles();
+      return true;
     } catch (err) {
       setErrorMessage(formatError(err));
+      return false;
     } finally {
       setIsSaving(false);
     }
-  }, [content, savedContent, isSaving, selectedKey, onSaveContext, project.id, loadFiles]);
+  }, [
+    content,
+    savedContent,
+    isSaving,
+    isLoadingFile,
+    loadFailed,
+    selectedKey,
+    onSaveContext,
+    project.id,
+    loadFiles,
+  ]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -221,12 +250,13 @@ export function ContextTab({ project, onSaveContext }: ContextTabProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleSave]);
 
-  const handleDiscardAndSwitch = () => {
-    if (!pendingSwitchKey) return;
-    const target = pendingSwitchKey;
+  const switchTo = (target: string) => {
     setPendingSwitchKey(null);
     setSelectedKey(target);
     if (target === NOTES_KEY) {
+      loadSeq.current++;
+      setIsLoadingFile(false);
+      setLoadFailed(false);
       setContent(project.context_notes);
       setSavedContent(project.context_notes);
     } else {
@@ -234,17 +264,19 @@ export function ContextTab({ project, onSaveContext }: ContextTabProps) {
     }
   };
 
+  const handleDiscardAndSwitch = () => {
+    if (pendingSwitchKey) switchTo(pendingSwitchKey);
+  };
+
+  // A failed save keeps the dialog closed but stays on the current file, so
+  // the unsaved text is not thrown away.
   const handleSaveAndSwitch = async () => {
     if (!pendingSwitchKey) return;
     const target = pendingSwitchKey;
-    await handleSave();
-    setPendingSwitchKey(null);
-    setSelectedKey(target);
-    if (target === NOTES_KEY) {
-      setContent(project.context_notes);
-      setSavedContent(project.context_notes);
+    if (await handleSave()) {
+      switchTo(target);
     } else {
-      loadFileContent(target);
+      setPendingSwitchKey(null);
     }
   };
 
@@ -254,6 +286,8 @@ export function ContextTab({ project, onSaveContext }: ContextTabProps) {
     try {
       await api.writeContextFile(project.id, "AGENTS.md", MINIMAL_AGENTS_TEMPLATE);
       await loadFiles();
+      loadSeq.current++;
+      setLoadFailed(false);
       setSelectedKey("AGENTS.md");
       setContent(MINIMAL_AGENTS_TEMPLATE);
       setSavedContent(MINIMAL_AGENTS_TEMPLATE);
@@ -625,7 +659,7 @@ export function ContextTab({ project, onSaveContext }: ContextTabProps) {
 
           <Button
             onClick={handleSave}
-            disabled={!hasChanges || isSaving}
+            disabled={!hasChanges || isSaving || loadFailed}
             variant={hasChanges ? "default" : "secondary"}
             title="Guardar (Ctrl+S)"
             className="flex-shrink-0 min-w-24"
@@ -646,6 +680,10 @@ export function ContextTab({ project, onSaveContext }: ContextTabProps) {
         <div className="flex-1 px-5 pb-5 overflow-y-auto">
           {isLoadingFile ? (
             <div className="py-20 text-center text-xs text-fog">Cargando…</div>
+          ) : loadFailed ? (
+            <div className="py-20 text-center text-xs text-fog">
+              No se pudo leer el fichero. Vuelve a seleccionarlo para reintentar.
+            </div>
           ) : isPreview ? (
             <div className="max-w-3xl space-y-2">
               {content.trim() ? (

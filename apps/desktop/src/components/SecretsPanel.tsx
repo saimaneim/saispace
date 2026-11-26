@@ -32,16 +32,31 @@ function AddSecretDialog({
   open,
   onOpenChange,
   onSaved,
+  existingNames,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
+  existingNames: string[];
 }) {
   const [name, setName] = useState("");
   const [value, setValue] = useState("");
   const [description, setDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const replaces = existingNames.includes(name.trim());
+
+  // The dialog stays mounted: drop the typed value when it closes so a
+  // cancelled secret does not linger in memory or reappear on reopen.
+  const handleOpenChange = (next: boolean) => {
+    if (!next) {
+      setName("");
+      setValue("");
+      setDescription("");
+      setError(null);
+    }
+    onOpenChange(next);
+  };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -49,11 +64,8 @@ function AddSecretDialog({
     setError(null);
     try {
       await api.setSecret(name.trim(), value, description.trim());
-      setName("");
-      setValue("");
-      setDescription("");
       onSaved();
-      onOpenChange(false);
+      handleOpenChange(false);
     } catch (err) {
       setError(formatError(err));
     } finally {
@@ -62,7 +74,7 @@ function AddSecretDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <form onSubmit={submit} className="space-y-4">
           <DialogHeader>
@@ -96,13 +108,18 @@ function AddSecretDialog({
               className={inputClass}
             />
           </div>
+          {replaces && (
+            <p className="text-sm text-fog">
+              Ya existe una clave {name.trim()}: se sustituirá su valor.
+            </p>
+          )}
           {error && <p className="text-sm text-coral-red">{error}</p>}
           <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="secondary" onClick={() => handleOpenChange(false)}>
               Cancelar
             </Button>
             <Button type="submit" variant="default" disabled={!name || !value || isSaving}>
-              {isSaving ? "Guardando…" : "Guardar"}
+              {isSaving ? "Guardando…" : replaces ? "Sustituir" : "Guardar"}
             </Button>
           </DialogFooter>
         </form>
@@ -267,7 +284,12 @@ export function SecretsPanel({ onChanged }: SecretsPanelProps) {
         {error && <p className="text-sm text-coral-red">{error}</p>}
       </div>
 
-      <AddSecretDialog open={isAddOpen} onOpenChange={setIsAddOpen} onSaved={load} />
+      <AddSecretDialog
+        open={isAddOpen}
+        onOpenChange={setIsAddOpen}
+        onSaved={load}
+        existingNames={secrets.map((s) => s.name)}
+      />
 
       <Dialog
         open={pendingDelete !== null}

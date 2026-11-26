@@ -213,11 +213,13 @@ async fn run_with_secrets(ctx: &Context, args: RunArgs) -> CliResult<ExitCode> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
-    let masks: Vec<String> = env
+    // Longest first, so a secret that contains another is masked whole.
+    let mut masks: Vec<Vec<u8>> = env
         .iter()
-        .map(|(_, v)| v.clone())
+        .map(|(_, v)| v.as_bytes().to_vec())
         .filter(|v| v.len() >= MIN_MASK_LEN)
         .collect();
+    masks.sort_by_key(|m| std::cmp::Reverse(m.len()));
     let out_pipe = child.stdout.take();
     let err_pipe = child.stderr.take();
     let out_masks = masks.clone();
@@ -231,21 +233,51 @@ async fn run_with_secrets(ctx: &Context, args: RunArgs) -> CliResult<ExitCode> {
     }
     let _ = out_thread.join();
     let status = child.wait()?;
-    let code = status.code().unwrap_or(1);
-    Ok(ExitCode::from(u8::try_from(code).unwrap_or(1)))
+    Ok(ExitCode::from(exit_code(status)))
 }
 
-fn mask(line: &[u8], masks: &[String]) -> Vec<u8> {
-    let mut text = String::from_utf8_lossy(line).into_owned();
-    for secret in masks {
-        if text.contains(secret.as_str()) {
-            text = text.replace(secret.as_str(), "••••••");
+/// Mirrors the shell: a child killed by a signal exits as 128 + signal.
+fn exit_code(status: std::process::ExitStatus) -> u8 {
+    if let Some(code) = status.code() {
+        return u8::try_from(code).unwrap_or(1);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if let Some(signal) = status.signal() {
+            return u8::try_from(128 + signal).unwrap_or(1);
         }
     }
-    text.into_bytes()
+    1
 }
 
-fn pump(pipe: impl Read, sink: &mut impl Write, masks: &[String]) {
+const MASK: &[u8] = "••••••".as_bytes();
+
+/// Replaces every secret in `line` byte by byte, so binary output (an image
+/// piped through `curl`, a tarball) passes through untouched.
+fn mask(line: &[u8], masks: &[Vec<u8>]) -> Vec<u8> {
+    let mut out = line.to_vec();
+    for secret in masks {
+        if secret.is_empty() || !out.windows(secret.len()).any(|w| w == secret.as_slice()) {
+            continue;
+        }
+        let mut replaced = Vec::with_capacity(out.len());
+        let mut i = 0;
+        while i < out.len() {
+            if out[i..].starts_with(secret) {
+                replaced.extend_from_slice(MASK);
+                i += secret.len();
+            } else {
+                replaced.push(out[i]);
+                i += 1;
+            }
+        }
+        out = replaced;
+    }
+    out
+}
+
+fn pump(pipe: impl Read, sink: &mut impl Write, masks: &[Vec<u8>]) {
     let mut reader = BufReader::new(pipe);
     let mut line = Vec::new();
     loop {
@@ -263,4 +295,36 @@ fn pump(pipe: impl Read, sink: &mut impl Write, masks: &[String]) {
             }
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::mask;
+
+    #[test]
+    fn mask_keeps_binary_bytes() {
+        let line = b"abc\x00\xff\xfeDEF";
+        assert_eq!(mask(line, &[b"zzzz".to_vec()]), line.to_vec());
+    }
+
+    #[test]
+    fn mask_replaces_every_occurrence_next_to_invalid_utf8() {
+        let out = mask(b"\xffsecret-secret\n", &[b"secret".to_vec()]);
+        assert_eq!(
+            out,
+            [b"\xff".as_slice(), MASK_BYTES, b"-", MASK_BYTES, b"\n"].concat()
+        );
+    }
+
+    #[test]
+    fn mask_longest_secret_first() {
+        let mut masks = vec![b"abcd".to_vec(), b"abcdefgh".to_vec()];
+        masks.sort_by_key(|m| std::cmp::Reverse(m.len()));
+        assert_eq!(
+            mask(b"xabcdefghx", &masks),
+            [b"x".as_slice(), MASK_BYTES, b"x"].concat()
+        );
+    }
+
+    const MASK_BYTES: &[u8] = super::MASK;
 }

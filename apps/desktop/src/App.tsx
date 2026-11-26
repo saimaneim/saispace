@@ -69,10 +69,15 @@ export function App() {
 
   const reportError = useCallback((err: unknown) => setErrorMessage(formatError(err)), []);
 
+  // Activity events can fire several refreshes at once: only the newest one
+  // may write state, or a slow older response would roll the UI back.
+  const refreshSeq = useRef(0);
   const refreshAll = useCallback(async () => {
+    const seq = ++refreshSeq.current;
     try {
       const [list, events] = await Promise.all([api.listProjects(), api.listActivity(60)]);
       const taskLists = await Promise.all(list.map((p) => api.listTasks(p.id)));
+      if (seq !== refreshSeq.current) return;
       setProjects(list);
       setActivities(events);
       setTasksByProject(Object.fromEntries(list.map((p, i) => [p.id, taskLists[i]])));
@@ -231,9 +236,12 @@ export function App() {
     await run(() => api.updateProject(activeProject.id, { status }));
   };
 
+  // Throws on failure so ContextTab keeps the text unsaved instead of
+  // reporting "Guardado" (run() would swallow the error).
   const handleSaveContext = async (context_notes: string) => {
     if (!activeProject) return;
-    await run(() => api.updateProject(activeProject.id, { context_notes }));
+    await api.updateProject(activeProject.id, { context_notes });
+    await refreshAll();
   };
 
   const handleUpdateTask = async (id: string, status?: TaskStatus, priority?: Task["priority"]) => {

@@ -71,6 +71,8 @@ export function SearchDialog({
     if (!open) return;
     const trimmed = query.trim();
     if (!/[\p{L}\p{N}]/u.test(trimmed)) {
+      // Invalidate any search still in flight so it cannot refill the list.
+      requestId.current++;
       setHits([]);
       setError(null);
       return;
