@@ -89,6 +89,9 @@ export function App() {
     }
   }, [reportError]);
 
+  const projectsRef = useRef(projects);
+  projectsRef.current = projects;
+
   const toggleProjectPin = useCallback(
     async (id: string, pinned: boolean) => {
       try {
@@ -101,14 +104,18 @@ export function App() {
     [reportError],
   );
 
-  const reorderProjects = useCallback(
-    async (ids: string[]) => {
+  // Drag and drop: moves a project to a new slot, pinning or unpinning it
+  // when it crosses groups. The list updates first so the drop feels instant.
+  const moveProject = useCallback(
+    async (id: string, pinned: boolean, ids: string[]) => {
+      const pinChanged = projectsRef.current.some((p) => p.id === id && p.pinned !== pinned);
       setProjects((prev) => {
-        const byId = new Map(prev.map((p) => [p.id, p]));
-        const ordered = ids.flatMap((id) => byId.get(id) ?? []);
-        return [...ordered, ...prev.filter((p) => !ids.includes(p.id))];
+        const byId = new Map(prev.map((p) => [p.id, p.id === id ? { ...p, pinned } : p]));
+        const ordered = ids.flatMap((pid) => byId.get(pid) ?? []);
+        return [...ordered, ...[...byId.values()].filter((p) => !ids.includes(p.id))];
       });
       try {
+        if (pinChanged) await api.setProjectPinned(id, pinned);
         await api.reorderProjects(ids);
       } catch (err) {
         reportError(err);
@@ -236,14 +243,6 @@ export function App() {
     await run(() => api.updateProject(activeProject.id, { status }));
   };
 
-  // Throws on failure so ContextTab keeps the text unsaved instead of
-  // reporting "Guardado" (run() would swallow the error).
-  const handleSaveContext = async (context_notes: string) => {
-    if (!activeProject) return;
-    await api.updateProject(activeProject.id, { context_notes });
-    await refreshAll();
-  };
-
   const handleUpdateTask = async (id: string, status?: TaskStatus, priority?: Task["priority"]) => {
     await run(() => api.updateTask(id, { status, priority }));
   };
@@ -281,7 +280,7 @@ export function App() {
         onOpenDirectoryPicker={() => setIsPickerOpen(true)}
         taskCounts={taskCounts}
         onTogglePin={toggleProjectPin}
-        onReorder={reorderProjects}
+        onMove={moveProject}
         isOpen={isSidebarOpen}
       />
 
@@ -412,11 +411,7 @@ export function App() {
                     <TechnologiesTab key={activeProject.id} project={activeProject} />
                   )}
                   {activeTab === "context" && (
-                    <ContextTab
-                      key={activeProject.id}
-                      project={activeProject}
-                      onSaveContext={handleSaveContext}
-                    />
+                    <ContextTab key={activeProject.id} project={activeProject} />
                   )}
                 </div>
               </>

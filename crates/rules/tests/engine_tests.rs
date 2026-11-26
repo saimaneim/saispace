@@ -164,12 +164,12 @@ fn store_roundtrip_and_tree_scan_respect_gitignore() {
     let scoped = engine.check_tree(repo.path(), &[nested]);
     assert_eq!(scoped.findings.len(), 0);
 
-    repo.write(".saispace/rules/broken.toml", "id = \"broken\"\n");
+    repo.write(".agents/checks/broken.toml", "id = \"broken\"\n");
     assert!(matches!(
         load_rules(repo.path()),
         Err(RulesError::Parse { .. })
     ));
-    fs::remove_file(repo.path().join(".saispace/rules/broken.toml")).expect("cleanup");
+    fs::remove_file(repo.path().join(".agents/checks/broken.toml")).expect("cleanup");
 
     remove_rule(repo.path(), "no-unwrap").expect("remove");
     assert!(matches!(

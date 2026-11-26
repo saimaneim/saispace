@@ -41,11 +41,10 @@ async fn setup() -> Db {
     db
 }
 
-async fn project(db: &Db, name: &str, path: &str, notes: Option<&str>) -> Uuid {
+async fn project(db: &Db, name: &str, path: &str) -> Uuid {
     db.create_project(CreateProjectInput {
         name: name.to_string(),
         path: path.to_string(),
-        context_notes: notes.map(str::to_string),
     })
     .await
     .expect("create project")
@@ -92,7 +91,7 @@ async fn sync_detects_cargo_and_npm_versions_from_real_manifests() {
         r#"{"dependencies":{"leak":"1.0.0"}}"#,
     );
 
-    let id = project(&db, "demo", &fixture.path().to_string_lossy(), None).await;
+    let id = project(&db, "demo", &fixture.path().to_string_lossy()).await;
     let stack = db.sync_project_stack(id).await.expect("sync");
 
     let version_of = |name: &str| {
@@ -120,7 +119,7 @@ async fn sync_detects_cargo_and_npm_versions_from_real_manifests() {
 #[tokio::test]
 async fn sync_rejects_missing_directory_and_unknown_project() {
     let db = setup().await;
-    let id = project(&db, "ghost", "/definitely/not/here", None).await;
+    let id = project(&db, "ghost", "/definitely/not/here").await;
     assert!(matches!(
         db.sync_project_stack(id).await,
         Err(CoreError::Validation(_))
@@ -214,7 +213,7 @@ async fn rules_for_project_follow_the_detected_stack() {
         "Cargo.lock",
         "[[package]]\nname = \"tauri\"\nversion = \"2.12.7\"\n",
     );
-    let id = project(&db, "app", &fixture.path().to_string_lossy(), None).await;
+    let id = project(&db, "app", &fixture.path().to_string_lossy()).await;
     db.sync_project_stack(id).await.expect("sync");
 
     db.upsert_tech_rule(rule("tauri", Some("2"), "v2 rule"))
@@ -276,22 +275,10 @@ async fn assert_rule_lifecycle(db: &Db, other: uuid::Uuid) {
 }
 
 #[tokio::test]
-async fn fts_tracks_project_notes_tasks_and_rules() {
+async fn fts_tracks_project_names_tasks_and_rules() {
     let db = setup().await;
-    let id = project(
-        &db,
-        "alpha",
-        "/p/alpha",
-        Some("Usamos migración incremental con SQLite"),
-    )
-    .await;
-    let other = project(
-        &db,
-        "beta",
-        "/p/beta",
-        Some("Notas sobre incremental en otro proyecto"),
-    )
-    .await;
+    let id = project(&db, "Migración incremental", "/p/alpha").await;
+    let other = project(&db, "Incremental beta", "/p/beta").await;
 
     let hits = db
         .search("migracion", None, None)
@@ -313,12 +300,12 @@ async fn fts_tracks_project_notes_tasks_and_rules() {
     db.update_project(
         id,
         UpdateProjectInput {
-            context_notes: Some("ahora hablamos de tauri capabilities".to_string()),
+            name: Some("Tauri capabilities".to_string()),
             ..Default::default()
         },
     )
     .await
-    .expect("update notes");
+    .expect("rename project");
     assert_eq!(count(&db, "migracion", Some(id)).await, 0);
     assert_eq!(
         db.search("capabilities", None, None)
@@ -370,7 +357,7 @@ async fn fts_tracks_project_notes_tasks_and_rules() {
 #[tokio::test]
 async fn fts_survives_hostile_queries_and_limits_results() {
     let db = setup().await;
-    let id = project(&db, "gamma", "/p/gamma", Some("alpha beta")).await;
+    let id = project(&db, "gamma alpha beta", "/p/gamma").await;
     for n in 0..5 {
         db.create_task(CreateTaskInput {
             project_id: id,

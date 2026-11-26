@@ -105,7 +105,7 @@ impl Db {
                 m.last_used_at
             FROM memories m
             LEFT JOIN projects p ON p.id = m.project_id
-            WHERE m.use_count > 0
+            WHERE m.use_count > 0 AND m.superseded_by IS NULL
             ORDER BY m.use_count DESC, m.last_used_at DESC, m.updated_at DESC
             LIMIT 5
             ",
@@ -125,6 +125,7 @@ impl Db {
                     0
                 ) AS never_used
             FROM memories
+            WHERE superseded_by IS NULL
             ",
         )
         .fetch_one(&self.pool)
@@ -141,6 +142,7 @@ impl Db {
                 COALESCE(SUM(CASE WHEN m.use_count > 0 THEN 1 ELSE 0 END), 0) AS used
             FROM memories m
             LEFT JOIN projects p ON p.id = m.project_id
+            WHERE m.superseded_by IS NULL
             -- One row per registered project (by id, so same-name projects stay
             -- apart), then one per orphan folder name, then the global bucket.
             GROUP BY m.project_id, CASE WHEN m.project_id IS NULL THEN m.project_name END
@@ -205,7 +207,6 @@ mod tests {
         db.create_project(CreateProjectInput {
             name: name.into(),
             path: format!("/tmp/{name}"),
-            context_notes: None,
         })
         .await
         .expect("project")

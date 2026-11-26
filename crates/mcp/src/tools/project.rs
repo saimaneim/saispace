@@ -5,7 +5,7 @@ use rmcp::model::{CallToolResult, ContentBlock};
 use rmcp::{tool, tool_router};
 use saispace_core::models::{
     ActionKind, CreateProjectInput, EntityKind, Project, RecordActivityInput, Task, TaskStatus,
-    TechRule, Technology, UpdateProjectInput,
+    TechRule, Technology,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -17,7 +17,6 @@ pub struct ListProjectsParams {}
 pub struct RegisterProjectParams {
     pub name: String,
     pub path: String,
-    pub context_notes: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -40,14 +39,6 @@ pub struct RegisterProjectResponse {
     pub project: Project,
     pub stack: Vec<Technology>,
     pub stack_error: Option<String>,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-pub struct UpdateProjectContextParams {
-    pub project_id: Option<String>,
-    pub path: Option<String>,
-    pub context_notes: String,
-    pub append: Option<bool>,
 }
 
 #[tool_router(router = project_tool_router, vis = "pub")]
@@ -91,7 +82,6 @@ impl SaiSpaceServer {
             let input = CreateProjectInput {
                 name: params.name,
                 path: canonical_path,
-                context_notes: params.context_notes,
             };
             match self.db.create_project(input).await {
                 Ok(project) => (project, true),
@@ -122,7 +112,7 @@ impl SaiSpaceServer {
 
     #[tool(
         name = "get_project_context",
-        description = "Get project details, context notes, open tasks, the detected stack and the tech rules matching that stack, by project_id or path"
+        description = "Get project details, open tasks, the detected stack and the tech rules matching that stack, by project_id or path"
     )]
     async fn get_project_context(
         &self,
@@ -177,68 +167,5 @@ impl SaiSpaceServer {
             tech_rules,
         };
         format_success(&response)
-    }
-
-    #[tool(
-        name = "update_project_context",
-        description = "Update or append context notes and key decisions for a project, by project_id or path"
-    )]
-    async fn update_project_context(
-        &self,
-        Parameters(params): Parameters<UpdateProjectContextParams>,
-    ) -> CallToolResult {
-        let project_id = match params.project_id.as_deref() {
-            Some(id_str) => match parse_uuid(id_str) {
-                Ok(id) => Some(id),
-                Err(err) => return format_error(&err),
-            },
-            None => None,
-        };
-        let project_opt = match self
-            .resolve_project(project_id, params.path.as_deref())
-            .await
-        {
-            Ok(p) => p,
-            Err(err) => return format_error(&err),
-        };
-        let Some(project) = project_opt else {
-            return CallToolResult::error(vec![ContentBlock::text("Project not found")]);
-        };
-        let new_context = match params.append {
-            Some(true) if !project.context_notes.trim().is_empty() => {
-                format!(
-                    "{}\n\n{}",
-                    project.context_notes.trim(),
-                    params.context_notes.trim()
-                )
-            }
-            _ => params.context_notes,
-        };
-        let updated = match self
-            .db
-            .update_project(
-                project.id,
-                UpdateProjectInput {
-                    context_notes: Some(new_context),
-                    ..Default::default()
-                },
-            )
-            .await
-        {
-            Ok(p) => p,
-            Err(err) => return format_error(&err),
-        };
-        let _ = self
-            .db
-            .record_activity(RecordActivityInput {
-                project_id: Some(project.id),
-                actor: self.actor(),
-                action: ActionKind::Update,
-                entity: EntityKind::ContextNotes,
-                entity_id: Some(project.id),
-                details: None,
-            })
-            .await;
-        format_success(&updated)
     }
 }

@@ -27,10 +27,10 @@ import {
 
 interface ContextTabProps {
   project: Project;
-  onSaveContext: (notes: string) => Promise<void>;
 }
 
-const NOTES_KEY = "__notes__";
+/** Markdown opens rendered; data files (json, toml, yaml) open in the editor. */
+const isMarkdown = (path: string) => /\.(md|mdc)$/i.test(path);
 
 interface SkillSubgroup {
   id: string;
@@ -124,11 +124,11 @@ Contexto y directrices principales de este proyecto.
 - Evitar suposiciones sin verificar
 `;
 
-export function ContextTab({ project, onSaveContext }: ContextTabProps) {
+export function ContextTab({ project }: ContextTabProps) {
   const [files, setFiles] = useState<ContextFile[]>([]);
-  const [selectedKey, setSelectedKey] = useState<string>(NOTES_KEY);
-  const [content, setContent] = useState<string>(project.context_notes);
-  const [savedContent, setSavedContent] = useState<string>(project.context_notes);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [content, setContent] = useState("");
+  const [savedContent, setSavedContent] = useState("");
   const [isLoadingFile, setIsLoadingFile] = useState(false);
   // Set when the selected file could not be read: editing is blocked so a
   // save cannot overwrite it with the previous file's text.
@@ -137,7 +137,7 @@ export function ContextTab({ project, onSaveContext }: ContextTabProps) {
   // otherwise show (and later save) another file's content under this key.
   const loadSeq = useRef(0);
   const [isSaving, setIsSaving] = useState(false);
-  const [isPreview, setIsPreview] = useState(false);
+  const [isPreview, setIsPreview] = useState(true);
   const [hasSaved, setHasSaved] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pendingSwitchKey, setPendingSwitchKey] = useState<string | null>(null);
@@ -182,6 +182,21 @@ export function ContextTab({ project, onSaveContext }: ContextTabProps) {
     [project.id],
   );
 
+  // Open the main guideline (AGENTS.md first) as soon as the list arrives.
+  const defaultKey = useMemo(() => {
+    const { guidelines, skills, rules, others } = categorizeContextFiles(files);
+    return (
+      guidelines[0]?.path ?? rules[0]?.path ?? skills[0]?.files[0]?.file.path ?? others[0]?.path
+    );
+  }, [files]);
+  useEffect(() => {
+    if (selectedKey === null && defaultKey) {
+      setSelectedKey(defaultKey);
+      setIsPreview(isMarkdown(defaultKey));
+      loadFileContent(defaultKey);
+    }
+  }, [selectedKey, defaultKey, loadFileContent]);
+
   const selectItem = useCallback(
     (key: string) => {
       if (key === selectedKey && !loadFailed) return;
@@ -192,30 +207,19 @@ export function ContextTab({ project, onSaveContext }: ContextTabProps) {
       }
 
       setSelectedKey(key);
-      if (key === NOTES_KEY) {
-        loadSeq.current++;
-        setIsLoadingFile(false);
-        setLoadFailed(false);
-        setContent(project.context_notes);
-        setSavedContent(project.context_notes);
-      } else {
-        loadFileContent(key);
-      }
+      setIsPreview(isMarkdown(key));
+      loadFileContent(key);
     },
-    [selectedKey, loadFailed, content, savedContent, project.context_notes, loadFileContent],
+    [selectedKey, loadFailed, content, savedContent, loadFileContent],
   );
 
   const handleSave = useCallback(async (): Promise<boolean> => {
     if (content === savedContent) return true;
-    if (isSaving || isLoadingFile || loadFailed) return false;
+    if (!selectedKey || isSaving || isLoadingFile || loadFailed) return false;
     setIsSaving(true);
     setErrorMessage(null);
     try {
-      if (selectedKey === NOTES_KEY) {
-        await onSaveContext(content);
-      } else {
-        await api.writeContextFile(project.id, selectedKey, content);
-      }
+      await api.writeContextFile(project.id, selectedKey, content);
       setSavedContent(content);
       setHasSaved(true);
       setTimeout(() => setHasSaved(false), 2000);
@@ -234,7 +238,6 @@ export function ContextTab({ project, onSaveContext }: ContextTabProps) {
     isLoadingFile,
     loadFailed,
     selectedKey,
-    onSaveContext,
     project.id,
     loadFiles,
   ]);
@@ -253,15 +256,8 @@ export function ContextTab({ project, onSaveContext }: ContextTabProps) {
   const switchTo = (target: string) => {
     setPendingSwitchKey(null);
     setSelectedKey(target);
-    if (target === NOTES_KEY) {
-      loadSeq.current++;
-      setIsLoadingFile(false);
-      setLoadFailed(false);
-      setContent(project.context_notes);
-      setSavedContent(project.context_notes);
-    } else {
-      loadFileContent(target);
-    }
+    setIsPreview(isMarkdown(target));
+    loadFileContent(target);
   };
 
   const handleDiscardAndSwitch = () => {
@@ -289,6 +285,7 @@ export function ContextTab({ project, onSaveContext }: ContextTabProps) {
       loadSeq.current++;
       setLoadFailed(false);
       setSelectedKey("AGENTS.md");
+      setIsPreview(true);
       setContent(MINIMAL_AGENTS_TEMPLATE);
       setSavedContent(MINIMAL_AGENTS_TEMPLATE);
     } catch (err) {
@@ -359,11 +356,10 @@ export function ContextTab({ project, onSaveContext }: ContextTabProps) {
     return openSkills.has(key);
   };
 
-  const currentLabel =
-    selectedKey === NOTES_KEY
-      ? "Notas del proyecto"
-      : (files.find((f) => f.path === selectedKey)?.name ?? selectedKey);
-  const currentSubtitle = selectedKey === NOTES_KEY ? "Guardadas en saispace" : selectedKey;
+  const currentLabel = selectedKey
+    ? (files.find((f) => f.path === selectedKey)?.name ?? selectedKey)
+    : "Contexto";
+  const currentSubtitle = selectedKey ?? "Sin ficheros de contexto";
 
   const rowClass = (selected: boolean) =>
     cn(
@@ -372,8 +368,6 @@ export function ContextTab({ project, onSaveContext }: ContextTabProps) {
         ? "bg-elevated text-paper font-medium"
         : "text-mist hover:text-paper hover:bg-obsidian",
     );
-
-  const skillsTotalFiles = categorized.skills.reduce((acc, s) => acc + s.files.length, 0);
 
   return (
     <div className="flex-1 flex h-full overflow-hidden bg-void select-none">
@@ -396,16 +390,6 @@ export function ContextTab({ project, onSaveContext }: ContextTabProps) {
           className="flex-1 overflow-y-auto px-3 pb-3 space-y-1"
           aria-label="Ficheros de contexto"
         >
-          <button
-            type="button"
-            onClick={() => selectItem(NOTES_KEY)}
-            title="Notas del proyecto (guardadas en saispace)"
-            className={rowClass(selectedKey === NOTES_KEY)}
-          >
-            <FileText className="w-3.5 h-3.5 text-fog flex-shrink-0" />
-            <span className="truncate flex-1 font-medium">Notas del proyecto</span>
-          </button>
-
           {categorized.guidelines.length > 0 && (
             <div className="pt-1">
               <button
@@ -463,7 +447,7 @@ export function ContextTab({ project, onSaveContext }: ContextTabProps) {
                 <Sparkles className="w-3.5 h-3.5 text-fog flex-shrink-0" />
                 <span className="truncate flex-1 text-left">Skills</span>
                 <span className="tabular-nums text-[11px] text-ash font-normal">
-                  {skillsTotalFiles}
+                  {categorized.skills.length}
                 </span>
               </button>
 
@@ -678,7 +662,11 @@ export function ContextTab({ project, onSaveContext }: ContextTabProps) {
         )}
 
         <div className="flex-1 px-5 pb-5 overflow-y-auto">
-          {isLoadingFile ? (
+          {selectedKey === null ? (
+            <div className="py-20 text-center text-xs text-fog">
+              Sin ficheros de contexto. Crea un AGENTS.md desde la barra lateral.
+            </div>
+          ) : isLoadingFile ? (
             <div className="py-20 text-center text-xs text-fog">Cargando…</div>
           ) : loadFailed ? (
             <div className="py-20 text-center text-xs text-fog">

@@ -1,7 +1,7 @@
 # saispace-rules
 
 Motor de reglas verificables de saispace. Cada regla es un fichero TOML en
-`.saispace/rules/<id>.toml`. El motor decide qué reglas aplican a cada fichero
+`.agents/checks/<id>.toml` (o el antiguo `.saispace/rules/`). El motor decide qué reglas aplican a cada fichero
 (por globs) y, si la regla tiene `check`, busca infracciones línea a línea.
 
 Lo usa el CLI: `sai check`, `sai rule add|list|rm` y `sai context <ficheros>`.

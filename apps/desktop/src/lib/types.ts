@@ -5,7 +5,6 @@ export interface Project {
   name: string;
   path: string;
   status: ProjectStatus;
-  context_notes: string;
   pinned: boolean;
   sort_order: number;
   created_at: string;
@@ -15,14 +14,12 @@ export interface Project {
 export interface CreateProjectInput {
   name: string;
   path: string;
-  context_notes?: string;
 }
 
 export interface UpdateProjectInput {
   name?: string;
   path?: string;
   status?: ProjectStatus;
-  context_notes?: string;
 }
 
 export type TaskStatus = "todo" | "in_progress" | "blocked" | "done" | "cancelled";
@@ -102,7 +99,7 @@ export interface Technology {
   project_id: string;
   name: string;
   version: string;
-  ecosystem: "npm" | "cargo" | "pypi" | "go";
+  ecosystem: "runtime" | "npm" | "cargo" | "pypi" | "go";
   source: string;
   docs_url: string;
   detected_at: string;
@@ -158,6 +155,19 @@ export interface Memory {
   updated_at: string;
   last_used_at: string | null;
   use_count: number;
+  /** Set when the memory was consolidated into another one. */
+  superseded_by: string | null;
+}
+
+export type MemoryRelation = "related" | "depends_on" | "supersedes";
+
+export interface MemoryLink {
+  id: string;
+  title: string;
+  kind: MemoryKind;
+  relation: MemoryRelation;
+  direction: "out" | "in";
+  archived: boolean;
 }
 
 export interface UpdateMemoryInput {

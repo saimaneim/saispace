@@ -1,14 +1,15 @@
 use crate::server::SaiSpaceServer;
 use crate::tools::{canonicalize_path, format_error, format_success, parse_uuid};
-use chrono::{DateTime, Utc};
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, ContentBlock};
 use rmcp::{tool, tool_router};
-use saispace_core::CoreError;
+use saispace_core::memory_render::{excerpt, rule_preview};
 use saispace_core::models::{
-    ActionKind, EntityKind, Memory, MemoryKind, MemoryScope, Project, RecordActivityInput,
-    SaveMemoryInput, SimilarMemory,
+    ActionKind, ConsolidateHint, ConsolidateInput, EntityKind, LinkDirection, Memory, MemoryKind,
+    MemoryLink, MemoryRelation, MemoryScope, Project, RecordActivityInput, SaveMemoryInput,
+    SimilarMemory,
 };
+use saispace_core::{CoreError, short_id};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -35,49 +36,188 @@ pub struct MemoryContextParams {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct MemoryIdParams {
+    /// Full id or the 8-digit short id shown in listings.
     pub id: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct LinkMemoriesParams {
+    pub from: String,
+    pub to: String,
+    /// `related` (default) or `depends_on` (`from` needs `to`).
+    pub relation: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct ConsolidateMemoriesParams {
+    /// Ids (full or short) of 2+ memories of the same project.
+    pub ids: Vec<String>,
+    /// Title of the merged memory.
+    pub title: String,
+    /// Merged content: keep every still-true fact, drop repetition.
+    pub content: String,
+    pub kind: Option<String>,
+    pub topic_key: Option<String>,
+}
+
+/// A link as the agent sees it: who, and how it relates from this memory.
+#[derive(Debug, Serialize)]
+struct LinkView {
+    id: String,
+    title: String,
+    rel: &'static str,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    archived: bool,
+}
+
+impl LinkView {
+    fn new(link: &MemoryLink) -> Self {
+        let rel = match (link.relation, link.direction) {
+            (MemoryRelation::Related, _) => "related",
+            (MemoryRelation::DependsOn, LinkDirection::Out) => "depends_on",
+            (MemoryRelation::DependsOn, LinkDirection::In) => "needed_by",
+            (MemoryRelation::Supersedes, LinkDirection::Out) => "absorbed",
+            (MemoryRelation::Supersedes, LinkDirection::In) => "absorbed_by",
+        };
+        Self {
+            id: short_id(link.id),
+            title: link.title.clone(),
+            rel,
+            archived: link.archived,
+        }
+    }
+}
+
+/// One memory without the bookkeeping fields (use counts, raw timestamps,
+/// empty values) that cost tokens and do not help the agent.
+#[derive(Debug, Serialize)]
+struct MemoryView {
+    id: String,
+    kind: MemoryKind,
+    title: String,
+    content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    topic_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    project: Option<String>,
+    updated: String,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pinned: bool,
+    /// Set when this memory was consolidated: read the survivor instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    archived_into: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    links: Vec<LinkView>,
+}
+
+impl MemoryView {
+    fn new(m: &Memory, links: &[MemoryLink]) -> Self {
+        Self {
+            id: short_id(m.id),
+            kind: m.kind,
+            title: m.title.clone(),
+            content: m.content.clone(),
+            topic_key: m.topic_key.clone(),
+            project: m.project_name.clone(),
+            updated: m.updated_at.format("%Y-%m-%d").to_string(),
+            pinned: m.pinned,
+            archived_into: m.superseded_by.map(short_id),
+            links: links.iter().map(LinkView::new).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct BriefMemory {
+    id: String,
+    title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    topic_key: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 struct ContextItem {
-    id: Uuid,
+    id: String,
     kind: MemoryKind,
     title: String,
-    updated_at: DateTime<Utc>,
+    updated: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
     preview: String,
 }
 
 impl ContextItem {
+    /// `max` 0 lists the title only: the agent opens what it needs by id.
     fn new(m: &Memory, max: usize) -> Self {
-        let flat = m.content.split_whitespace().collect::<Vec<_>>().join(" ");
-        let mut preview: String = flat.chars().take(max).collect();
-        if flat.chars().count() > max {
-            preview.push('…');
-        }
+        let preview = match (max, m.kind) {
+            (0, _) => String::new(),
+            (_, MemoryKind::Preference) => rule_preview(&m.content, max),
+            _ => excerpt(&m.content, max),
+        };
         Self {
-            id: m.id,
+            id: short_id(m.id),
             kind: m.kind,
             title: m.title.clone(),
-            updated_at: m.updated_at,
+            updated: m.updated_at.format("%Y-%m-%d").to_string(),
             preview,
         }
     }
 }
 
 #[derive(Debug, Serialize)]
+struct ProjectBrief {
+    id: Uuid,
+    name: String,
+    path: String,
+}
+
+#[derive(Debug, Serialize)]
+struct PairView {
+    a: String,
+    a_title: String,
+    b: String,
+    b_title: String,
+}
+
+impl PairView {
+    fn new(hint: &ConsolidateHint) -> Self {
+        Self {
+            a: short_id(hint.a),
+            a_title: hint.a_title.clone(),
+            b: short_id(hint.b),
+            b_title: hint.b_title.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
 struct ContextResponse {
-    project: Option<Project>,
+    project: Option<ProjectBrief>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     preferences: Vec<ContextItem>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     last_session: Option<ContextItem>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pinned: Vec<ContextItem>,
     memories: Vec<ContextItem>,
-    hint: &'static str,
+    /// Look-alike pairs: merge them with `consolidate_memories` if they are one.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    consolidate: Vec<PairView>,
 }
 
 #[derive(Debug, Serialize)]
 struct SaveResponse {
-    memory: Memory,
-    similar: Vec<SimilarMemory>,
+    id: String,
+    action: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    topic_key: Option<String>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pinned: bool,
+    /// Memories this one now links to (mentioned by id or `topic_key`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    linked: Vec<BriefMemory>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    similar: Vec<BriefMemory>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     hint: Option<String>,
 }
 
@@ -85,7 +225,7 @@ struct SaveResponse {
 /// carries one, the cheapest fix is to save again reusing it.
 fn save_hint(saved: &Memory, similar: &[SimilarMemory]) -> Option<String> {
     let generic = (!similar.is_empty()).then(|| {
-        "Similar memories exist: merge by saving again with the same topic_key, or delete_memory the stale one".to_string()
+        "Similar memories exist: if they are the same knowledge, merge them with consolidate_memories".to_string()
     });
     if saved
         .topic_key
@@ -101,7 +241,7 @@ fn save_hint(saved: &Memory, similar: &[SimilarMemory]) -> Option<String> {
         .find(|s| !s.topic_key.is_empty() && s.hit.project_id == saved.project_id)
         .map(|s| {
             format!(
-                "Similar memory has topic_key \"{}\": save again with that topic_key to update it instead of duplicating.",
+                "Similar memory has topic_key \"{}\": save with that topic_key to update it instead of duplicating",
                 s.topic_key
             )
         })
@@ -117,15 +257,15 @@ impl SaiSpaceServer {
         project_id: Option<&str>,
         path: Option<&str>,
         register: bool,
-    ) -> Result<Option<Project>, CallToolResult> {
+    ) -> Result<Option<Project>, Box<CallToolResult>> {
         if let Some(raw) = project_id {
-            let id = parse_uuid(raw).map_err(|e| format_error(&e))?;
+            let id = parse_uuid(raw).map_err(|e| Box::new(format_error(&e)))?;
             return match self.db.get_project(id).await {
                 Ok(Some(project)) => Ok(Some(project)),
-                Ok(None) => Err(CallToolResult::error(vec![ContentBlock::text(
+                Ok(None) => Err(Box::new(CallToolResult::error(vec![ContentBlock::text(
                     "Project not found",
-                )])),
-                Err(err) => Err(format_error(&err)),
+                )]))),
+                Err(err) => Err(Box::new(format_error(&err))),
             };
         }
         let dir = match path {
@@ -138,7 +278,7 @@ impl SaiSpaceServer {
         self.db
             .project_for_path(&dir, register)
             .await
-            .map_err(|e| format_error(&e))
+            .map_err(|e| Box::new(format_error(&e)))
     }
 }
 
@@ -146,7 +286,7 @@ impl SaiSpaceServer {
 impl SaiSpaceServer {
     #[tool(
         name = "save_memory",
-        description = "Save durable knowledge (decision, architecture, bugfix, pattern, config, discovery, preference, session_summary, note). Reusing topic_key in the same scope updates rather than duplicates. Scope: project_id, path, or the working directory; global=true for cross-project knowledge"
+        description = "Save durable knowledge (decision, architecture, bugfix, pattern, config, discovery, preference, session_summary, note). Save lessons right away: user correction -> kind preference; own mistake with non-obvious cause -> kind bugfix with the cause. Reusing topic_key in the same scope updates instead of duplicating. Scope: project_id, path, or the working directory; global=true for cross-project knowledge"
     )]
     async fn save_memory(
         &self,
@@ -171,7 +311,7 @@ impl SaiSpaceServer {
                         "no project for this directory: pass the project path, or global=true for cross-project knowledge".to_string(),
                     ));
                 }
-                Err(result) => return result,
+                Err(result) => return *result,
             }
         };
         let mut saved = match self
@@ -215,16 +355,46 @@ impl SaiSpaceServer {
             .await
             .unwrap_or_default();
         let hint = save_hint(&saved, &similar);
+        let linked = self
+            .db
+            .memory_links(saved.id)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|l| l.direction == LinkDirection::Out && l.relation == MemoryRelation::Related)
+            .map(|l| BriefMemory {
+                id: short_id(l.id),
+                title: l.title,
+                topic_key: None,
+            })
+            .collect();
+        // The agent just wrote the content: echoing it back would only
+        // spend its tokens again.
         format_success(&SaveResponse {
-            memory: saved,
-            similar,
+            id: short_id(saved.id),
+            action: if action == ActionKind::Create {
+                "created"
+            } else {
+                "updated"
+            },
+            topic_key: saved.topic_key.clone(),
+            pinned: saved.pinned,
+            linked,
+            similar: similar
+                .iter()
+                .map(|s| BriefMemory {
+                    id: short_id(s.hit.id),
+                    title: s.hit.title.clone(),
+                    topic_key: (!s.topic_key.is_empty()).then(|| s.topic_key.clone()),
+                })
+                .collect(),
             hint,
         })
     }
 
     #[tool(
         name = "memory_context",
-        description = "Read the session-start memory index for the current project (project_id, path, or working directory): preferences, pinned memories, the latest session summary and recent previews. Open items with get_memory"
+        description = "Read the session-start memory index for the current project (project_id, path, or working directory): preferences, pinned memories, the latest session summary, recent titles and duplicate pairs under consolidate. Open items with get_memory"
     )]
     async fn memory_context(
         &self,
@@ -235,7 +405,7 @@ impl SaiSpaceServer {
             .await
         {
             Ok(project) => project,
-            Err(result) => return result,
+            Err(result) => return *result,
         };
         let scope = MemoryScope::for_project(project.as_ref().map(|p| p.id));
         let context = match self
@@ -247,7 +417,11 @@ impl SaiSpaceServer {
             Err(err) => return format_error(&err),
         };
         format_success(&ContextResponse {
-            project,
+            project: project.map(|p| ProjectBrief {
+                id: p.id,
+                name: p.name,
+                path: p.path,
+            }),
             preferences: context
                 .preferences
                 .iter()
@@ -265,25 +439,120 @@ impl SaiSpaceServer {
             memories: context
                 .memories
                 .iter()
-                .map(|m| ContextItem::new(m, 160))
+                .map(|m| ContextItem::new(m, 0))
                 .collect(),
-            hint: "Open a memory with get_memory; save decisions, root causes and pending work with save_memory (same topic_key updates it)",
+            consolidate: context.consolidate.iter().map(PairView::new).collect(),
         })
     }
 
-    #[tool(name = "get_memory", description = "Full content of one memory by id")]
+    #[tool(
+        name = "get_memory",
+        description = "Full content of one memory by id (full or 8-digit short id), with its links: follow them instead of searching again"
+    )]
     async fn get_memory(&self, Parameters(params): Parameters<MemoryIdParams>) -> CallToolResult {
-        let id = match parse_uuid(&params.id) {
+        let id = match self.db.resolve_memory_id(&params.id).await {
             Ok(id) => id,
             Err(err) => return format_error(&err),
         };
-        match self.db.get_memory(id).await {
-            Ok(memory) => {
-                self.touch_memories(&[memory.id]).await;
-                format_success(&memory)
+        let memory = match self.db.get_memory(id).await {
+            Ok(memory) => memory,
+            Err(err) => return format_error(&err),
+        };
+        let links = self.db.memory_links(memory.id).await.unwrap_or_default();
+        self.touch_memories(&[memory.id]).await;
+        format_success(&MemoryView::new(&memory, &links))
+    }
+
+    #[tool(
+        name = "link_memories",
+        description = "Connect two memories so whoever opens one sees the other: relation related (default) or depends_on (from needs to). Saving already links memories whose id or topic_key the content mentions"
+    )]
+    async fn link_memories(
+        &self,
+        Parameters(params): Parameters<LinkMemoriesParams>,
+    ) -> CallToolResult {
+        let relation = match params.relation.as_deref().map(MemoryRelation::parse) {
+            None => MemoryRelation::Related,
+            Some(Some(r)) if r != MemoryRelation::Supersedes => r,
+            Some(_) => {
+                return format_error(&CoreError::Validation(
+                    "relation must be related or depends_on (consolidate_memories records supersedes)"
+                        .to_string(),
+                ));
             }
+        };
+        let (from, to) = match (
+            self.db.resolve_memory_id(&params.from).await,
+            self.db.resolve_memory_id(&params.to).await,
+        ) {
+            (Ok(from), Ok(to)) => (from, to),
+            (Err(err), _) | (_, Err(err)) => return format_error(&err),
+        };
+        match self.db.link_memories(from, to, relation).await {
+            Ok(added) => format_success(&serde_json::json!({
+                "from": short_id(from),
+                "to": short_id(to),
+                "relation": relation.as_str(),
+                "added": added,
+            })),
             Err(err) => format_error(&err),
         }
+    }
+
+    #[tool(
+        name = "consolidate_memories",
+        description = "Merge 2+ memories of one project (or all global) that hold the same knowledge into one: the survivor gets your merged title/content and their links; the rest are archived (kept, readable by id, out of the index and search). Use it when memory_context lists pairs under consolidate"
+    )]
+    async fn consolidate_memories(
+        &self,
+        Parameters(params): Parameters<ConsolidateMemoriesParams>,
+    ) -> CallToolResult {
+        let kind = match params.kind.as_deref() {
+            None => None,
+            Some(raw) => match MemoryKind::parse(raw) {
+                Some(kind) => Some(kind),
+                None => {
+                    return format_error(&CoreError::Validation(format!(
+                        "unknown memory kind '{raw}'"
+                    )));
+                }
+            },
+        };
+        let mut ids = Vec::with_capacity(params.ids.len());
+        for raw in &params.ids {
+            match self.db.resolve_memory_id(raw).await {
+                Ok(id) => ids.push(id),
+                Err(err) => return format_error(&err),
+            }
+        }
+        let merged = match self
+            .db
+            .consolidate_memories(ConsolidateInput {
+                ids: ids.clone(),
+                title: params.title,
+                content: params.content,
+                kind,
+                topic_key: params.topic_key,
+            })
+            .await
+        {
+            Ok(memory) => memory,
+            Err(err) => return format_error(&err),
+        };
+        self.record(RecordActivityInput {
+            project_id: merged.project_id,
+            actor: self.actor(),
+            action: ActionKind::Update,
+            entity: EntityKind::Memory,
+            entity_id: Some(merged.id),
+            details: Some(serde_json::json!({ "title": merged.title, "consolidated": ids.len() })),
+        })
+        .await;
+        format_success(&serde_json::json!({
+            "id": short_id(merged.id),
+            "topic_key": merged.topic_key,
+            "archived": ids.iter().filter(|id| **id != merged.id).map(|id| short_id(*id)).collect::<Vec<_>>(),
+        }))
     }
 
     #[tool(
@@ -294,7 +563,7 @@ impl SaiSpaceServer {
         &self,
         Parameters(params): Parameters<MemoryIdParams>,
     ) -> CallToolResult {
-        let id = match parse_uuid(&params.id) {
+        let id = match self.db.resolve_memory_id(&params.id).await {
             Ok(id) => id,
             Err(err) => return format_error(&err),
         };
@@ -314,6 +583,6 @@ impl SaiSpaceServer {
             details: Some(serde_json::json!({ "title": memory.title })),
         })
         .await;
-        format_success(&serde_json::json!({ "deleted": id }))
+        format_success(&serde_json::json!({ "deleted": short_id(id) }))
     }
 }

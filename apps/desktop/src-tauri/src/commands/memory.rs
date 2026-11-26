@@ -35,6 +35,17 @@ pub async fn get_memory(id: Uuid, db: State<'_, Db>) -> CommandResult<Memory> {
 
 /// # Errors
 ///
+/// Returns an error if the links cannot be loaded.
+#[tauri::command]
+pub async fn memory_links(
+    id: Uuid,
+    db: State<'_, Db>,
+) -> CommandResult<Vec<saispace_core::models::MemoryLink>> {
+    Ok(db.memory_links(id).await?)
+}
+
+/// # Errors
+///
 /// Returns an error if the memory does not exist or cannot be deleted.
 #[tauri::command]
 pub async fn delete_memory(id: Uuid, db: State<'_, Db>) -> CommandResult<()> {

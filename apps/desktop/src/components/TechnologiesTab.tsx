@@ -12,6 +12,7 @@ interface TechnologiesTabProps {
 }
 
 const ECOSYSTEM_LABELS: Record<Technology["ecosystem"], string> = {
+  runtime: "Entorno de ejecución",
   cargo: "Rust",
   npm: "JavaScript y TypeScript",
   pypi: "Python",
@@ -24,14 +25,45 @@ const SCOPE_FAMILY: Record<string, string> = {
   "@biomejs": "biome",
   "@tauri-apps": "tauri",
   "@radix-ui": "radix-ui",
+  "@babel": "babel",
+  "@hugeicons": "hugeicons",
+  "@hono": "hono",
+  "@tanstack": "tanstack",
+  "@whiskeysockets": "baileys",
+  "@fontsource": "fonts",
+  "@fontsource-variable": "fonts",
+};
+
+/** Packages that belong to a family their name does not reveal. */
+const FAMILY_OF: Record<string, string> = {
+  "tailwind-merge": "tailwindcss",
+  "tw-animate-css": "tailwindcss",
+  "tailwindcss-animate": "tailwindcss",
+  "prettier-plugin-tailwindcss": "tailwindcss",
+  "babel-plugin-react-compiler": "babel",
+  "drizzle-orm": "drizzle",
+  "drizzle-kit": "drizzle",
+  "@types/node": "node",
+  "@types/bun": "bun",
+  "radix-ui": "radix-ui",
+  "eslint-config-next": "eslint",
+  pg: "postgres",
 };
 
 const FAMILY_LABELS: Record<string, string> = {
   "radix-ui": "Radix UI",
+  tailwindcss: "Tailwind CSS",
+  drizzle: "Drizzle",
+  node: "Node.js",
+  babel: "Babel",
+  hugeicons: "Hugeicons",
+  tanstack: "TanStack",
+  postgres: "PostgreSQL",
   "@types": "Tipos",
-  "@fontsource-variable": "Fuentes",
-  "@fontsource": "Fuentes",
+  fonts: "Fuentes",
 };
+
+const ECOSYSTEM_ORDER: Technology["ecosystem"][] = ["runtime", "npm", "cargo", "pypi", "go"];
 
 interface Family {
   key: string;
@@ -44,9 +76,11 @@ interface Family {
 function groupFamilies(list: Technology[]): Family[] {
   const names = new Set(list.map((t) => t.name));
   const familyOf = (name: string): string => {
+    if (name in FAMILY_OF) return FAMILY_OF[name];
     if (name.startsWith("@types/")) {
-      const base = name.slice("@types/".length);
-      return names.has(base) ? familyOf(base) : "@types";
+      // @types/babel__traverse types @babel/traverse.
+      const base = name.slice("@types/".length).replace(/^(.+)__(.+)$/, "@$1/$2");
+      return names.has(base) || base.startsWith("@") ? familyOf(base) : "@types";
     }
     const scope = name.match(/^(@[^/]+)\//)?.[1];
     if (scope) return SCOPE_FAMILY[scope] ?? scope;
@@ -69,6 +103,7 @@ function groupFamilies(list: Technology[]): Family[] {
       return {
         key,
         label: FAMILY_LABELS[key] ?? key,
+        // Members map to their brand logo (tailwind-merge shows Tailwind).
         icon: sorted[0].name,
         members: sorted,
       };
@@ -161,7 +196,9 @@ export function TechnologiesTab({ project }: TechnologiesTabProps) {
       if (q && !item.name.toLowerCase().includes(q)) continue;
       map.set(item.ecosystem, [...(map.get(item.ecosystem) ?? []), item]);
     }
-    return [...map.entries()];
+    return [...map.entries()].sort(
+      ([a], [b]) => ECOSYSTEM_ORDER.indexOf(a) - ECOSYSTEM_ORDER.indexOf(b),
+    );
   }, [items, query]);
 
   return (

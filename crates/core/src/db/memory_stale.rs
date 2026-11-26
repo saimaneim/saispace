@@ -60,6 +60,7 @@ impl Db {
                    OR (?1 = 2 AND project_id = ?2))
               AND kind NOT IN ('preference', 'session_summary')
               AND pinned = 0
+              AND superseded_by IS NULL
               AND MAX(updated_at, COALESCE(last_used_at, '')) < ?3
             ORDER BY MAX(updated_at, COALESCE(last_used_at, '')) ASC, id ASC
             "
@@ -93,6 +94,7 @@ impl Db {
             FROM memories
             WHERE kind = 'session_summary'
               AND pinned = 0
+              AND superseded_by IS NULL
               AND (?1 = 0
                    OR (project_id IS NULL AND project_name = '')
                    OR (?1 = 2 AND project_id = ?2))
@@ -250,7 +252,6 @@ mod tests {
             .create_project(CreateProjectInput {
                 name: "mio".into(),
                 path: "/tmp/mio".into(),
-                context_notes: None,
             })
             .await
             .expect("project");
@@ -258,7 +259,6 @@ mod tests {
             .create_project(CreateProjectInput {
                 name: "otro".into(),
                 path: "/tmp/otro".into(),
-                context_notes: None,
             })
             .await
             .expect("project");
@@ -307,7 +307,6 @@ mod tests {
             .create_project(CreateProjectInput {
                 name: "resumenes".into(),
                 path: "/tmp/resumenes".into(),
-                context_notes: None,
             })
             .await
             .expect("project");

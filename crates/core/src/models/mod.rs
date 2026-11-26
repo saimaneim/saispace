@@ -1,5 +1,6 @@
 pub mod activity;
 pub mod memory;
+pub mod memory_graph;
 pub mod project;
 pub mod search;
 pub mod secret;
@@ -11,6 +12,9 @@ pub use activity::{ActionKind, ActivityEvent, Actor, EntityKind, RecordActivityI
 pub use memory::{
     AgentMemorySaves, Memory, MemoryContext, MemoryKind, MemoryScope, MemoryUsageStats,
     MostUsedMemory, ProjectMemoryUsage, SaveMemoryInput, UpdateMemoryInput,
+};
+pub use memory_graph::{
+    ConsolidateHint, ConsolidateInput, LinkDirection, MemoryLink, MemoryRelation,
 };
 pub use project::{CreateProjectInput, Project, ProjectStatus, UpdateProjectInput};
 pub use search::{SearchHit, SearchKind, SimilarMemory};

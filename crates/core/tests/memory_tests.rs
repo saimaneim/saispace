@@ -30,7 +30,6 @@ async fn topic_key_upserts_within_a_project_and_search_follows() {
         .create_project(CreateProjectInput {
             name: "alpha".into(),
             path: "/p/alpha".into(),
-            context_notes: None,
         })
         .await
         .expect("project");
@@ -136,7 +135,6 @@ async fn validation_unknown_project_and_import_timestamps() {
         .create_project(CreateProjectInput {
             name: "rome_store".into(),
             path: "/p/rome".into(),
-            context_notes: None,
         })
         .await
         .expect("project");
@@ -191,7 +189,6 @@ async fn unregistered_project_memories_stay_out_of_other_projects() {
         .create_project(CreateProjectInput {
             name: "mine".into(),
             path: "/p/mine".into(),
-            context_notes: None,
         })
         .await
         .expect("project");
@@ -342,7 +339,6 @@ async fn topic_keys_normalize_on_save_and_update() {
         .create_project(CreateProjectInput {
             name: "Saispace".into(),
             path: "/p/saispace".into(),
-            context_notes: None,
         })
         .await
         .expect("project");
@@ -560,7 +556,6 @@ async fn update_memory_conflict_on_unique_topic_returns_validation_error() {
         .create_project(CreateProjectInput {
             name: "beta".into(),
             path: "/p/beta".into(),
-            context_notes: None,
         })
         .await
         .expect("project");
@@ -617,7 +612,6 @@ async fn update_memory_conflict_on_unique_topic_returns_validation_error() {
         .create_project(CreateProjectInput {
             name: "gamma".into(),
             path: "/p/gamma".into(),
-            context_notes: None,
         })
         .await
         .expect("other project");

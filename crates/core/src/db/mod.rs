@@ -10,6 +10,7 @@ pub mod import;
 pub mod memory;
 pub mod memory_dupes;
 pub mod memory_edit;
+pub mod memory_graph;
 pub mod memory_orphans;
 pub mod memory_pin;
 pub mod memory_stale;
@@ -97,7 +98,12 @@ impl Db {
     ///
     /// Returns an error if a migration fails.
     pub async fn migrate(&self) -> CoreResult<()> {
-        sqlx::migrate!("./migrations").run(&self.pool).await?;
+        // The app, `sai` and the MCP share one database but update separately:
+        // an older binary must keep working after a newer one migrated it.
+        // Migrations are additive, so unknown applied ones are safe to skip.
+        let mut migrator = sqlx::migrate!("./migrations");
+        migrator.set_ignore_missing(true);
+        migrator.run(&self.pool).await?;
         Ok(())
     }
 

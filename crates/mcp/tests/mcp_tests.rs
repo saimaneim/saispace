@@ -46,6 +46,11 @@ async fn connect(
     (client, server_task)
 }
 
+/// Arrays the server omits when empty (to save tokens) read as empty.
+fn list(value: &serde_json::Value, key: &str) -> Vec<serde_json::Value> {
+    value[key].as_array().cloned().unwrap_or_default()
+}
+
 fn text_json(result: &rmcp::model::CallToolResult) -> serde_json::Value {
     let text = result
         .content
@@ -66,7 +71,17 @@ async fn test_server_instructions_describe_memory_protocol() {
     assert_ne!(instructions, "");
     assert!(instructions.len() < 1000);
     assert!(instructions.contains("save_memory"));
-    assert!(instructions.contains("topic_key"));
+    for term in [
+        "topic_key",
+        "get_memory",
+        "search_memory",
+        "consolidate_memories",
+        "preference",
+        "bugfix",
+        "session_summary",
+    ] {
+        assert!(instructions.contains(term), "instructions miss {term}");
+    }
 
     client.cancel().await.expect("cancel client failed");
     let _ = server_task.await;
@@ -82,11 +97,15 @@ async fn assert_expected_tools(
         .map(|t| t.name.to_string())
         .collect();
 
+    assert!(
+        !tool_names
+            .iter()
+            .any(|name| name == "update_project_context")
+    );
     for expected in [
         "list_projects",
         "register_project",
         "get_project_context",
-        "update_project_context",
         "list_tasks",
         "create_task",
         "update_task",
@@ -97,6 +116,8 @@ async fn assert_expected_tools(
         "memory_context",
         "get_memory",
         "delete_memory",
+        "link_memories",
+        "consolidate_memories",
         "list_secrets",
         "request_secret_access",
     ] {
@@ -115,8 +136,7 @@ async fn test_tool_listing_and_calls() {
 
     let register_args = json!({
         "name": "Saispace Core",
-        "path": "/dev/saispace",
-        "context_notes": "# Initial context"
+        "path": "/dev/saispace"
     })
     .as_object()
     .expect("json object")
@@ -167,30 +187,8 @@ async fn test_tool_listing_and_calls() {
     assert_eq!(ctx_json["project"]["name"], "Saispace Core");
     assert_eq!(ctx_json["open_tasks"].as_array().expect("array").len(), 1);
 
-    let update_notes_args = json!({
-        "project_id": project_id,
-        "context_notes": "Added MCP server support",
-        "append": true
-    })
-    .as_object()
-    .expect("json object")
-    .clone();
-
-    let update_notes_result = client
-        .call_tool(
-            CallToolRequestParams::new("update_project_context").with_arguments(update_notes_args),
-        )
-        .await
-        .expect("call update_project_context failed");
-
-    assert_eq!(update_notes_result.is_error, Some(false));
-    let notes_json = text_json(&update_notes_result);
-    let updated_notes = notes_json["context_notes"].as_str().expect("notes str");
-    assert!(updated_notes.contains("# Initial context"));
-    assert!(updated_notes.contains("Added MCP server support"));
-
     let activities = db.list_activity(50).await.expect("list_activity failed");
-    assert!(activities.len() >= 4);
+    assert!(activities.len() >= 3);
     assert!(activities.iter().all(|a| matches!(
         &a.actor,
         saispace_core::models::Actor::Agent { name } if name == "test-agent"
@@ -418,7 +416,7 @@ async fn assert_duplicate_hint_and_context(
     assert_eq!(twin["similar"][0]["topic_key"], "arch-auth");
     let hint = twin["hint"].as_str().expect("hint");
     assert!(hint.contains("\"arch-auth\""), "{hint}");
-    let twin_id = twin["memory"]["id"].as_str().expect("twin id").to_string();
+    let twin_id = twin["id"].as_str().expect("twin id").to_string();
     call(client, "delete_memory", json!({ "id": twin_id })).await;
 
     let bad_kind = call(
@@ -438,10 +436,12 @@ async fn assert_duplicate_hint_and_context(
     let context = text_json(&context);
     assert_eq!(context["project"]["id"], project_id);
     assert_eq!(context["preferences"][0]["title"], "Preferencia");
-    assert_eq!(context["pinned"].as_array().expect("array").len(), 0);
-    let memories = context["memories"].as_array().expect("array");
+    assert_eq!(list(&context, "pinned"), Vec::<serde_json::Value>::new());
+    let memories = list(&context, "memories");
     assert_eq!(memories.len(), 1);
-    assert_eq!(memories[0]["preview"], "Tokens rotativos");
+    // Plain memories are listed by title only: the agent opens what it needs.
+    assert_eq!(memories[0]["title"], "Auth");
+    assert!(memories[0].get("preview").is_none());
 
     let pinned_save = call(
         client,
@@ -450,7 +450,7 @@ async fn assert_duplicate_hint_and_context(
     )
     .await;
     assert_eq!(pinned_save.is_error, Some(false));
-    assert_eq!(text_json(&pinned_save)["memory"]["pinned"], true);
+    assert_eq!(text_json(&pinned_save)["pinned"], true);
 
     let context_pinned = call(
         client,
@@ -459,7 +459,7 @@ async fn assert_duplicate_hint_and_context(
     )
     .await;
     let context_pinned = text_json(&context_pinned);
-    let pinned_items = context_pinned["pinned"].as_array().expect("array");
+    let pinned_items = list(&context_pinned, "pinned");
     assert_eq!(pinned_items.len(), 1);
     assert_eq!(pinned_items[0]["title"], "Fijada");
     assert_eq!(pinned_items[0]["preview"], "Detalle fijado");
@@ -489,7 +489,7 @@ async fn test_memory_tools_replace_engram_flow() {
     )
     .await;
     assert_eq!(first.is_error, Some(false));
-    let first_id = text_json(&first)["memory"]["id"].clone();
+    let first_id = text_json(&first)["id"].clone();
     assert!(first_id.is_string());
 
     let second = call(
@@ -499,11 +499,15 @@ async fn test_memory_tools_replace_engram_flow() {
     )
     .await;
     let second = text_json(&second);
-    assert_eq!(second["memory"]["id"], first_id);
-    assert_eq!(
-        second["similar"],
-        json!([]),
+    assert_eq!(second["id"], first_id);
+    assert_eq!(second["action"], "updated");
+    assert!(
+        list(&second, "similar").is_empty(),
         "an upsert is not its own duplicate"
+    );
+    assert!(
+        second.get("content").is_none(),
+        "save does not echo the content back"
     );
 
     let global = call(
@@ -512,10 +516,9 @@ async fn test_memory_tools_replace_engram_flow() {
         json!({ "title": "Preferencia", "content": "Respuestas en español", "kind": "preference", "global": true }),
     )
     .await;
-    assert_eq!(
-        text_json(&global)["memory"]["project_id"],
-        serde_json::Value::Null
-    );
+    let global_id = text_json(&global)["id"].as_str().expect("id").to_string();
+    let global_memory = text_json(&call(&client, "get_memory", json!({ "id": global_id })).await);
+    assert!(global_memory["project"].is_null());
 
     assert_duplicate_hint_and_context(&client, &project_id, &first_id).await;
 
@@ -635,7 +638,7 @@ fn assert_project_summary_fields(item: &serde_json::Value, name: &str, path: &st
     assert_eq!(item["name"], name);
     assert_eq!(item["path"], path);
     assert_eq!(item["status"], "active");
-    assert!(item["context_notes"].is_string());
+    assert!(item.get("context_notes").is_none());
     assert!(item["created_at"].is_string());
     assert!(item["updated_at"].is_string());
 }
@@ -884,11 +887,9 @@ async fn test_memory_scope_all_and_orphan_isolation() {
 
     let context =
         text_json(&call(&client, "memory_context", json!({ "project_id": proj_a })).await);
-    let memories = context["memories"].as_array().expect("memories array");
+    let memories = list(&context, "memories");
     assert!(memories.iter().all(|m| m["title"] != "Orphaned Formula"));
-    let preferences = context["preferences"]
-        .as_array()
-        .expect("preferences array");
+    let preferences = list(&context, "preferences");
     assert!(preferences.iter().all(|p| p["title"] != "Orphaned Formula"));
 
     let orphan_search = text_json(
@@ -961,11 +962,8 @@ async fn test_memory_context_path_and_cwd_fallback() {
         .await,
     );
     assert_eq!(path_context["project"]["id"], proj_id);
-    assert_eq!(path_context["memories"].as_array().expect("array").len(), 1);
-    assert_eq!(
-        path_context["preferences"].as_array().expect("array").len(),
-        1
-    );
+    assert_eq!(list(&path_context, "memories").len(), 1);
+    assert_eq!(list(&path_context, "preferences").len(), 1);
 
     let unreg_context = text_json(
         &call(
@@ -977,25 +975,13 @@ async fn test_memory_context_path_and_cwd_fallback() {
     );
     assert!(unreg_context["project"].is_null());
     assert_eq!(
-        unreg_context["memories"].as_array().expect("array").len(),
-        0
+        list(&unreg_context, "memories"),
+        Vec::<serde_json::Value>::new()
     );
-    assert_eq!(
-        unreg_context["preferences"]
-            .as_array()
-            .expect("array")
-            .len(),
-        1
-    );
+    assert_eq!(list(&unreg_context, "preferences").len(), 1);
 
     let cwd_fallback_context = text_json(&call(&client, "memory_context", json!({})).await);
-    assert_eq!(
-        cwd_fallback_context["preferences"]
-            .as_array()
-            .expect("array")
-            .len(),
-        1
-    );
+    assert_eq!(list(&cwd_fallback_context, "preferences").len(), 1);
 
     let _ = std::fs::remove_dir_all(&temp_registered);
     let _ = std::fs::remove_dir_all(&temp_unregistered);
@@ -1046,9 +1032,16 @@ async fn test_save_memory_git_autoregistration_and_root_rejection() {
     .await;
     assert_eq!(saved.is_error, Some(false));
     let saved_json = text_json(&saved);
-    let auto_project_id = saved_json["memory"]["project_id"]
-        .as_str()
-        .expect("project id string")
+    let saved_id = db
+        .resolve_memory_id(saved_json["id"].as_str().expect("memory id"))
+        .await
+        .expect("resolve");
+    let auto_project_id = db
+        .get_memory(saved_id)
+        .await
+        .expect("saved memory")
+        .project_id
+        .expect("auto-registered project")
         .to_string();
 
     let projects = text_json(&call(&client, "list_projects", json!({})).await);
@@ -1091,16 +1084,16 @@ async fn test_save_memory_git_autoregistration_and_root_rejection() {
 
 async fn save_usage_memory(
     client: &rmcp::service::RunningService<rmcp::RoleClient, TestClientHandler>,
+    db: &Db,
     args: serde_json::Value,
 ) -> (uuid::Uuid, String) {
     let saved = text_json(&call(client, "save_memory", args).await);
-    assert_eq!(saved["memory"]["use_count"], 0);
-    assert!(saved["memory"]["last_used_at"].is_null());
-    let id_str = saved["memory"]["id"]
-        .as_str()
-        .expect("memory id")
-        .to_string();
-    let id = uuid::Uuid::parse_str(&id_str).expect("valid uuid");
+    let id_str = saved["id"].as_str().expect("memory id").to_string();
+    assert_eq!(id_str.len(), 8, "save returns the short id");
+    let id = db.resolve_memory_id(&id_str).await.expect("resolve");
+    let memory = db.get_memory(id).await.expect("memory");
+    assert_eq!(memory.use_count, 0);
+    assert!(memory.last_used_at.is_none());
     (id, id_str)
 }
 
@@ -1118,6 +1111,7 @@ async fn test_memory_usage_tracking_on_reads() {
 
     let (pref_id, _) = save_usage_memory(
         &client,
+        &db,
         json!({
             "title": "Estilo código",
             "content": "Evitar unwrap en producción",
@@ -1128,6 +1122,7 @@ async fn test_memory_usage_tracking_on_reads() {
     .await;
     let (pinned_id, _) = save_usage_memory(
         &client,
+        &db,
         json!({
             "project_id": project_id,
             "title": "Invariant clave",
@@ -1139,6 +1134,7 @@ async fn test_memory_usage_tracking_on_reads() {
     .await;
     let (decision_id, decision_id_str) = save_usage_memory(
         &client,
+        &db,
         json!({
             "project_id": project_id,
             "title": "Motor caché",
@@ -1155,7 +1151,7 @@ async fn test_memory_usage_tracking_on_reads() {
 
     let get1 = call(&client, "get_memory", json!({ "id": decision_id_str })).await;
     assert_eq!(get1.is_error, Some(false));
-    assert_eq!(text_json(&get1)["use_count"], 0);
+    assert_eq!(text_json(&get1)["title"], "Motor caché");
 
     let after_get1 = db.get_memory(decision_id).await.expect("after get1");
     assert_eq!(after_get1.use_count, 1);
@@ -1164,7 +1160,6 @@ async fn test_memory_usage_tracking_on_reads() {
 
     let get2 = call(&client, "get_memory", json!({ "id": decision_id_str })).await;
     assert_eq!(get2.is_error, Some(false));
-    assert_eq!(text_json(&get2)["use_count"], 1);
     assert_use_count(&db, decision_id, 2).await;
 
     let search = call(
@@ -1197,6 +1192,89 @@ async fn test_memory_usage_tracking_on_reads() {
     )
     .await;
     assert_eq!(missing.is_error, Some(true));
+
+    client.cancel().await.expect("cancel client failed");
+    let _ = server_task.await;
+}
+
+#[tokio::test]
+async fn test_links_and_consolidation_over_mcp() {
+    let server = setup_test_server().await;
+    let (client, server_task) = connect(server).await;
+    let project_id = register_test_project(&client, "Graph Proj", "/dev/graph-proj").await;
+    let save = |title: &'static str, content: String, topic: Option<&'static str>| {
+        let mut args = json!({ "project_id": project_id, "title": title, "content": content, "kind": "decision" });
+        if let Some(topic) = topic {
+            args["topic_key"] = json!(topic);
+        }
+        args
+    };
+
+    let base = text_json(
+        &call(
+            &client,
+            "save_memory",
+            save("Cola de eventos", "SQLite WAL".into(), Some("event-queue")),
+        )
+        .await,
+    );
+    let base_id = base["id"].as_str().expect("id").to_string();
+    // Mentioning the topic links the new memory to it.
+    let fix = text_json(
+        &call(
+            &client,
+            "save_memory",
+            save(
+                "Bloqueos de escritura",
+                "Ver event-queue: busy_timeout".into(),
+                None,
+            ),
+        )
+        .await,
+    );
+    assert_eq!(fix["linked"][0]["id"], base_id);
+    let fix_id = fix["id"].as_str().expect("id").to_string();
+
+    let linked = call(
+        &client,
+        "link_memories",
+        json!({ "from": fix_id, "to": base_id, "relation": "depends_on" }),
+    )
+    .await;
+    assert_eq!(text_json(&linked)["added"], true);
+    let opened = text_json(&call(&client, "get_memory", json!({ "id": base_id })).await);
+    let rels: Vec<String> = list(&opened, "links")
+        .iter()
+        .filter_map(|l| l["rel"].as_str().map(str::to_string))
+        .collect();
+    assert!(rels.iter().any(|r| r == "needed_by"), "{opened}");
+
+    let merged = text_json(
+        &call(
+            &client,
+            "consolidate_memories",
+            json!({ "ids": [fix_id, base_id], "title": "Cola de eventos con WAL", "content": "SQLite WAL + busy_timeout" }),
+        )
+        .await,
+    );
+    assert_eq!(
+        merged["id"], base_id,
+        "the memory with a topic_key survives"
+    );
+    assert_eq!(merged["archived"][0], fix_id);
+
+    let archived = text_json(&call(&client, "get_memory", json!({ "id": fix_id })).await);
+    assert_eq!(archived["archived_into"], base_id);
+    let hits = text_json(
+        &call(
+            &client,
+            "search_memory",
+            json!({ "query": "busy_timeout", "project_id": project_id }),
+        )
+        .await,
+    );
+    assert_eq!(hits.as_array().expect("hits").len(), 1);
+    assert_eq!(hits[0]["id"], base_id);
 
     client.cancel().await.expect("cancel client failed");
     let _ = server_task.await;

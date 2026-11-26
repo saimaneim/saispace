@@ -5,12 +5,13 @@ pub mod error_log;
 use commands::{
     activity::{list_activity, list_activity_by_project},
     context::{list_context_files, read_context_file, write_context_file},
+    favicon::project_favicon,
     fs::list_directory,
     global::{global_ai_inventory, tech_icon},
     memory::{
         agent_memory_context, delete_memory, get_memory, link_orphan_memories, list_memories,
-        list_orphan_memory_groups, memory_duplicates, memory_stale, memory_usage_stats,
-        set_memory_pinned, update_memory,
+        list_orphan_memory_groups, memory_duplicates, memory_links, memory_stale,
+        memory_usage_stats, set_memory_pinned, update_memory,
     },
     project::{
         create_project, delete_project, get_project, list_projects, reorder_projects,
@@ -84,6 +85,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             list_projects,
+            project_favicon,
             get_project,
             create_project,
             update_project,
@@ -110,6 +112,7 @@ pub fn run() {
             open_url,
             list_memories,
             get_memory,
+            memory_links,
             delete_memory,
             update_memory,
             set_memory_pinned,

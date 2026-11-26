@@ -8,12 +8,24 @@ En la primera ejecución de cada sesión principal guarda la salida de `sai memo
 - Ignora las sesiones hijas (subagentes).
 - `sai` corre con stdin cerrado y se mata a los 3 s. El índice se limita a 8 KB. Ante cualquier fallo no inyecta nada y lo reintenta en la siguiente ejecución.
 
+## Aprendizaje automático de errores
+
+Con cada mensaje del usuario (evento `session.inbox.enqueued`), el plugin envía el texto como JSON a `sai memory nudge` por stdin:
+
+```json
+{"hook_event_name":"UserPromptSubmit","prompt":"<texto del usuario>"}
+```
+
+Si el CLI detecta que el prompt es una corrección, devuelve un recordatorio corto (≤ 300 caracteres). El plugin lo guarda como entrada de instrucciones `saispace-nudge` y la quita al terminar ese turno. Si no hay corrección, no se inyecta nada. Errores y timeouts (1.5 s) se ignoran silenciosamente.
+
 ## Instalación
 
-Necesitas `sai` en el `PATH`. Desde la raíz del repositorio:
+Necesitas `sai` en el `PATH`:
 
 ```sh
-ln -sf "$PWD/integrations/opencode/saispace.ts" ~/.config/opencode/plugins/saispace.ts
+sai setup opencode
 ```
+
+Copia el plugin incluido en `sai` a `~/.config/opencode/plugins/saispace.ts` y su módulo a `~/.config/opencode/saispace-plugin/`. Repite el comando tras actualizar `sai`; `--uninstall` lo quita. Si había el enlace antiguo al repo, lo sustituye.
 
 Reinicia OpenCode (o su servicio en segundo plano) para que cargue el plugin.

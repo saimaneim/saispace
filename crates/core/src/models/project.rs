@@ -18,7 +18,6 @@ pub struct Project {
     pub name: String,
     pub path: String,
     pub status: ProjectStatus,
-    pub context_notes: String,
     pub pinned: bool,
     pub sort_order: i64,
     pub created_at: DateTime<Utc>,
@@ -29,8 +28,6 @@ pub struct Project {
 pub struct CreateProjectInput {
     pub name: String,
     pub path: String,
-    #[serde(default)]
-    pub context_notes: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,6 +38,4 @@ pub struct UpdateProjectInput {
     pub path: Option<String>,
     #[serde(default)]
     pub status: Option<ProjectStatus>,
-    #[serde(default)]
-    pub context_notes: Option<String>,
 }

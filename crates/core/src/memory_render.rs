@@ -1,4 +1,5 @@
-use crate::models::{Memory, MemoryContext, MemoryKind, Project};
+use crate::db::memory_graph::short_id;
+use crate::models::{Memory, MemoryContext, MemoryKind, MemoryLink, MemoryRelation, Project};
 use std::fmt::Write as _;
 
 pub const CONTEXT_BUDGET: usize = 6_000;
@@ -27,6 +28,25 @@ pub fn excerpt(text: &str, max: usize) -> String {
     format!("{}…", cut.trim_end())
 }
 
+/// The rule itself, without the "What:" label nor the "Why:" rationale:
+/// the agent needs the rule every session, the reason only when it opens it.
+#[must_use]
+pub fn rule_preview(text: &str, max: usize) -> String {
+    let flat = excerpt(text, usize::MAX);
+    let body = flat
+        .strip_prefix("What:")
+        .or_else(|| flat.strip_prefix("**What**:"))
+        .unwrap_or(&flat)
+        .trim_start();
+    let rule = ["· Why:", "· **Why**:", " Why:"]
+        .iter()
+        .filter_map(|marker| body.find(marker))
+        .min()
+        .map_or(body, |cut| &body[..cut])
+        .trim_end_matches([' ', '·']);
+    excerpt(rule, max)
+}
+
 #[must_use]
 pub fn kind_label(kind: MemoryKind) -> &'static str {
     match kind {
@@ -52,18 +72,18 @@ pub fn render_context(project: Option<&Project>, context: &MemoryContext) -> Str
         None => out.push_str("# Memoria global (este directorio aún no tiene memorias propias)\n"),
     }
     out.push_str(
-        "Abre una con `sai memory get <id>`; busca con `sai memory search \"<texto>\"`.\n\
-         Guarda decisiones, causas raíz y pendientes con `sai memory save --topic <tema>` (mismo tema = actualiza).\n",
+        "`sai memory get <id>` abre una (con sus enlaces); `sai memory search \"<texto>\"` busca.\n\
+         Guarda decisiones, causas raíz y pendientes con `sai memory save --topic <tema>` (mismo tema = actualiza). Si el usuario te corrige, guárdalo con `--kind preference`.\n",
     );
     if !context.preferences.is_empty() {
         out.push_str("\n## Preferencias del usuario\n");
         for m in &context.preferences {
             let _ = writeln!(
                 out,
-                "- {}: {} ({})",
+                "- {}: {} [{}]",
                 m.title,
-                excerpt(&m.content, 240),
-                m.id
+                rule_preview(&m.content, 200),
+                short_id(m.id)
             );
         }
     }
@@ -75,7 +95,7 @@ pub fn render_context(project: Option<&Project>, context: &MemoryContext) -> Str
                 "- [{}] {} · {}\n  {}",
                 kind_label(m.kind),
                 m.title,
-                m.id,
+                short_id(m.id),
                 excerpt(&m.content, 240)
             );
         }
@@ -85,7 +105,7 @@ pub fn render_context(project: Option<&Project>, context: &MemoryContext) -> Str
             out,
             "\n## Última sesión · {} · {}\n{}",
             m.updated_at.format("%Y-%m-%d"),
-            m.id,
+            short_id(m.id),
             excerpt(&m.content, 700)
         );
     }
@@ -97,13 +117,28 @@ pub fn render_context(project: Option<&Project>, context: &MemoryContext) -> Str
                 kind_label(m.kind),
                 excerpt(&m.title, 90),
                 m.updated_at.format("%Y-%m-%d"),
-                m.id
+                short_id(m.id)
             );
             if out.len() + line.len() > CONTEXT_BUDGET {
                 out.push_str("- … más con `sai memory search`\n");
                 break;
             }
             out.push_str(&line);
+        }
+    }
+    if !context.consolidate.is_empty() {
+        out.push_str(
+            "\n## Para consolidar\nParecen la misma memoria: si lo son, únelas antes de terminar con `consolidate_memories` o `sai memory merge` (no se borra nada).\n",
+        );
+        for hint in &context.consolidate {
+            let _ = writeln!(
+                out,
+                "- {} {} ≈ {} {}",
+                short_id(hint.a),
+                excerpt(&hint.a_title, 60),
+                short_id(hint.b),
+                excerpt(&hint.b_title, 60)
+            );
         }
     }
     if context.preferences.is_empty()
@@ -117,19 +152,49 @@ pub fn render_context(project: Option<&Project>, context: &MemoryContext) -> Str
 }
 
 #[must_use]
-pub fn render_memory(m: &Memory) -> String {
-    format!(
-        "# {}\n{} · {} · {} · actualizada {}{}\n\n{}",
+pub fn relation_label(link: &MemoryLink) -> &'static str {
+    use crate::models::LinkDirection::{In, Out};
+    match (link.relation, link.direction) {
+        (MemoryRelation::Related, _) => "relacionada",
+        (MemoryRelation::DependsOn, Out) => "depende de",
+        (MemoryRelation::DependsOn, In) => "la necesita",
+        (MemoryRelation::Supersedes, Out) => "absorbió",
+        (MemoryRelation::Supersedes, In) => "absorbida por",
+    }
+}
+
+#[must_use]
+pub fn render_memory(m: &Memory, links: &[MemoryLink]) -> String {
+    let mut out = format!(
+        "# {}\n{} · {} · {} · actualizada {}{}{}\n\n{}",
         m.title,
         kind_label(m.kind),
         m.project_name.as_deref().unwrap_or("global"),
-        m.id,
+        short_id(m.id),
         m.updated_at.format("%Y-%m-%d %H:%M"),
         m.topic_key
             .as_deref()
             .map_or_else(String::new, |t| format!(" · tema {t}")),
+        m.superseded_by.map_or_else(String::new, |by| format!(
+            " · archivada: consolidada en {}",
+            short_id(by)
+        )),
         m.content.trim()
-    )
+    );
+    if !links.is_empty() {
+        out.push_str("\n\n## Enlaces\n");
+        for link in links {
+            let _ = writeln!(
+                out,
+                "- {} {} [{}]{}",
+                relation_label(link),
+                link.title,
+                short_id(link.id),
+                if link.archived { " (archivada)" } else { "" }
+            );
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -177,7 +242,6 @@ mod tests {
             name: "mi-proyecto".to_string(),
             path: "/home/user/mi-proyecto".to_string(),
             status: ProjectStatus::Active,
-            context_notes: String::new(),
             pinned: false,
             sort_order: 0,
             created_at: Utc::now(),
@@ -216,6 +280,7 @@ mod tests {
                 updated_at: now,
                 last_used_at: None,
                 use_count: 0,
+                superseded_by: None,
             });
         }
         let context = MemoryContext {
@@ -224,5 +289,81 @@ mod tests {
         };
         let rendered = render_context(None, &context);
         assert!(rendered.contains("- … más con `sai memory search`"));
+    }
+
+    fn memory(title: &str, content: &str) -> Memory {
+        let now = Utc::now();
+        Memory {
+            id: Uuid::now_v7(),
+            project_id: None,
+            project_name: None,
+            kind: MemoryKind::Preference,
+            title: title.to_string(),
+            content: content.to_string(),
+            topic_key: None,
+            pinned: false,
+            created_at: now,
+            updated_at: now,
+            last_used_at: None,
+            use_count: 0,
+            superseded_by: None,
+        }
+    }
+
+    #[test]
+    fn rule_preview_keeps_only_the_rule() {
+        assert_eq!(
+            rule_preview("What: commits en inglés\nWhy: lo pide el equipo", 200),
+            "commits en inglés"
+        );
+        assert_eq!(rule_preview("Sin etiquetas", 200), "Sin etiquetas");
+    }
+
+    #[test]
+    fn consolidate_hints_render_with_short_ids_and_an_instruction() {
+        let a = memory("Auth con cookies", "x");
+        let b = memory("Auth cookies v2", "y");
+        let context = MemoryContext {
+            memories: vec![a.clone(), b.clone()],
+            consolidate: vec![crate::models::ConsolidateHint {
+                a: a.id,
+                a_title: a.title.clone(),
+                b: b.id,
+                b_title: b.title.clone(),
+            }],
+            ..MemoryContext::default()
+        };
+        let rendered = render_context(None, &context);
+        assert!(rendered.contains("## Para consolidar"));
+        assert!(rendered.contains("consolidate_memories"));
+        assert!(rendered.contains(&format!(
+            "- {} Auth con cookies ≈ {} Auth cookies v2",
+            short_id(a.id),
+            short_id(b.id)
+        )));
+    }
+
+    #[test]
+    fn render_memory_lists_links_and_archive_state() {
+        let survivor = memory("Superviviente", "x");
+        let mut archived = memory("Vieja", "y");
+        archived.superseded_by = Some(survivor.id);
+        let links = vec![MemoryLink {
+            id: survivor.id,
+            title: survivor.title.clone(),
+            kind: MemoryKind::Preference,
+            relation: MemoryRelation::Supersedes,
+            direction: crate::models::LinkDirection::In,
+            archived: false,
+        }];
+        let rendered = render_memory(&archived, &links);
+        assert!(rendered.contains(&format!(
+            "archivada: consolidada en {}",
+            short_id(survivor.id)
+        )));
+        assert!(rendered.contains(&format!(
+            "- absorbida por Superviviente [{}]",
+            short_id(survivor.id)
+        )));
     }
 }

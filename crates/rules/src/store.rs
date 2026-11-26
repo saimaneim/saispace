@@ -4,13 +4,21 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub const RULES_DIR: &str = ".saispace/rules";
+/// Checks live next to the other agent assets, in their own folder:
+/// `.agents/rules` belongs to the Markdown rules other harnesses read
+/// (Antigravity), so `sai` never writes there.
+pub const RULES_DIR: &str = ".agents/checks";
+/// Where checks lived before `.agents/checks`; still read when present.
+pub const LEGACY_RULES_DIR: &str = ".saispace/rules";
 
 #[must_use]
 pub fn find_root(start: &Path) -> PathBuf {
     let mut current = Some(start);
     while let Some(dir) = current {
-        if dir.join(".saispace").is_dir() || dir.join(".git").exists() {
+        if dir.join(RULES_DIR).is_dir()
+            || dir.join(".saispace").is_dir()
+            || dir.join(".git").exists()
+        {
             return dir.to_path_buf();
         }
         current = dir.parent();
@@ -18,9 +26,16 @@ pub fn find_root(start: &Path) -> PathBuf {
     start.to_path_buf()
 }
 
+/// `.agents/checks`, or the legacy `.saispace/rules` when only that exists.
 #[must_use]
 pub fn rules_dir(root: &Path) -> PathBuf {
-    root.join(RULES_DIR)
+    let current = root.join(RULES_DIR);
+    let legacy = root.join(LEGACY_RULES_DIR);
+    if !current.is_dir() && legacy.is_dir() {
+        legacy
+    } else {
+        current
+    }
 }
 
 fn io_err(path: &Path) -> impl FnOnce(std::io::Error) -> RulesError + '_ {

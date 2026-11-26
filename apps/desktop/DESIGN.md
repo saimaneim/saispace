@@ -54,13 +54,15 @@ La interfaz se estructura sobre capas de luminosidad decreciente en profundidad,
 
 ## Jerarquía de la pestaña Contexto
 
-1. **Notas del proyecto:** Elemento anclado en la parte superior con acceso directo.
-2. **Directrices:** Ficheros en raíz (`AGENTS.md`, `CLAUDE.md`, `DESIGN.md`), desplegado por defecto.
-3. **Skills:** Carpeta de skills (`.agents/skills/*`, `.claude/skills/*`), colapsada por defecto. Cada skill constituye un subgrupo propio con su nombre y sus ficheros internos (`SKILL.md`, referencias).
-4. **Reglas:** Reglas operativas (`.agents/rules/*`, `.cursor/rules/*`), colapsada por defecto.
-5. **Otros:** Archivos de contexto restantes, colapsada por defecto.
-6. **Filtro reactivo:** Campo de búsqueda superior que expande de inmediato los grupos y skills que coincidan.
-7. **Rutas e información:** Nombres limpios con tooltip nativo que muestra la ruta completa en hover.
+Solo ficheros estándar del repo: saispace no guarda contexto propio fuera de ellos.
+
+1. **Directrices:** Ficheros en raíz (`AGENTS.md`, `CLAUDE.md`, `DESIGN.md`), desplegado por defecto. Se abre `AGENTS.md` al entrar.
+2. **Skills:** Carpeta de skills (`.agents/skills/*`, `.claude/skills/*`), colapsada por defecto. El contador cuenta skills (carpetas), no ficheros. Cada skill es un subgrupo con sus ficheros (`SKILL.md`, referencias).
+3. **Reglas:** Reglas operativas (`.agents/rules/*`, `.cursor/rules/*`), colapsada por defecto.
+4. **Otros:** Archivos de contexto restantes, colapsada por defecto.
+5. **Filtro reactivo:** Campo de búsqueda superior que expande de inmediato los grupos y skills que coincidan.
+6. **Rutas e información:** Nombres limpios con tooltip nativo que muestra la ruta completa en hover.
+7. **Vista previa por defecto:** Markdown (`.md`, `.mdc`) se abre renderizado; JSON, TOML y YAML se abren en el editor.
 
 ## Renderizado de memoria y Markdown
 

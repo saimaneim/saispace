@@ -126,6 +126,10 @@ impl Db {
                       SELECT 1 FROM memories m
                       WHERE m.id = search_index.ref_id AND m.project_name <> '')))
               )
+              -- Consolidated memories live on in the memory that absorbed them.
+              AND NOT (kind = 'memory' AND EXISTS (
+                    SELECT 1 FROM memories m
+                    WHERE m.id = search_index.ref_id AND m.superseded_by IS NOT NULL))
             ORDER BY rank
             LIMIT ?4
             ",

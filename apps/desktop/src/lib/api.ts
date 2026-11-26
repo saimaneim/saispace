@@ -10,6 +10,7 @@ import type {
   DirectoryListing,
   DuplicatePair,
   Memory,
+  MemoryLink,
   MemoryUsageStats,
   OrphanGroup,
   Project,
@@ -149,6 +150,7 @@ export const api = {
     ),
 
   getMemory: (id: string) => invokeOrFallback<Memory>("get_memory", { id }),
+  memoryLinks: (id: string) => invokeOrFallback<MemoryLink[]>("memory_links", { id }, []),
 
   globalAiInventory: () =>
     invokeOrFallback<AiInventory>("global_ai_inventory", undefined, {
@@ -174,7 +176,9 @@ export const api = {
 
   revokeSecretGrant: (id: string) => invokeOrFallback<void>("revoke_secret_grant", { id }),
 
-  techIcon: (name: string) => invokeOrFallback<string | null>("tech_icon", { name }, null),
+  projectFavicon: (id: string) => invokeOrFallback<string | null>("project_favicon", { id }, null),
+  techIcon: (name: string, pkg?: string) =>
+    invokeOrFallback<string | null>("tech_icon", { name, package: pkg ?? null }, null),
 
   deleteMemory: (id: string) => invokeOrFallback<void>("delete_memory", { id }),
 

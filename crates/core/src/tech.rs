@@ -142,7 +142,54 @@ fn parse_package_json(path: &Path, source: &str) -> Vec<DetectedTechnology> {
             }
         }
     }
+    out.extend(runtimes(&json, dir, source));
     out
+}
+
+/// The JavaScript runtime the project declares: `engines`, `packageManager`
+/// (`bun@1.3.0`) or a version file next to `package.json`. Only explicit
+/// declarations count; `@types/node` alone says nothing about the runtime.
+fn runtimes(json: &serde_json::Value, dir: &Path, source: &str) -> Vec<DetectedTechnology> {
+    let mut found: Vec<(&str, String, String)> = Vec::new();
+    let engines = json.get("engines").and_then(|v| v.as_object());
+    for runtime in ["node", "bun", "deno"] {
+        if let Some(range) = engines
+            .and_then(|e| e.get(runtime))
+            .and_then(|v| v.as_str())
+        {
+            found.push((runtime, clean_range(range), source.to_string()));
+        }
+    }
+    if let Some((manager, version)) = json
+        .get("packageManager")
+        .and_then(|v| v.as_str())
+        .and_then(|pm| pm.split_once('@'))
+    {
+        let version = version.split('+').next().unwrap_or(version);
+        if matches!(manager, "bun" | "pnpm" | "yarn" | "npm") {
+            found.push((manager, version.to_string(), source.to_string()));
+        }
+    }
+    if !found.iter().any(|(name, ..)| *name == "node") {
+        for file in [".nvmrc", ".node-version"] {
+            if let Ok(text) = fs::read_to_string(dir.join(file)) {
+                let version = clean_range(text.lines().next().unwrap_or(""));
+                if version.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+                    let file_source = Path::new(source)
+                        .parent()
+                        .map(|p| p.join(file))
+                        .map_or_else(|| file.to_string(), |p| p.to_string_lossy().into_owned());
+                    found.push(("node", version, file_source));
+                    break;
+                }
+            }
+        }
+    }
+    found
+        .into_iter()
+        .filter(|(_, version, _)| !version.is_empty())
+        .map(|(name, version, src)| make(name, &version, "runtime", &src))
+        .collect()
 }
 
 fn installed_npm_version(dir: &Path, name: &str) -> Option<String> {
@@ -377,6 +424,37 @@ mod tests {
         assert_eq!(get("serde").as_deref(), Some("1.0.228"));
         assert!(get("local").is_none());
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn detects_declared_runtimes() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            dir.path().join("package.json"),
+            r#"{"engines":{"node":">=22.4"},"packageManager":"bun@1.3.2+sha512.abc","devDependencies":{"@types/node":"^24.0.0"}}"#,
+        )
+        .expect("write");
+        let techs = detect_technologies(dir.path()).expect("detect");
+        let find = |n: &str| {
+            techs
+                .iter()
+                .find(|t| t.name == n)
+                .map(|t| t.version.as_str())
+        };
+        assert_eq!(find("node"), Some("22.4"));
+        assert_eq!(find("bun"), Some("1.3.2"));
+    }
+
+    #[test]
+    fn reads_nvmrc_when_engines_are_missing() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(dir.path().join("package.json"), r#"{"dependencies":{}}"#).expect("write");
+        std::fs::write(dir.path().join(".nvmrc"), "v20.11.1\n").expect("write");
+        let techs = detect_technologies(dir.path()).expect("detect");
+        let node = techs.iter().find(|t| t.name == "node").expect("node");
+        assert_eq!(node.version, "20.11.1");
+        assert_eq!(node.ecosystem, "runtime");
+        assert_eq!(node.source, ".nvmrc");
     }
 
     #[test]

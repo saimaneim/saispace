@@ -7,6 +7,7 @@ import { AgentContextDialog } from "./AgentContextDialog";
 import { DuplicatesPanel } from "./DuplicatesPanel";
 import { Markdown } from "./Markdown";
 import { MemoryEditor } from "./MemoryEditor";
+import { MemoryLinks } from "./MemoryLinks";
 import { OrphanMemories } from "./OrphanMemories";
 import { StalePanel } from "./StalePanel";
 import { Button } from "./ui/button";
@@ -127,7 +128,7 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
     return duplicates.filter((pair) => !dismissedPairKeys.has(`${pair.a.id}:${pair.b.id}`));
   }, [duplicates, dismissedPairKeys]);
 
-  const staleCount = staleReport.stale.length + staleReport.surplus_sessions.length;
+  const staleCount = staleReport.stale.length;
 
   // Stale memories can be older than the 200 loaded ones: the report carries them whole.
   const selected =
@@ -136,6 +137,23 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
     staleReport.surplus_sessions.find((m) => m.id === selectedId) ??
     visible[0] ??
     null;
+
+  // Links may point at memories outside the loaded 200 (or archived ones):
+  // fetch them by id and add them to the list.
+  const openMemory = async (id: string) => {
+    if (!memories.some((m) => m.id === id)) {
+      try {
+        const memory = await api.getMemory(id);
+        setMemories((prev) => (prev.some((m) => m.id === id) ? prev : [memory, ...prev]));
+      } catch (err) {
+        setError(formatError(err));
+        return;
+      }
+    }
+    setShowStale(false);
+    setShowDuplicates(false);
+    setSelectedId(id);
+  };
 
   const togglePin = async (memory: Memory) => {
     try {
@@ -384,8 +402,11 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
               {error}
             </div>
           )}
-          <div className="flex-1 overflow-y-auto bg-carbon rounded-lg p-6">
-            <Markdown content={selected.content} className="max-w-[70ch]" />
+          <div className="flex-1 overflow-y-auto">
+            <div className="bg-carbon rounded-lg p-6">
+              <Markdown content={selected.content} className="max-w-[70ch]" />
+            </div>
+            <MemoryLinks memory={selected} onOpen={openMemory} />
           </div>
         </section>
       ) : null}

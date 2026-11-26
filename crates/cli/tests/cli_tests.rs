@@ -49,6 +49,12 @@ fn stdout(out: &Output) -> String {
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
 
+/// The 8-digit short id `sai` prints for a memory.
+fn short(id: &str) -> String {
+    let hex = id.replace('-', "");
+    hex[hex.len() - 8..].to_string()
+}
+
 #[test]
 fn rule_add_check_context_and_exit_codes() {
     let sb = Sandbox::new("rules");
@@ -86,7 +92,7 @@ fn rule_add_check_context_and_exit_codes() {
         String::from_utf8_lossy(&added.stderr)
     );
     assert!(stdout(&added).contains("1 violaciones actuales"));
-    assert!(repo.join(".saispace/rules/no-unwrap.toml").is_file());
+    assert!(repo.join(".agents/checks/no-unwrap.toml").is_file());
 
     let dup = sb.sai(
         &repo,
@@ -121,7 +127,7 @@ fn rule_add_check_context_and_exit_codes() {
         ],
     );
     assert_eq!(bad.status.code(), Some(2));
-    assert!(!repo.join(".saispace/rules/bad.toml").exists());
+    assert!(!repo.join(".agents/checks/bad.toml").exists());
 
     let failed = sb.sai(&repo, &["check"]);
     assert_eq!(failed.status.code(), Some(1));
@@ -210,11 +216,11 @@ fn memory_save_upsert_search_context_and_validation() {
 
     let pinned = sb.sai(&repo, &["memory", "pin", id]);
     assert!(pinned.status.success());
-    assert!(stdout(&pinned).contains(&format!("fijada {id}")));
+    assert!(stdout(&pinned).contains(&format!("fijada {}", short(id))));
 
     let pinned_ctx = stdout(&sb.sai(&repo, &["memory", "context"]));
     assert!(pinned_ctx.contains("## Fijadas"));
-    assert!(pinned_ctx.contains(&format!("- [note] Decisión de auth · {id}")));
+    assert!(pinned_ctx.contains(&format!("- [note] Decisión de auth · {}", short(id))));
     assert!(pinned_ctx.contains("Pasamos a tokens rotativos"));
 
     let pinned_json = sb.sai(&repo, &["memory", "context", "--json"]);
@@ -224,7 +230,7 @@ fn memory_save_upsert_search_context_and_validation() {
 
     let unpinned = sb.sai(&repo, &["memory", "unpin", id]);
     assert!(unpinned.status.success());
-    assert!(stdout(&unpinned).contains(&format!("desfijada {id}")));
+    assert!(stdout(&unpinned).contains(&format!("desfijada {}", short(id))));
 
     let unpinned_ctx = stdout(&sb.sai(&repo, &["memory", "context"]));
     assert!(!unpinned_ctx.contains("## Fijadas"));
@@ -256,7 +262,7 @@ fn memory_save_upsert_search_context_and_validation() {
 
     let rm = sb.sai(&repo, &["memory", "rm", id]);
     assert!(rm.status.success());
-    assert!(stdout(&rm).contains(&format!("eliminada {id}  Decisión de auth")));
+    assert!(stdout(&rm).contains(&format!("eliminada {}  Decisión de auth", short(id))));
     assert_eq!(sb.sai(&repo, &["memory", "get", id]).status.code(), Some(2));
 }
 
@@ -432,7 +438,7 @@ fn memory_list_scoping_and_cross_project() {
     assert!(rm_res.status.success());
     let rm_txt = stdout(&rm_res);
     assert!(
-        rm_txt.contains(&format!("eliminada {target_id}  Borrame luego")),
+        rm_txt.contains(&format!("eliminada {}  Borrame luego", short(target_id))),
         "{rm_txt}"
     );
 }
@@ -597,7 +603,8 @@ fn memory_edit_updates_fields_and_validates_input() {
     assert!(edit_out.contains("Bugfix"));
 
     let get = sb.sai(&repo, &["memory", "get", id, "--json"]);
-    let mem: serde_json::Value = serde_json::from_slice(&get.stdout).expect("json");
+    let got: serde_json::Value = serde_json::from_slice(&get.stdout).expect("json");
+    let mem = &got["memory"];
     assert_eq!(mem["title"], "Nuevo titulo");
     assert_eq!(mem["kind"], "bugfix");
     assert_eq!(mem["topic_key"], "arch-nuevo");
@@ -610,13 +617,15 @@ fn memory_edit_updates_fields_and_validates_input() {
     );
     assert!(stdin_edit.status.success());
     let get2 = sb.sai(&repo, &["memory", "get", id, "--json"]);
-    let mem2: serde_json::Value = serde_json::from_slice(&get2.stdout).expect("json");
+    let second_get: serde_json::Value = serde_json::from_slice(&get2.stdout).expect("json");
+    let mem2 = &second_get["memory"];
     assert_eq!(mem2["content"], "Contenido stdin");
 
     let clear_topic = sb.sai(&repo, &["memory", "edit", id, "--topic", ""]);
     assert!(clear_topic.status.success());
     let get3 = sb.sai(&repo, &["memory", "get", id, "--json"]);
-    let mem3: serde_json::Value = serde_json::from_slice(&get3.stdout).expect("json");
+    let third_get: serde_json::Value = serde_json::from_slice(&get3.stdout).expect("json");
+    let mem3 = &third_get["memory"];
     assert!(mem3["topic_key"].is_null());
 
     let runtime = tokio::runtime::Builder::new_current_thread()
@@ -879,8 +888,9 @@ fn memory_usage_tracks_get_search_and_ignores_list_and_context() {
 
     let get_json_out = sb.sai(&repo, &["memory", "get", decision_id, "--json"]);
     assert!(get_json_out.status.success());
-    let get_json: serde_json::Value =
+    let get_wrapped: serde_json::Value =
         serde_json::from_slice(&get_json_out.stdout).expect("get json");
+    let get_json = &get_wrapped["memory"];
     assert_eq!(get_json["use_count"], 2);
     assert!(get_json["last_used_at"].is_string());
     assert_eq!(get_json["updated_at"], decision["updated_at"]);

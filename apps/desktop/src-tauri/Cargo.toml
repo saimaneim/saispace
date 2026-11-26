@@ -1,6 +1,6 @@
 [package]
 name = "saispace-desktop"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
 
 [build-dependencies]
@@ -15,6 +15,7 @@ tokio = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
+base64 = "0.22"
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "query"] }
 
 [dev-dependencies]

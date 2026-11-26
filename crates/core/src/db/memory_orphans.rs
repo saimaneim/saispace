@@ -140,7 +140,6 @@ mod tests {
             .create_project(CreateProjectInput {
                 name: "Target Project".to_string(),
                 path: "/tmp/unrelated-target-path".to_string(),
-                context_notes: None,
             })
             .await?;
 
