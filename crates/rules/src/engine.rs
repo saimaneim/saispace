@@ -114,8 +114,16 @@ fn snippet(line: &str) -> String {
 impl Engine {
     /// # Errors
     ///
-    /// Returns an error if a rule is invalid or one of its patterns cannot be compiled.
+    /// Returns an error if a rule is invalid, two rules share an id, or one of
+    /// its patterns cannot be compiled.
     pub fn new(defs: &[RuleDef]) -> RulesResult<Self> {
+        let mut seen = std::collections::HashSet::new();
+        if let Some(dup) = defs.iter().find(|d| !seen.insert(d.id.as_str())) {
+            return Err(RulesError::Invalid(
+                dup.id.clone(),
+                "id is used by more than one rule".to_string(),
+            ));
+        }
         let rules = defs
             .iter()
             .map(|def| {

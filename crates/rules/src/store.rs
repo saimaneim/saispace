@@ -55,6 +55,10 @@ pub fn load_rules(root: &Path) -> RulesResult<Vec<RuleDef>> {
             source,
         })?;
         rule.validate()?;
+        if path.file_stem().and_then(|s| s.to_str()) != Some(rule.id.as_str()) {
+            let msg = format!("must live in {}.toml, found in {}", rule.id, path.display());
+            return Err(RulesError::Invalid(rule.id, msg));
+        }
         if let Some(first) = seen.insert(rule.id.clone(), path.clone()) {
             return Err(RulesError::DuplicateDefinition {
                 id: rule.id,
@@ -95,6 +99,9 @@ pub fn write_rule(root: &Path, rule: &RuleDef, force: bool) -> RulesResult<PathB
 ///
 /// Returns an error if the rule does not exist or cannot be removed.
 pub fn remove_rule(root: &Path, id: &str) -> RulesResult<PathBuf> {
+    if !crate::model::is_valid_id(id) {
+        return Err(RulesError::NotFound(id.to_string()));
+    }
     let path = rules_dir(root).join(format!("{id}.toml"));
     if !path.is_file() {
         return Err(RulesError::NotFound(id.to_string()));
