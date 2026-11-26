@@ -21,6 +21,13 @@ export interface StalePanelProps {
   onClose: () => void;
 }
 
+const preview = (content: string) =>
+  content
+    .replace(/[#*_`>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 160);
+
 function StaleItem({
   memory,
   onOpen,
@@ -31,11 +38,12 @@ function StaleItem({
   onDelete: () => void;
 }) {
   return (
-    <div className="bg-carbon border border-elevated rounded-lg px-4 py-3 flex items-center justify-between gap-3">
+    <div className="bg-carbon rounded-lg px-4 py-3 flex items-center justify-between gap-3">
       <div className="min-w-0 flex-1">
         <h3 className="text-sm font-semibold text-paper truncate">{memory.title}</h3>
+        <p className="text-xs text-mist truncate">{preview(memory.content)}</p>
         <p className="text-xs text-fog">
-          {KIND_LABELS[memory.kind]} · último uso:{" "}
+          {KIND_LABELS[memory.kind]} · guardada {formatTimeAgo(memory.updated_at)} · último uso:{" "}
           {memory.last_used_at ? formatTimeAgo(memory.last_used_at) : "nunca"}
         </p>
       </div>
@@ -58,7 +66,9 @@ export function StalePanel({ report, onOpenMemory, onDeleteMemory, onClose }: St
   const [error, setError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const total = report.stale.length + report.surplus_sessions.length;
+  // Old session summaries are not listed: only the latest reaches the agent at
+  // session start, so the rest cost nothing and stay searchable as history.
+  const total = report.stale.length;
 
   const confirmDelete = async () => {
     if (!pendingDelete) return;
@@ -79,7 +89,8 @@ export function StalePanel({ report, onOpenMemory, onDeleteMemory, onClose }: St
         <div>
           <h2 className="text-base font-semibold text-paper">Memorias para revisar</h2>
           <p className="text-xs text-fog">
-            {total} {total === 1 ? "memoria pendiente" : "memorias pendientes"}
+            Sin abrir ni actualizar en 60 días: ningún agente las está usando. Bórralas si ya no
+            valen o fíjalas para conservarlas.
           </p>
         </div>
         <Button variant="secondary" onClick={onClose}>
@@ -102,7 +113,7 @@ export function StalePanel({ report, onOpenMemory, onDeleteMemory, onClose }: St
           <History className="w-8 h-8 text-ash" />
           <p className="text-sm text-paper">Sin memorias para revisar</p>
           <p className="text-sm text-fog max-w-sm">
-            Todo está en uso reciente y no sobran resúmenes de sesión.
+            Todas las memorias se han usado o actualizado en los últimos 60 días.
           </p>
           <Button variant="secondary" onClick={onClose} className="mt-2">
             Volver a memorias
@@ -110,32 +121,16 @@ export function StalePanel({ report, onOpenMemory, onDeleteMemory, onClose }: St
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-          {report.stale.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-xs font-semibold text-fog">Sin uso</h3>
-              {report.stale.map((m) => (
-                <StaleItem
-                  key={m.id}
-                  memory={m}
-                  onOpen={() => onOpenMemory(m.id)}
-                  onDelete={() => setPendingDelete(m)}
-                />
-              ))}
-            </div>
-          )}
-          {report.surplus_sessions.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-xs font-semibold text-fog">Resúmenes de sesión sobrantes</h3>
-              {report.surplus_sessions.map((m) => (
-                <StaleItem
-                  key={m.id}
-                  memory={m}
-                  onOpen={() => onOpenMemory(m.id)}
-                  onDelete={() => setPendingDelete(m)}
-                />
-              ))}
-            </div>
-          )}
+          <div className="space-y-2">
+            {report.stale.map((m) => (
+              <StaleItem
+                key={m.id}
+                memory={m}
+                onOpen={() => onOpenMemory(m.id)}
+                onDelete={() => setPendingDelete(m)}
+              />
+            ))}
+          </div>
         </div>
       )}
 

@@ -49,6 +49,8 @@ pub struct Memory {
     pub updated_at: DateTime<Utc>,
     pub last_used_at: Option<DateTime<Utc>>,
     pub use_count: i64,
+    /// Set when the memory was consolidated into another one.
+    pub superseded_by: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -100,6 +102,9 @@ pub struct MemoryContext {
     pub last_session: Option<Memory>,
     pub pinned: Vec<Memory>,
     pub memories: Vec<Memory>,
+    /// Likely duplicates worth merging, so the index stays small over time.
+    #[serde(default)]
+    pub consolidate: Vec<super::memory_graph::ConsolidateHint>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

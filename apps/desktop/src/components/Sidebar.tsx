@@ -1,7 +1,8 @@
-import { FolderOpen, Globe, GripVertical, Pin, PinOff, Plus, Search } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import type { Project, ProjectStatus } from "../lib/types";
+import { FolderOpen, Globe, Pin, PinOff, Plus, Search } from "lucide-react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { Project } from "../lib/types";
 import { cn } from "../lib/utils";
+import { ProjectIcon } from "./ProjectIcon";
 
 interface SidebarProps {
   projects: Project[];
@@ -10,119 +11,118 @@ interface SidebarProps {
   onOpenDirectoryPicker: () => void;
   taskCounts: Record<string, number>;
   onTogglePin: (id: string, pinned: boolean) => void;
-  onReorder: (ids: string[]) => void;
+  /** Drop result: the project, whether it ends up pinned, and the full new order. */
+  onMove: (id: string, pinned: boolean, ids: string[]) => void;
   isOpen: boolean;
   isGlobalSelected: boolean;
   onSelectGlobal: () => void;
   pendingRequests: number;
 }
 
-const STATUS_DOT: Record<ProjectStatus, string> = {
-  active: "bg-pulse-green",
-  on_hold: "bg-status-amber",
-  completed: "bg-fog",
-  archived: "bg-ash",
-};
-
 type Group = "pinned" | "rest";
 
 interface DragState {
   id: string;
-  group: Group;
   startY: number;
+  pointerY: number;
+  /** Pointer offset inside the grabbed row, so the card does not jump. */
+  grabOffset: number;
+  left: number;
+  width: number;
   active: boolean;
-  order: string[];
+  target: { group: Group; index: number };
 }
 
 const DRAG_THRESHOLD = 4;
+const EDGE_SCROLL_PX = 40;
+const PLACEHOLDER = "__placeholder__";
 
-interface ProjectGroupProps {
-  group: Group;
-  items: Project[];
-  selectedProjectId: string | null;
-  taskCounts: Record<string, number>;
-  draggingId: string | null;
+interface RowProps {
+  project: Project;
+  isSelected: boolean;
+  openTasks: number;
   canDrag: boolean;
   onSelect: (id: string) => void;
   onTogglePin: (id: string, pinned: boolean) => void;
-  onDragStart: (id: string, group: Group, startY: number) => void;
+  onPointerDown?: (e: React.PointerEvent<HTMLElement>) => void;
+  floating?: boolean;
 }
 
-function ProjectGroup({
-  group,
-  items,
-  selectedProjectId,
-  taskCounts,
-  draggingId,
+function ProjectRow({
+  project: p,
+  isSelected,
+  openTasks,
   canDrag,
   onSelect,
   onTogglePin,
-  onDragStart,
-}: ProjectGroupProps) {
+  onPointerDown,
+  floating = false,
+}: RowProps) {
   return (
-    <ul className="space-y-0.5">
-      {items.map((p) => {
-        const isSelected = p.id === selectedProjectId;
-        const isDragging = p.id === draggingId;
-        const openTasks = taskCounts[p.id] ?? 0;
-        return (
-          <li
-            key={p.id}
-            data-drag-group={group}
-            data-project-id={p.id}
-            className={cn(
-              "group relative rounded-md",
-              isDragging && "bg-elevated shadow-popover z-10",
-            )}
-          >
-            <button
-              type="button"
-              onClick={() => onSelect(p.id)}
-              onPointerDown={(e) => {
-                if (canDrag && e.button === 0) onDragStart(p.id, group, e.clientY);
-              }}
-              aria-current={isSelected ? "page" : undefined}
-              className={cn(
-                "w-full flex items-center gap-2.5 pl-2.5 pr-9 h-10 rounded-md text-sm text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
-                isSelected
-                  ? "bg-elevated text-paper font-medium"
-                  : "text-mist hover:text-paper hover:bg-obsidian",
-                isDragging && "cursor-grabbing",
-              )}
-            >
-              <span className="relative w-2 h-2 flex-shrink-0 flex items-center justify-center">
-                <span
-                  className={cn(
-                    "w-2 h-2 rounded-full",
-                    STATUS_DOT[p.status],
-                    canDrag && "group-hover:opacity-0",
-                  )}
-                />
-                {canDrag && (
-                  <GripVertical className="absolute w-3.5 h-3.5 text-fog opacity-0 group-hover:opacity-100" />
-                )}
-              </span>
-              <span className="truncate flex-1">{p.name}</span>
-              {openTasks > 0 && (
-                <span className="text-xs text-fog tabular-nums flex-shrink-0 group-hover:opacity-0">
-                  {openTasks}
-                </span>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => onTogglePin(p.id, !p.pinned)}
-              aria-label={p.pinned ? `Desfijar ${p.name}` : `Fijar ${p.name}`}
-              title={p.pinned ? "Desfijar" : "Fijar arriba"}
-              className="absolute right-1.5 top-1/2 -translate-y-1/2 h-7 w-7 rounded-md flex items-center justify-center text-fog opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-paper hover:bg-graphite transition-opacity duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
-            >
-              {p.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
-            </button>
-          </li>
-        );
-      })}
-    </ul>
+    <div className="group relative rounded-md">
+      <button
+        type="button"
+        onClick={() => onSelect(p.id)}
+        onPointerDown={onPointerDown}
+        aria-current={isSelected ? "page" : undefined}
+        className={cn(
+          "w-full flex items-center gap-2.5 pl-2.5 pr-9 h-10 rounded-md text-sm text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+          isSelected || floating
+            ? "bg-elevated text-paper font-medium"
+            : "text-mist hover:text-paper hover:bg-obsidian",
+          canDrag && "cursor-grab",
+          floating && "cursor-grabbing",
+        )}
+      >
+        <ProjectIcon projectId={p.id} name={p.name} status={p.status} />
+        <span className="truncate flex-1">{p.name}</span>
+        {openTasks > 0 && (
+          <span className="text-xs text-fog tabular-nums flex-shrink-0 group-hover:opacity-0">
+            {openTasks}
+          </span>
+        )}
+      </button>
+      {!floating && (
+        <button
+          type="button"
+          onClick={() => onTogglePin(p.id, !p.pinned)}
+          aria-label={p.pinned ? `Desfijar ${p.name}` : `Fijar ${p.name}`}
+          title={p.pinned ? "Desfijar" : "Fijar arriba"}
+          className="absolute right-1.5 top-1/2 -translate-y-1/2 h-7 w-7 rounded-md flex items-center justify-center text-fog opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-paper hover:bg-graphite transition-opacity duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+        >
+          {p.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+        </button>
+      )}
+    </div>
   );
+}
+
+/** Animates rows from their previous position to the new one (FLIP), so the
+ * list opens a gap for the dragged card the way a kanban column does. */
+function useFlip(order: string) {
+  const nodes = useRef(new Map<string, HTMLElement>());
+  const last = useRef(new Map<string, number>());
+
+  useLayoutEffect(() => {
+    const next = new Map<string, number>();
+    for (const [id, el] of nodes.current) {
+      const top = el.getBoundingClientRect().top;
+      next.set(id, top);
+      const prev = last.current.get(id);
+      if (prev === undefined || prev === top) continue;
+      el.style.transition = "none";
+      el.style.transform = `translateY(${prev - top}px)`;
+      el.getBoundingClientRect();
+      el.style.transition = "transform 160ms cubic-bezier(0.2, 0, 0, 1)";
+      el.style.transform = "";
+    }
+    last.current = next;
+  }, [order]);
+
+  return (id: string) => (el: HTMLElement | null) => {
+    if (el) nodes.current.set(id, el);
+    else nodes.current.delete(id);
+  };
 }
 
 export function Sidebar({
@@ -132,7 +132,7 @@ export function Sidebar({
   onOpenDirectoryPicker,
   taskCounts,
   onTogglePin,
-  onReorder,
+  onMove,
   isOpen,
   isGlobalSelected,
   onSelectGlobal,
@@ -140,100 +140,186 @@ export function Sidebar({
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [drag, setDrag] = useState<DragState | null>(null);
+  const dragRef = useRef<DragState | null>(null);
   const suppressClick = useRef(false);
+  const navRef = useRef<HTMLElement | null>(null);
+  const zoneRefs = useRef<Record<Group, HTMLElement | null>>({ pinned: null, rest: null });
 
+  const isFiltering = searchQuery.trim() !== "";
   const filteredProjects = projects.filter((p) =>
     p.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
-  const isFiltering = searchQuery.trim() !== "";
+  const byId = new Map(projects.map((p) => [p.id, p]));
+  const dragging = drag?.active ? drag : null;
 
-  const order = (group: Group) => {
-    const base = filteredProjects.filter((p) => p.pinned === (group === "pinned"));
-    if (!drag || drag.group !== group || !drag.active) return base;
-    const byId = new Map(base.map((p) => [p.id, p]));
-    return drag.order.flatMap((id) => byId.get(id) ?? []);
+  // Ids per group as shown: the dragged card leaves its slot and a gap
+  // (placeholder) opens where it would land.
+  const columns = (group: Group): string[] => {
+    const ids = filteredProjects
+      .filter((p) => p.pinned === (group === "pinned") && p.id !== dragging?.id)
+      .map((p) => p.id);
+    if (dragging?.target.group === group) {
+      ids.splice(Math.min(dragging.target.index, ids.length), 0, PLACEHOLDER);
+    }
+    return ids;
   };
-  const pinned = order("pinned");
-  const rest = order("rest");
+  const pinnedIds = columns("pinned");
+  const restIds = columns("rest");
+  const setRowRef = useFlip(`${pinnedIds.join()}|${restIds.join()}`);
 
-  const dragRef = useRef<DragState | null>(null);
-  const updateDrag = (next: DragState | null) => {
+  const update = (next: DragState | null) => {
     dragRef.current = next;
     setDrag(next);
   };
-  const isDragArmed = drag !== null;
+
+  const isArmed = drag !== null;
 
   useEffect(() => {
-    if (!isDragArmed) return;
-    const onMove = (e: PointerEvent) => {
+    if (!isArmed) return;
+
+    const targetAt = (y: number, id: string): DragState["target"] => {
+      const zones = (["pinned", "rest"] as const).flatMap((group) => {
+        const el = zoneRefs.current[group];
+        return el ? [{ group, rect: el.getBoundingClientRect(), el }] : [];
+      });
+      const zone =
+        zones.find((z) => y >= z.rect.top && y <= z.rect.bottom) ??
+        zones.reduce((best, z) => {
+          const dist = Math.min(Math.abs(y - z.rect.top), Math.abs(y - z.rect.bottom));
+          const bestDist = Math.min(Math.abs(y - best.rect.top), Math.abs(y - best.rect.bottom));
+          return dist < bestDist ? z : best;
+        });
+      const rows = [...zone.el.querySelectorAll<HTMLElement>("[data-row-id]")].filter(
+        (n) => n.dataset.rowId !== id && n.dataset.rowId !== PLACEHOLDER,
+      );
+      const index = rows.filter((n) => {
+        const rect = n.getBoundingClientRect();
+        return rect.top + rect.height / 2 < y;
+      }).length;
+      return { group: zone.group, index };
+    };
+
+    const onMovePointer = (e: PointerEvent) => {
       const current = dragRef.current;
       if (!current) return;
       const active = current.active || Math.abs(e.clientY - current.startY) > DRAG_THRESHOLD;
       if (!active) return;
-      const nodes = document.querySelectorAll<HTMLElement>(`[data-drag-group="${current.group}"]`);
-      const others = [...nodes].filter((n) => n.dataset.projectId !== current.id);
-      let index = others.findIndex((n) => {
-        const rect = n.getBoundingClientRect();
-        return e.clientY < rect.top + rect.height / 2;
-      });
-      if (index === -1) index = others.length;
-      const ids = others.flatMap((n) => n.dataset.projectId ?? []);
-      ids.splice(index, 0, current.id);
-      dragRef.current = { ...current, active, order: ids };
-      setDrag(dragRef.current);
+      const nav = navRef.current;
+      if (nav) {
+        const rect = nav.getBoundingClientRect();
+        if (e.clientY < rect.top + EDGE_SCROLL_PX) nav.scrollBy({ top: -8 });
+        else if (e.clientY > rect.bottom - EDGE_SCROLL_PX) nav.scrollBy({ top: 8 });
+      }
+      update({ ...current, active, pointerY: e.clientY, target: targetAt(e.clientY, current.id) });
     };
-    const onUp = () => {
+
+    const finish = (commit: boolean) => {
       const current = dragRef.current;
-      dragRef.current = null;
-      setDrag(null);
+      update(null);
       if (!current?.active) return;
       suppressClick.current = true;
       window.setTimeout(() => {
         suppressClick.current = false;
       }, 0);
-      const isPinnedGroup = current.group === "pinned";
-      const initial = projects.filter((p) => p.pinned === isPinnedGroup).map((p) => p.id);
-      if (current.order.join() === initial.join()) return;
-      const pinnedIds = isPinnedGroup
-        ? current.order
-        : projects.filter((p) => p.pinned).map((p) => p.id);
-      const restIds = isPinnedGroup
-        ? projects.filter((p) => !p.pinned).map((p) => p.id)
-        : current.order;
-      onReorder([...pinnedIds, ...restIds]);
+      if (!commit) return;
+      const pinned = current.target.group === "pinned";
+      const without = (group: Group) =>
+        projects
+          .filter((p) => p.pinned === (group === "pinned") && p.id !== current.id)
+          .map((p) => p.id);
+      const pinnedOrder = without("pinned");
+      const restOrder = without("rest");
+      (pinned ? pinnedOrder : restOrder).splice(current.target.index, 0, current.id);
+      const ids = [...pinnedOrder, ...restOrder];
+      const before = projects.map((p) => p.id).join();
+      const wasPinned = projects.find((p) => p.id === current.id)?.pinned;
+      if (ids.join() === before && wasPinned === pinned) return;
+      onMove(current.id, pinned, ids);
     };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onUp);
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onUp);
-    };
-  }, [isDragArmed, projects, onReorder]);
 
-  const groupProps = {
-    selectedProjectId,
-    taskCounts,
-    draggingId: drag?.active ? drag.id : null,
-    canDrag: !isFiltering,
-    onSelect: (id: string) => {
-      if (suppressClick.current) {
-        suppressClick.current = false;
-        return;
-      }
-      onSelectProject(id);
-    },
-    onTogglePin,
-    onDragStart: (id: string, group: Group, startY: number) =>
-      updateDrag({
-        id,
-        group,
-        startY,
-        active: false,
-        order: projects.filter((p) => p.pinned === (group === "pinned")).map((p) => p.id),
-      }),
+    const onUp = () => finish(true);
+    const onCancel = () => finish(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") finish(false);
+    };
+    window.addEventListener("pointermove", onMovePointer);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointermove", onMovePointer);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [isArmed, projects, onMove]);
+
+  const startDrag = (project: Project, e: React.PointerEvent<HTMLElement>) => {
+    if (isFiltering || e.button !== 0) return;
+    const row = e.currentTarget.getBoundingClientRect();
+    const group: Group = project.pinned ? "pinned" : "rest";
+    const index = projects
+      .filter((p) => p.pinned === project.pinned)
+      .findIndex((p) => p.id === project.id);
+    update({
+      id: project.id,
+      startY: e.clientY,
+      pointerY: e.clientY,
+      grabOffset: e.clientY - row.top,
+      left: row.left,
+      width: row.width,
+      active: false,
+      target: { group, index },
+    });
   };
+
+  const select = (id: string) => {
+    if (suppressClick.current) {
+      suppressClick.current = false;
+      return;
+    }
+    onSelectProject(id);
+  };
+
+  const renderColumn = (group: Group, ids: string[]) => (
+    <ul
+      ref={(el) => {
+        zoneRefs.current[group] = el;
+      }}
+      className={cn("space-y-0.5", ids.length === 0 && "min-h-2")}
+    >
+      {ids.map((id) => {
+        if (id === PLACEHOLDER) {
+          return (
+            <li
+              key={PLACEHOLDER}
+              data-row-id={PLACEHOLDER}
+              ref={setRowRef(PLACEHOLDER)}
+              className="h-10 rounded-md bg-obsidian"
+            />
+          );
+        }
+        const p = byId.get(id);
+        if (!p) return null;
+        return (
+          <li key={id} data-row-id={id} ref={setRowRef(id)}>
+            <ProjectRow
+              project={p}
+              isSelected={id === selectedProjectId}
+              openTasks={taskCounts[id] ?? 0}
+              canDrag={!isFiltering}
+              onSelect={select}
+              onTogglePin={onTogglePin}
+              onPointerDown={(e) => startDrag(p, e)}
+            />
+          </li>
+        );
+      })}
+    </ul>
+  );
+
+  const showPinned = pinnedIds.length > 0 || dragging !== null;
+  const draggedProject = dragging ? byId.get(dragging.id) : undefined;
 
   return (
     <aside
@@ -324,18 +410,21 @@ export function Sidebar({
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 pb-3" aria-label="Proyectos">
-          {pinned.length > 0 && (
-            <>
+        <nav ref={navRef} className="flex-1 overflow-y-auto px-3 pb-3" aria-label="Proyectos">
+          {showPinned && (
+            <Fragment>
               <p className="flex items-center gap-1.5 px-2.5 pt-1 pb-1 text-xs text-fog">
                 <Pin className="w-3 h-3" />
                 Fijados
+                {dragging && pinnedIds.length === 0 && (
+                  <span className="text-ash">· suelta aquí para fijar</span>
+                )}
               </p>
-              <ProjectGroup group="pinned" items={pinned} {...groupProps} />
+              {renderColumn("pinned", pinnedIds)}
               <div className="h-px bg-obsidian mx-2.5 my-2" />
-            </>
+            </Fragment>
           )}
-          <ProjectGroup group="rest" items={rest} {...groupProps} />
+          {renderColumn("rest", restIds)}
 
           {filteredProjects.length === 0 && (
             <div className="py-8 text-center text-xs text-fog space-y-1">
@@ -345,6 +434,26 @@ export function Sidebar({
           )}
         </nav>
       </div>
+      {dragging && draggedProject && (
+        <div
+          className="fixed z-50 pointer-events-none rounded-md shadow-popover rotate-1 scale-[1.02]"
+          style={{
+            top: dragging.pointerY - dragging.grabOffset,
+            left: dragging.left,
+            width: dragging.width,
+          }}
+        >
+          <ProjectRow
+            project={draggedProject}
+            isSelected={false}
+            openTasks={taskCounts[draggedProject.id] ?? 0}
+            canDrag
+            onSelect={() => {}}
+            onTogglePin={() => {}}
+            floating
+          />
+        </div>
+      )}
     </aside>
   );
 }

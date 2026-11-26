@@ -53,7 +53,6 @@ mod tests {
         db.create_project(CreateProjectInput {
             name: name.into(),
             path: format!("/tmp/{name}"),
-            context_notes: None,
         })
         .await
         .unwrap()

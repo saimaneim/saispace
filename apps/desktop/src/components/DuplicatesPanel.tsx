@@ -85,7 +85,7 @@ export function DuplicatesPanel({
           {pairs.map((pair) => (
             <div
               key={`${pair.a.id}:${pair.b.id}`}
-              className="bg-carbon border border-elevated rounded-lg p-4 flex flex-col gap-3"
+              className="bg-carbon rounded-lg p-4 flex flex-col gap-3"
             >
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-obsidian rounded-md p-3 flex flex-col gap-2 min-w-0">

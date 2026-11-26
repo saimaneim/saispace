@@ -88,14 +88,7 @@ pub async fn update_project(
     input: UpdateProjectInput,
     db: State<'_, Db>,
 ) -> CommandResult<Project> {
-    let is_notes_update =
-        input.context_notes.is_some() && input.name.is_none() && input.status.is_none();
     let project = db.update_project(id, input).await?;
-    let entity = if is_notes_update {
-        EntityKind::ContextNotes
-    } else {
-        EntityKind::Project
-    };
     record_activity_or_log(
         &db,
         "update_project activity",
@@ -103,7 +96,7 @@ pub async fn update_project(
             project_id: Some(project.id),
             actor: Actor::User,
             action: ActionKind::Update,
-            entity,
+            entity: EntityKind::Project,
             entity_id: Some(project.id),
             details: None,
         },

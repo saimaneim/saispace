@@ -1,6 +1,6 @@
 [package]
 name = "saispace-cli"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
 
 [[bin]]
@@ -19,6 +19,7 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 chrono = { workspace = true }
+tempfile = "3"
 
 [lints]
 workspace = true

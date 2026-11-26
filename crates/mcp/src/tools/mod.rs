@@ -24,8 +24,9 @@ pub fn parse_uuid(id: &str) -> Result<Uuid, CoreError> {
     Uuid::parse_str(id).map_err(|e| CoreError::Validation(format!("Invalid UUID '{id}': {e}")))
 }
 
+/// Compact JSON: indentation costs the agent tokens and carries nothing.
 pub fn format_success<T: Serialize>(value: &T) -> CallToolResult {
-    let json_text = match serde_json::to_string_pretty(value) {
+    let json_text = match serde_json::to_string(value) {
         Ok(text) => text,
         Err(err) => return format_error(&CoreError::from(err)),
     };

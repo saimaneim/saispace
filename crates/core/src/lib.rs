@@ -1,6 +1,7 @@
 pub mod db;
 pub mod error;
 pub mod inventory;
+pub mod learning;
 pub mod memory_render;
 pub mod models;
 pub mod paths;
@@ -11,6 +12,7 @@ pub mod vault;
 pub use db::Db;
 pub use db::DuplicatePair;
 pub use db::StaleReport;
+pub use db::memory_graph::{KEEP_SESSIONS, short_id};
 pub use error::{CoreError, CoreResult};
 pub use models::*;
 pub use paths::{

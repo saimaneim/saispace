@@ -14,7 +14,6 @@ async fn two_near_identical_titles_in_one_project_form_one_pair() {
         .create_project(CreateProjectInput {
             name: "test-proj".into(),
             path: "/p/test-proj".into(),
-            context_notes: None,
         })
         .await
         .expect("project");
@@ -62,7 +61,6 @@ async fn same_titles_in_different_projects_do_not_pair() {
         .create_project(CreateProjectInput {
             name: "proj-a".into(),
             path: "/p/proj-a".into(),
-            context_notes: None,
         })
         .await
         .expect("project a");
@@ -71,7 +69,6 @@ async fn same_titles_in_different_projects_do_not_pair() {
         .create_project(CreateProjectInput {
             name: "proj-b".into(),
             path: "/p/proj-b".into(),
-            context_notes: None,
         })
         .await
         .expect("project b");
@@ -124,7 +121,6 @@ async fn session_summaries_never_pair() {
         .create_project(CreateProjectInput {
             name: "proj-s".into(),
             path: "/p/proj-s".into(),
-            context_notes: None,
         })
         .await
         .expect("project");
@@ -166,7 +162,6 @@ async fn symmetric_dedupe_returns_single_pair() {
         .create_project(CreateProjectInput {
             name: "proj-sym".into(),
             path: "/p/proj-sym".into(),
-            context_notes: None,
         })
         .await
         .expect("project");

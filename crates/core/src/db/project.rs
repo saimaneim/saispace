@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 pub(crate) const PROJECT_COLUMNS: &str =
-    "id, name, path, status, context_notes, pinned, sort_order, created_at, updated_at";
+    "id, name, path, status, pinned, sort_order, created_at, updated_at";
 
 impl Db {
     /// # Errors
@@ -19,12 +19,11 @@ impl Db {
         let path = required_text("path", &input.path)?;
         let id = Uuid::now_v7();
         let now = Utc::now();
-        let context_notes = input.context_notes.unwrap_or_default();
 
         let project = sqlx::query_as::<_, Project>(&format!(
             r"
-            INSERT INTO projects (id, name, path, status, context_notes, created_at, updated_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            INSERT INTO projects (id, name, path, status, created_at, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
             RETURNING {PROJECT_COLUMNS}
             ",
         ))
@@ -32,7 +31,6 @@ impl Db {
         .bind(name)
         .bind(path)
         .bind(ProjectStatus::Active)
-        .bind(context_notes)
         .bind(now)
         .bind(now)
         .fetch_one(&self.pool)
@@ -117,16 +115,14 @@ impl Db {
             SET name = COALESCE(?1, name),
                 path = COALESCE(?2, path),
                 status = COALESCE(?3, status),
-                context_notes = COALESCE(?4, context_notes),
-                updated_at = ?5
-            WHERE id = ?6
+                updated_at = ?4
+            WHERE id = ?5
             RETURNING {PROJECT_COLUMNS}
             ",
         ))
         .bind(name)
         .bind(path)
         .bind(input.status)
-        .bind(input.context_notes)
         .bind(now)
         .bind(id)
         .fetch_optional(&self.pool)
@@ -234,7 +230,6 @@ impl Db {
             .create_project(CreateProjectInput {
                 name,
                 path: root_str,
-                context_notes: None,
             })
             .await?;
         Ok(Some(project))

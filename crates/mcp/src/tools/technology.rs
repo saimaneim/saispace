@@ -43,15 +43,15 @@ impl SaiSpaceServer {
         &self,
         project_id: Option<&str>,
         path: Option<&str>,
-    ) -> Result<Project, CallToolResult> {
+    ) -> Result<Project, Box<CallToolResult>> {
         let id = match project_id {
-            Some(raw) => Some(parse_uuid(raw).map_err(|e| format_error(&e))?),
+            Some(raw) => Some(parse_uuid(raw).map_err(|e| Box::new(format_error(&e)))?),
             None => None,
         };
         match self.resolve_project(id, path).await {
             Ok(Some(project)) => Ok(project),
-            Ok(None) => Err(not_found()),
-            Err(err) => Err(format_error(&err)),
+            Ok(None) => Err(Box::new(not_found())),
+            Err(err) => Err(Box::new(format_error(&err))),
         }
     }
 }
@@ -71,7 +71,7 @@ impl SaiSpaceServer {
             .await
         {
             Ok(project) => project,
-            Err(result) => return result,
+            Err(result) => return *result,
         };
         match self.sync_stack(project.id).await {
             Ok(stack) => format_success(&stack),
@@ -116,7 +116,7 @@ impl SaiSpaceServer {
 
     #[tool(
         name = "search_memory",
-        description = "Search memories, project context notes, task titles and tech rules with SQLite FTS5. Defaults to the current project (project_id, path, or working directory) plus global entries; all=true searches every project. Retries with any term when all terms have no match"
+        description = "Search memories, project names, task titles and tech rules with SQLite FTS5. Defaults to the current project (project_id, path, or working directory) plus global entries; all=true searches every project. Retries with any term when all terms have no match"
     )]
     async fn search_memory(
         &self,
@@ -130,7 +130,7 @@ impl SaiSpaceServer {
                 .await
             {
                 Ok(project) => MemoryScope::for_project(project.map(|p| p.id)),
-                Err(result) => return result,
+                Err(result) => return *result,
             }
         };
         let hits = match self
@@ -163,6 +163,19 @@ impl SaiSpaceServer {
             })),
         })
         .await;
-        format_success(&hits)
+        // Memories travel with their short id; the rank and project id are
+        // noise to the agent. Tasks and rules keep the full id their tools need.
+        let compact: Vec<serde_json::Value> = hits
+            .iter()
+            .map(|h| {
+                let id = if h.kind == SearchKind::Memory {
+                    saispace_core::short_id(h.id)
+                } else {
+                    h.id.to_string()
+                };
+                serde_json::json!({ "kind": h.kind, "id": id, "title": h.title, "snippet": h.snippet })
+            })
+            .collect();
+        format_success(&compact)
     }
 }

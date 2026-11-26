@@ -4,10 +4,11 @@ use saispace_core::memory_render::{
     excerpt, kind_label, render_compact_notice, render_context, render_memory,
 };
 use saispace_core::models::{
-    ActionKind, Actor, EntityKind, Memory, MemoryKind, MemoryScope, Project, RecordActivityInput,
-    SaveMemoryInput, SearchKind, UpdateMemoryInput,
+    ActionKind, Actor, ConsolidateInput, EntityKind, LinkDirection, Memory, MemoryKind,
+    MemoryRelation, MemoryScope, Project, RecordActivityInput, SaveMemoryInput, SearchKind,
+    UpdateMemoryInput,
 };
-use saispace_core::{Db, default_db_path};
+use saispace_core::{Db, default_db_path, short_id};
 use std::io::{IsTerminal, Read};
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -47,7 +48,8 @@ pub enum MemoryCommand {
     },
     #[command(about = "Edita una memoria existente")]
     Edit {
-        id: Uuid,
+        #[arg(help = "Id de la memoria (completo o los 8 últimos dígitos)")]
+        id: String,
         #[arg(long)]
         title: Option<String>,
         #[arg(help = "Contenido; usa \"-\" para leerlo de stdin")]
@@ -87,19 +89,49 @@ pub enum MemoryCommand {
     },
     #[command(about = "Contenido completo de una memoria")]
     Get {
-        #[arg(help = "Identificador de la memoria")]
-        id: Uuid,
+        #[arg(help = "Id de la memoria (completo o los 8 últimos dígitos)")]
+        id: String,
         #[arg(help = "Salida en formato JSON", long)]
         json: bool,
     },
     #[command(about = "Fija una memoria")]
-    Pin { id: Uuid },
+    Pin { id: String },
     #[command(about = "Desfija una memoria")]
-    Unpin { id: Uuid },
+    Unpin { id: String },
     #[command(about = "Elimina una memoria")]
     Rm {
-        #[arg(help = "Identificador de la memoria a eliminar")]
-        id: Uuid,
+        #[arg(help = "Id de la memoria a eliminar")]
+        id: String,
+    },
+    #[command(about = "Enlaza dos memorias (relacionada, depende de)")]
+    Connect {
+        #[arg(help = "Memoria origen")]
+        from: String,
+        #[arg(help = "Memoria destino")]
+        to: String,
+        #[arg(
+            help = "Relación: related, depends_on",
+            long,
+            default_value = "related"
+        )]
+        relation: String,
+    },
+    #[command(about = "Quita los enlaces entre dos memorias")]
+    Disconnect { a: String, b: String },
+    #[command(
+        about = "Une varias memorias en una: la superviviente recibe el texto nuevo y las demás quedan archivadas"
+    )]
+    Merge {
+        #[arg(help = "Ids de las memorias a unir (2 o más)", num_args = 2.., required = true)]
+        ids: Vec<String>,
+        #[arg(help = "Título de la memoria unida", long)]
+        title: String,
+        #[arg(help = "Contenido unido; usa \"-\" para leerlo de stdin", long)]
+        content: String,
+        #[arg(help = "Tipo (por defecto, el de la superviviente)", long)]
+        kind: Option<String>,
+        #[arg(help = "Tema (por defecto, el que ya tuviera alguna)", long)]
+        topic: Option<String>,
     },
     #[command(about = "Detecta posibles memorias duplicadas")]
     Dupes {
@@ -145,6 +177,10 @@ pub enum MemoryCommand {
         about = "Normaliza los topic_key guardados a la convención actual (migración de datos)"
     )]
     NormalizeTopics,
+    #[command(about = "Enlaza las memorias existentes que se mencionan entre sí (por id o tema)")]
+    Relink,
+    #[command(about = "Hook para detectar correcciones y recordar guardar lecciones en memoria")]
+    Nudge,
 }
 
 fn actor() -> Actor {
@@ -212,7 +248,7 @@ fn print_memory_line(m: &Memory) {
     let scope = m.project_name.as_deref().unwrap_or("global");
     crate::out!(
         "{}  {}  [{:?}] {}  ({scope})",
-        m.id,
+        short_id(m.id),
         m.updated_at.format("%Y-%m-%d"),
         m.kind,
         m.title
@@ -220,6 +256,10 @@ fn print_memory_line(m: &Memory) {
 }
 
 pub fn run(cmd: MemoryCommand) -> CliResult<()> {
+    if matches!(cmd, MemoryCommand::Nudge) {
+        crate::nudge::run();
+        return Ok(());
+    }
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
@@ -277,20 +317,30 @@ async fn save(
     })
     .await?;
     print_memory_line(&saved);
+    let linked: Vec<String> = db
+        .memory_links(saved.id)
+        .await?
+        .iter()
+        .filter(|l| l.direction == LinkDirection::Out && l.relation == MemoryRelation::Related)
+        .map(|l| format!("{} {}", short_id(l.id), l.title))
+        .collect();
+    if !linked.is_empty() {
+        crate::out!("enlazada con: {}", linked.join(" · "));
+    }
     let similar = db.similar_memories(&saved, 3).await?;
     if !similar.is_empty() {
         crate::out!(
-            "parecidas (actualiza con el mismo --topic o borra la sobrante con `sai memory rm <id>`):"
+            "parecidas (actualiza con el mismo --topic o únelas con `sai memory merge <id> <id>`):"
         );
         for s in &similar {
             // Reusing a topic only updates within the same scope: a global
             // memory's key saved from a project would create a new row.
             if s.topic_key.is_empty() || s.hit.project_id != saved.project_id {
-                crate::out!("  {}  {}", s.hit.id, s.hit.title);
+                crate::out!("  {}  {}", short_id(s.hit.id), s.hit.title);
             } else {
                 crate::out!(
                     "  {}  {}  (usa --topic {} para actualizarla)",
-                    s.hit.id,
+                    short_id(s.hit.id),
                     s.hit.title,
                     s.topic_key
                 );
@@ -377,10 +427,17 @@ async fn search(db: &Db, query: &str, all: bool, limit: i64, json: bool) -> CliR
         crate::out!("{}", serde_json::to_string_pretty(&hits)?);
     } else {
         for h in &hits {
+            // Memories print their short id; tasks and rules keep the full
+            // one, which their own commands expect.
+            let id = if h.kind == SearchKind::Memory {
+                short_id(h.id)
+            } else {
+                h.id.to_string()
+            };
             crate::out!(
                 "{:?}  {}  {}\n    {}",
                 h.kind,
-                h.id,
+                id,
                 h.title,
                 excerpt(&h.snippet, 200)
             );
@@ -392,10 +449,63 @@ async fn search(db: &Db, query: &str, all: bool, limit: i64, json: bool) -> CliR
     Ok(())
 }
 
+async fn merge(
+    db: &Db,
+    raw_ids: &[String],
+    title: String,
+    content: String,
+    kind: Option<&str>,
+    topic: Option<String>,
+) -> CliResult<()> {
+    let mut ids = Vec::with_capacity(raw_ids.len());
+    for raw in raw_ids {
+        ids.push(db.resolve_memory_id(raw).await?);
+    }
+    let kind = kind
+        .map(|k| {
+            MemoryKind::parse(k)
+                .ok_or_else(|| CliError::Usage(format!("unknown memory kind '{k}'")))
+        })
+        .transpose()?;
+    let content = if content == "-" {
+        std::io::read_to_string(std::io::stdin())?
+    } else {
+        content
+    };
+    let merged = db
+        .consolidate_memories(ConsolidateInput {
+            ids: ids.clone(),
+            title,
+            content,
+            kind,
+            topic_key: topic,
+        })
+        .await?;
+    db.record_activity(RecordActivityInput {
+        project_id: merged.project_id,
+        actor: actor(),
+        action: ActionKind::Update,
+        entity: EntityKind::Memory,
+        entity_id: Some(merged.id),
+        details: Some(serde_json::json!({ "title": merged.title, "consolidated": ids.len() })),
+    })
+    .await?;
+    print_memory_line(&merged);
+    crate::out!(
+        "archivadas en ella: {}",
+        ids.iter()
+            .filter(|id| **id != merged.id)
+            .map(|id| short_id(*id))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    Ok(())
+}
+
 async fn rm(db: &Db, id: Uuid) -> CliResult<()> {
     let memory = db.get_memory(id).await?;
     db.delete_memory(id).await?;
-    crate::out!("eliminada {}  {}", memory.id, memory.title);
+    crate::out!("eliminada {}  {}", short_id(memory.id), memory.title);
     Ok(())
 }
 
@@ -569,7 +679,11 @@ async fn set_pinned(db: &Db, id: Uuid, pinned: bool) -> CliResult<()> {
         details: Some(serde_json::json!({ "title": memory.title, "pinned": pinned })),
     })
     .await?;
-    crate::out!("{} {id}", if pinned { "fijada" } else { "desfijada" });
+    crate::out!(
+        "{} {}",
+        if pinned { "fijada" } else { "desfijada" },
+        short_id(id)
+    );
     Ok(())
 }
 
@@ -610,6 +724,63 @@ async fn context(db: &Db, limit: i64, json: bool, source: Option<String>) -> Cli
     Ok(())
 }
 
+async fn get(db: &Db, id: &str, json: bool) -> CliResult<()> {
+    let memory = db.get_memory(db.resolve_memory_id(id).await?).await?;
+    let links = db.memory_links(memory.id).await?;
+    touch_memories_or_warn(db, &[memory.id]).await;
+    if json {
+        let value = serde_json::json!({ "memory": memory, "links": links });
+        crate::out!("{}", serde_json::to_string_pretty(&value)?);
+    } else {
+        crate::out!("{}", render_memory(&memory, &links));
+    }
+    Ok(())
+}
+
+async fn connect(db: &Db, from: &str, to: &str, relation: &str) -> CliResult<()> {
+    let relation = MemoryRelation::parse(relation)
+        .filter(|r| *r != MemoryRelation::Supersedes)
+        .ok_or_else(|| {
+            CliError::Usage(format!(
+                "relación '{relation}' no válida: usa related o depends_on (merge crea supersedes)"
+            ))
+        })?;
+    let from = db.resolve_memory_id(from).await?;
+    let to = db.resolve_memory_id(to).await?;
+    let added = db.link_memories(from, to, relation).await?;
+    crate::out!(
+        "{} {} → {} ({})",
+        if added {
+            "enlazadas"
+        } else {
+            "ya estaban enlazadas"
+        },
+        short_id(from),
+        short_id(to),
+        relation.as_str()
+    );
+    Ok(())
+}
+
+async fn dupes(db: &Db, all: bool) -> CliResult<()> {
+    let scope = if all {
+        MemoryScope::All
+    } else {
+        MemoryScope::for_project(current_project(db, false).await?.map(|p| p.id))
+    };
+    let pairs = db.duplicate_pairs(scope, 50).await?;
+    if pairs.is_empty() {
+        crate::out!("sin duplicados");
+    } else {
+        for pair in &pairs {
+            crate::out!("{}  {}", short_id(pair.a.id), pair.a.title);
+            crate::out!("  ≈ {}  {}", short_id(pair.b.id), pair.b.title);
+        }
+        crate::out!("únelas con `sai memory merge <id> <id> --title … --content -`");
+    }
+    Ok(())
+}
+
 async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
     let db = Db::open(&default_db_path()?).await?;
     match cmd {
@@ -632,7 +803,10 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
             content,
             kind,
             topic,
-        } => edit(&db, id, title, content, kind.as_deref(), topic).await?,
+        } => {
+            let id = db.resolve_memory_id(&id).await?;
+            edit(&db, id, title, content, kind.as_deref(), topic).await?;
+        }
         MemoryCommand::Search {
             query,
             all,
@@ -644,34 +818,31 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
             json,
             source,
         } => context(&db, limit, json, source).await?,
-        MemoryCommand::Get { id, json } => {
-            let memory = db.get_memory(id).await?;
-            touch_memories_or_warn(&db, &[memory.id]).await;
-            if json {
-                crate::out!("{}", serde_json::to_string_pretty(&memory)?);
-            } else {
-                crate::out!("{}", render_memory(&memory));
-            }
+        MemoryCommand::Get { id, json } => get(&db, &id, json).await?,
+        MemoryCommand::Rm { id } => rm(&db, db.resolve_memory_id(&id).await?).await?,
+        MemoryCommand::Pin { id } => {
+            set_pinned(&db, db.resolve_memory_id(&id).await?, true).await?;
         }
-        MemoryCommand::Rm { id } => rm(&db, id).await?,
-        MemoryCommand::Pin { id } => set_pinned(&db, id, true).await?,
-        MemoryCommand::Unpin { id } => set_pinned(&db, id, false).await?,
-        MemoryCommand::Dupes { all } => {
-            let scope = if all {
-                MemoryScope::All
-            } else {
-                MemoryScope::for_project(current_project(&db, false).await?.map(|p| p.id))
-            };
-            let pairs = db.duplicate_pairs(scope, 50).await?;
-            if pairs.is_empty() {
-                crate::out!("sin duplicados");
-            } else {
-                for pair in &pairs {
-                    crate::out!("{}  {}", pair.a.id, pair.a.title);
-                    crate::out!("  ≈ {}  {}", pair.b.id, pair.b.title);
-                }
-            }
+        MemoryCommand::Unpin { id } => {
+            set_pinned(&db, db.resolve_memory_id(&id).await?, false).await?;
         }
+        MemoryCommand::Connect { from, to, relation } => {
+            connect(&db, &from, &to, &relation).await?;
+        }
+        MemoryCommand::Disconnect { a, b } => {
+            let a = db.resolve_memory_id(&a).await?;
+            let b = db.resolve_memory_id(&b).await?;
+            let removed = db.unlink_memories(a, b).await?;
+            crate::out!("{removed} enlaces quitados");
+        }
+        MemoryCommand::Merge {
+            ids,
+            title,
+            content,
+            kind,
+            topic,
+        } => merge(&db, &ids, title, content, kind.as_deref(), topic).await?,
+        MemoryCommand::Dupes { all } => dupes(&db, all).await?,
         MemoryCommand::Stale {
             days,
             keep_sessions,
@@ -693,10 +864,15 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
         MemoryCommand::Link { project_name, path } => {
             link_orphans(&db, &project_name, path).await?;
         }
+        MemoryCommand::Relink => {
+            let added = db.relink_all().await?;
+            crate::out!("{added} enlaces nuevos");
+        }
         MemoryCommand::NormalizeTopics => {
             let changed = db.normalize_existing_topic_keys().await?;
             crate::out!("{changed} claves de tema normalizadas");
         }
+        MemoryCommand::Nudge => crate::nudge::run(),
     }
     Ok(())
 }

@@ -18,8 +18,8 @@ async fn setup_test_db() -> Db {
 async fn test_serde_defaults() {
     let json_project = r#"{"name":"Test","path":"/tmp/test"}"#;
     let input: CreateProjectInput =
-        serde_json::from_str(json_project).expect("should deserialize without context_notes");
-    assert_eq!(input.context_notes, None);
+        serde_json::from_str(json_project).expect("should deserialize name and path");
+    assert_eq!(input.name, "Test");
 
     let json_task = format!(r#"{{"project_id":"{}","title":"Task"}}"#, Uuid::new_v4());
     let task_input: CreateTaskInput =
@@ -35,7 +35,6 @@ async fn test_project_lifecycle() {
         .create_project(CreateProjectInput {
             name: "Saispace".to_string(),
             path: "/path/to/saispace".to_string(),
-            context_notes: Some("# Project Context".to_string()),
         })
         .await
         .expect("create_project failed");
@@ -43,7 +42,6 @@ async fn test_project_lifecycle() {
     assert_eq!(created.name, "Saispace");
     assert_eq!(created.path, "/path/to/saispace");
     assert_eq!(created.status, ProjectStatus::Active);
-    assert_eq!(created.context_notes, "# Project Context");
 
     let by_id = db
         .get_project(created.id)
@@ -63,7 +61,6 @@ async fn test_project_lifecycle() {
         .create_project(CreateProjectInput {
             name: "Duplicate Path".to_string(),
             path: "/path/to/saispace".to_string(),
-            context_notes: None,
         })
         .await;
     assert!(duplicate_path.is_err());
@@ -75,14 +72,12 @@ async fn test_project_lifecycle() {
                 name: Some("Saispace HQ".to_string()),
                 path: None,
                 status: Some(ProjectStatus::OnHold),
-                context_notes: Some("Updated context".to_string()),
             },
         )
         .await
         .expect("update_project failed");
     assert_eq!(updated.name, "Saispace HQ");
     assert_eq!(updated.status, ProjectStatus::OnHold);
-    assert_eq!(updated.context_notes, "Updated context");
 
     let projects = db.list_projects().await.expect("list_projects failed");
     assert_eq!(projects.len(), 1);
@@ -115,7 +110,6 @@ async fn test_task_lifecycle_and_cascade() {
         .create_project(CreateProjectInput {
             name: "Project A".to_string(),
             path: "/projects/a".to_string(),
-            context_notes: None,
         })
         .await
         .expect("create_project failed");
@@ -201,7 +195,6 @@ async fn test_activity_recording_and_filtering() {
         .create_project(CreateProjectInput {
             name: "Project Beta".to_string(),
             path: "/projects/beta".to_string(),
-            context_notes: None,
         })
         .await
         .expect("create_project failed");
@@ -267,7 +260,6 @@ fn project_input(name: &str, path: &str) -> CreateProjectInput {
     CreateProjectInput {
         name: name.to_string(),
         path: path.to_string(),
-        context_notes: None,
     }
 }
 

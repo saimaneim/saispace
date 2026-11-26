@@ -52,7 +52,6 @@ export function makeProject(overrides: Partial<Project> = {}): Project {
     name: overrides.name ?? id,
     path: overrides.path ?? `/home/test/${id}`,
     status: "active",
-    context_notes: "",
     pinned: false,
     sort_order: 0,
     created_at: now(),
@@ -75,6 +74,7 @@ export function makeMemory(overrides: Partial<Memory> = {}): Memory {
     updated_at: now(),
     last_used_at: null,
     use_count: 0,
+    superseded_by: null,
     ...overrides,
   };
 }
@@ -106,10 +106,13 @@ export function installFakeBackend(options: FakeBackendOptions = {}) {
 
   const handlers: Record<string, Handler> = {
     // Projects
-    list_projects: () => [...projects].sort((a, b) => a.sort_order - b.sort_order),
+    list_projects: () =>
+      [...projects].sort(
+        (a, b) => Number(b.pinned) - Number(a.pinned) || a.sort_order - b.sort_order,
+      ),
     get_project: ({ id }) => projects.find((p) => p.id === id) ?? null,
     create_project: ({ input }) => {
-      const { name, path, context_notes } = input as CreateProjectInput;
+      const { name, path } = input as CreateProjectInput;
       if (!name.trim()) throw new CommandError("El nombre no puede estar vacío");
       if (projects.some((p) => p.path === path)) {
         throw new CommandError(`Ya existe un proyecto en ${path}`, "conflict");
@@ -117,7 +120,6 @@ export function installFakeBackend(options: FakeBackendOptions = {}) {
       const project = makeProject({
         name,
         path,
-        context_notes: context_notes ?? "",
         sort_order: projects.length,
       });
       projects.push(project);
@@ -146,7 +148,12 @@ export function installFakeBackend(options: FakeBackendOptions = {}) {
       project.pinned = Boolean(pinned);
       return project;
     },
-    reorder_projects: () => undefined,
+    reorder_projects: ({ ids }) => {
+      (ids as string[]).forEach((id, index) => {
+        findProject(id).sort_order = index + 1;
+      });
+    },
+    project_favicon: () => null,
 
     // Directory picker
     list_directory: ({ path }) => {
@@ -174,6 +181,7 @@ export function installFakeBackend(options: FakeBackendOptions = {}) {
         .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
         .slice(0, (limit as number | undefined) ?? 200),
     get_memory: ({ id }) => findMemory(id),
+    memory_links: () => [],
     update_memory: ({ id, input }) => {
       const memory = findMemory(id);
       const patch = input as UpdateMemoryInput;

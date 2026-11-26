@@ -3,7 +3,8 @@ use crate::db::search::STOPWORDS;
 use crate::db::validation::text_with_limit;
 use crate::error::{CoreError, CoreResult};
 use crate::models::{
-    Memory, MemoryContext, MemoryKind, MemoryScope, SaveMemoryInput, SearchKind, SimilarMemory,
+    ConsolidateHint, Memory, MemoryContext, MemoryKind, MemoryScope, SaveMemoryInput, SearchKind,
+    SimilarMemory,
 };
 use crate::topic_key::normalize_topic_key;
 use chrono::{DateTime, Utc};
@@ -11,8 +12,11 @@ use uuid::Uuid;
 
 pub const MAX_MEMORY_TITLE_CHARS: usize = 200;
 pub const MAX_MEMORY_CONTENT_CHARS: usize = 20_000;
+/// Duplicate pairs listed at session start: enough to prompt a merge,
+/// few enough not to cost much.
+const MAX_CONSOLIDATE_HINTS: usize = 3;
 
-pub(crate) const MEMORY_COLUMNS: &str = "id, project_id, NULLIF(project_name, '') AS project_name, kind, title, content, NULLIF(topic_key, '') AS topic_key, pinned, created_at, updated_at, last_used_at, use_count";
+pub(crate) const MEMORY_COLUMNS: &str = "id, project_id, NULLIF(project_name, '') AS project_name, kind, title, content, NULLIF(topic_key, '') AS topic_key, pinned, created_at, updated_at, last_used_at, use_count, superseded_by";
 
 /// Share of meaningful title words two memories must have in common (Jaccard)
 /// to count as possible duplicates. One shared word such as a client name
@@ -45,7 +49,13 @@ impl Db {
     ///
     /// Returns an error if the input is invalid or the memory cannot be stored.
     pub async fn save_memory(&self, input: SaveMemoryInput) -> CoreResult<Memory> {
-        self.save_memory_at(input, Utc::now(), None).await
+        let memory = self.save_memory_at(input, Utc::now(), None).await?;
+        // Connections and housekeeping happen on save, so the agent never
+        // has to remember them: references become links, and only the
+        // latest session summaries stay active.
+        self.link_references(&memory).await?;
+        self.archive_old_sessions(&memory).await?;
+        Ok(memory)
     }
 
     /// # Errors
@@ -131,9 +141,10 @@ impl Db {
             r"
             SELECT {MEMORY_COLUMNS}
             FROM memories
-            WHERE ?1 = 0
-               OR (project_id IS NULL AND project_name = '')
-               OR (?1 = 2 AND project_id = ?2)
+            WHERE superseded_by IS NULL
+              AND (?1 = 0
+                   OR (project_id IS NULL AND project_name = '')
+                   OR (?1 = 2 AND project_id = ?2))
             ORDER BY updated_at DESC
             LIMIT ?3
             "
@@ -173,6 +184,17 @@ impl Db {
                 _ => {}
             }
         }
+        context.consolidate = self
+            .duplicate_pairs(scope, MAX_CONSOLIDATE_HINTS)
+            .await?
+            .into_iter()
+            .map(|pair| ConsolidateHint {
+                a: pair.a.id,
+                a_title: pair.a.title,
+                b: pair.b.id,
+                b_title: pair.b.title,
+            })
+            .collect();
         Ok(context)
     }
 

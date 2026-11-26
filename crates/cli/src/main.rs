@@ -11,8 +11,11 @@ macro_rules! out {
 }
 
 mod memory;
+mod nudge;
 mod rules;
 mod secret;
+mod setup;
+mod skills;
 
 use clap::{Parser, Subcommand};
 use std::process::ExitCode;
@@ -46,7 +49,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    #[command(about = "Ejecuta las reglas de .saispace/rules sobre el repositorio")]
+    #[command(about = "Ejecuta las comprobaciones de .agents/checks sobre el repositorio")]
     Check(rules::CheckArgs),
     #[command(about = "Crea, lista o elimina reglas")]
     #[command(subcommand)]
@@ -59,6 +62,20 @@ enum Command {
     #[command(about = "Claves guardadas: los agentes las usan con permiso, sin ver su valor")]
     #[command(subcommand)]
     Secret(secret::SecretCommand),
+    #[command(about = "Skills de .agents/skills para los agentes que no las leen solos")]
+    #[command(subcommand)]
+    Skills(SkillsCommand),
+    #[command(about = "Instala la integración de saispace en un agente")]
+    #[command(subcommand)]
+    Setup(setup::SetupCommand),
+}
+
+#[derive(Subcommand)]
+enum SkillsCommand {
+    #[command(
+        about = "Enlaza .agents/skills en .claude/skills (Claude Code no lee .agents); no sobrescribe nada"
+    )]
+    Sync(skills::SyncArgs),
 }
 
 fn main() -> ExitCode {
@@ -69,6 +86,8 @@ fn main() -> ExitCode {
         Command::Context(args) => rules::context(&args).map(|()| ExitCode::SUCCESS),
         Command::Memory(cmd) => memory::run(cmd).map(|()| ExitCode::SUCCESS),
         Command::Secret(cmd) => secret::run(cmd),
+        Command::Skills(SkillsCommand::Sync(args)) => skills::run(&args),
+        Command::Setup(cmd) => setup::run(&cmd),
     };
     match result {
         Ok(code) => code,
