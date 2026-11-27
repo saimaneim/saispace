@@ -1,5 +1,6 @@
 pub mod db;
 pub mod error;
+pub mod git_history;
 pub mod inventory;
 pub mod learning;
 pub mod memory_render;
@@ -7,6 +8,7 @@ pub mod models;
 pub mod paths;
 pub mod recall;
 pub mod tech;
+pub mod timeline;
 pub mod topic_key;
 pub mod vault;
 

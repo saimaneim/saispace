@@ -27,6 +27,7 @@ use commands::{
         delete_tech_rule, list_project_tech_rules, list_tech_rules, list_technologies, open_url,
         search_memory, sync_project_stack, upsert_tech_rule,
     },
+    timeline::project_timeline,
 };
 use error::CommandError;
 use error_log::log_error;
@@ -103,6 +104,7 @@ pub fn run() {
             goal_delete,
             list_activity,
             list_activity_by_project,
+            project_timeline,
             list_directory,
             list_context_files,
             read_context_file,

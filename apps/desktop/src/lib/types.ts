@@ -330,3 +330,25 @@ export interface SecretGrant {
   created_at: string;
   decided_at: string | null;
 }
+
+export type TimelineKind = "goal_completed" | "release" | "task_completed" | "commit" | "memory";
+
+export interface TimelineItem {
+  kind: TimelineKind;
+  at: string;
+  title: string;
+  detail: string | null;
+  label: string | null;
+  goal: string | null;
+  link: string | null;
+  hash: string | null;
+  pr: number | null;
+  files: string[];
+  file_count: number;
+}
+
+export interface TimelineDay {
+  /** Local calendar day, `YYYY-MM-DD`. */
+  date: string;
+  items: TimelineItem[];
+}
