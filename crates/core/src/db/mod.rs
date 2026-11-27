@@ -13,6 +13,7 @@ pub mod kpi;
 pub mod memory;
 pub mod memory_dupes;
 pub mod memory_edit;
+pub mod memory_expiry;
 pub mod memory_graph;
 pub mod memory_orphans;
 pub mod memory_pin;

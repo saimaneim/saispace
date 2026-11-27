@@ -115,6 +115,15 @@ pub struct MemoryContext {
     /// still sees what was left to finish.
     #[serde(default)]
     pub open_tasks: Vec<OpenTask>,
+    /// Still-valid temporary facts (`--until`), soonest to expire first.
+    #[serde(default)]
+    pub temporary: Vec<TemporaryMemory>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TemporaryMemory {
+    pub memory: Memory,
+    pub expires_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

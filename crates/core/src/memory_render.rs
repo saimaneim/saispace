@@ -89,6 +89,23 @@ fn render_environment(out: &mut String, context: &MemoryContext) {
     }
 }
 
+fn render_temporary(out: &mut String, context: &MemoryContext) {
+    if context.temporary.is_empty() {
+        return;
+    }
+    out.push_str("\n## Estado temporal\nHechos con caducidad: tenlos en cuenta antes de actuar (p. ej. no delegues a un proveedor sin cuota).\n");
+    for t in &context.temporary {
+        let _ = writeln!(
+            out,
+            "- {}: {} · hasta {} [{}]",
+            t.memory.title,
+            rule_preview(&t.memory.content, 160),
+            t.expires_at.format("%Y-%m-%d %H:%M UTC"),
+            short_id(t.memory.id)
+        );
+    }
+}
+
 fn render_open_tasks(out: &mut String, context: &MemoryContext) {
     if context.open_tasks.is_empty() {
         return;
@@ -141,6 +158,7 @@ pub fn render_context(project: Option<&Project>, context: &MemoryContext) -> Str
         }
     }
     render_environment(&mut out, context);
+    render_temporary(&mut out, context);
     if !context.pinned.is_empty() {
         out.push_str("\n## Fijadas\n");
         for m in &context.pinned {
@@ -202,6 +220,7 @@ pub fn render_context(project: Option<&Project>, context: &MemoryContext) -> Str
         && context.last_session.is_none()
         && context.memories.is_empty()
         && context.open_tasks.is_empty()
+        && context.temporary.is_empty()
     {
         out.push_str("\nSin memorias todavía.\n");
     }

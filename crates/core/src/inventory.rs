@@ -230,9 +230,44 @@ fn push_servers(inv: &mut AiInventory, tool: &str, servers: &serde_json::Map<Str
             enabled: config
                 .get("enabled")
                 .and_then(Value::as_bool)
-                .unwrap_or(true),
+                .unwrap_or_else(|| {
+                    !config
+                        .get("disabled")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false)
+                }),
         });
     }
+}
+
+/// Antigravity keeps its MCP servers, skills and plugins under
+/// `~/.gemini/config` (its rules file is the shared `~/.gemini/GEMINI.md`).
+fn scan_antigravity(inv: &mut AiInventory, home: &Path) {
+    let dir = home.join(".gemini").join("config");
+    scan_skills(inv, "Antigravity", &dir.join("skills"));
+    let mut warnings = Vec::new();
+    if let Some(Value::Object(servers)) = read_json(&dir.join("mcp_config.json"), &mut warnings)
+        .and_then(|v| v.get("mcpServers").cloned())
+    {
+        push_servers(inv, "Antigravity", &servers);
+    }
+    if let Ok(entries) = std::fs::read_dir(dir.join("plugins")) {
+        let mut names: Vec<String> = entries
+            .filter_map(Result::ok)
+            .filter(|e| e.path().is_dir())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        for name in names {
+            inv.plugins.push(PluginEntry {
+                tool: "Antigravity".to_string(),
+                name,
+                version: String::new(),
+                enabled: true,
+            });
+        }
+    }
+    inv.warnings.extend(warnings);
 }
 
 fn scan_claude(inv: &mut AiInventory, home: &Path) {
@@ -349,6 +384,7 @@ pub fn scan_ai_inventory(home: &Path) -> AiInventory {
     let mut inv = AiInventory::default();
     scan_claude(&mut inv, home);
     scan_opencode(&mut inv, home);
+    scan_antigravity(&mut inv, home);
     scan_others(&mut inv, home);
     inv
 }

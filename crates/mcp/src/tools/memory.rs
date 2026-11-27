@@ -29,6 +29,9 @@ pub struct SaveMemoryParams {
     /// 144", "permission denied (publickey)") or
     /// `env:t3code` / `env:opencode` for a host. Replaces the current list.
     pub triggers: Option<Vec<String>>,
+    /// Temporary fact: expires at this time (RFC 3339, `YYYY-MM-DD`, or `6h`/`3d`
+    /// from now), e.g. a provider out of quota until its reset time.
+    pub expires_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -152,6 +155,13 @@ struct ContextItem {
     preview: String,
 }
 
+#[derive(Debug, Serialize)]
+struct TemporaryItem {
+    #[serde(flatten)]
+    item: ContextItem,
+    until: String,
+}
+
 impl ContextItem {
     /// `max` 0 lists the title only: the agent opens what it needs by id.
     fn new(m: &Memory, max: usize) -> Self {
@@ -206,6 +216,9 @@ struct ContextResponse {
     /// Lessons for the host the agent runs in (T3 Code, `OpenCode`…).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     environment: Vec<ContextItem>,
+    /// Temporary facts still valid (`expires_at`): respect them before acting.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    temporary: Vec<TemporaryItem>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pinned: Vec<ContextItem>,
     memories: Vec<ContextItem>,
@@ -331,6 +344,15 @@ impl SaiSpaceServer {
                 Err(result) => return *result,
             }
         };
+        let expires_at = match params
+            .expires_at
+            .as_deref()
+            .map(|raw| saispace_core::db::memory_expiry::parse_until(raw, chrono::Utc::now()))
+            .transpose()
+        {
+            Ok(at) => at,
+            Err(err) => return format_error(&err),
+        };
         let mut saved = match self
             .db
             .save_memory(SaveMemoryInput {
@@ -359,6 +381,11 @@ impl SaiSpaceServer {
             },
             None => Vec::new(),
         };
+        if let Some(at) = expires_at
+            && let Err(err) = self.db.set_memory_expiry(saved.id, Some(at)).await
+        {
+            return format_error(&err);
+        }
         let action = if saved.created_at == saved.updated_at {
             ActionKind::Create
         } else {
@@ -449,6 +476,13 @@ impl SaiSpaceServer {
         {
             return format_error(&err);
         }
+        if let Err(err) = self
+            .db
+            .attach_temporary(&mut context, chrono::Utc::now())
+            .await
+        {
+            return format_error(&err);
+        }
         format_success(&ContextResponse {
             project: project.map(|p| ProjectBrief {
                 id: p.id,
@@ -468,6 +502,14 @@ impl SaiSpaceServer {
                 .environment
                 .iter()
                 .map(|m| ContextItem::new(m, 400))
+                .collect(),
+            temporary: context
+                .temporary
+                .iter()
+                .map(|t| TemporaryItem {
+                    item: ContextItem::new(&t.memory, 400),
+                    until: t.expires_at.to_rfc3339(),
+                })
                 .collect(),
             pinned: context
                 .pinned

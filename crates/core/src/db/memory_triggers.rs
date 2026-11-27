@@ -80,6 +80,9 @@ impl Db {
             FROM memory_triggers t
             JOIN memories m ON m.id = t.memory_id
             WHERE m.superseded_by IS NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM memory_expiry e WHERE e.memory_id = m.id AND e.expires_at <= ?3
+              )
               AND (?1 = 0
                    OR (m.project_id IS NULL AND m.project_name = '')
                    OR (?1 = 2 AND m.project_id = ?2))
@@ -87,6 +90,7 @@ impl Db {
         )
         .bind(mode)
         .bind(project_id)
+        .bind(Utc::now())
         .fetch_all(&self.pool)
         .await?;
         let mut ids: Vec<Uuid> = Vec::new();

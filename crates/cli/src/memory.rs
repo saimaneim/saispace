@@ -36,6 +36,11 @@ pub enum MemoryCommand {
             long = "trigger"
         )]
         triggers: Vec<String>,
+        #[arg(
+            help = "Caduca en esta fecha o plazo (2026-12-01, 2026-12-01T10:00:00Z, 6h, 3d): hechos temporales como una cuota agotada",
+            long
+        )]
+        until: Option<String>,
     },
     #[command(about = "Lista memorias recientes del proyecto y globales")]
     List {
@@ -78,6 +83,13 @@ pub enum MemoryCommand {
             conflicts_with = "triggers"
         )]
         no_triggers: bool,
+        #[arg(
+            help = "Caduca en esta fecha o plazo (2026-12-01, 2026-12-01T10:00:00Z, 6h, 3d): hechos temporales como una cuota agotada",
+            long
+        )]
+        until: Option<String>,
+        #[arg(help = "Quita la caducidad", long, conflicts_with = "until")]
+        no_until: bool,
     },
     #[command(about = "Búsqueda FTS5 en memorias, notas, tareas y reglas")]
     Search {
@@ -299,7 +311,7 @@ async fn save(
     topic: Option<String>,
     global: bool,
     triggers: &[String],
-) -> CliResult<()> {
+) -> CliResult<Uuid> {
     // Validate before saving, so a bad trigger never leaves a half-saved memory.
     saispace_core::recall::normalize_triggers(triggers).map_err(CliError::Usage)?;
     let kind = MemoryKind::parse(kind)
@@ -379,7 +391,7 @@ async fn save(
             }
         }
     }
-    Ok(())
+    Ok(saved.id)
 }
 
 async fn list(db: &Db, kind: Option<String>, all: bool, limit: i64, json: bool) -> CliResult<()> {
@@ -830,6 +842,8 @@ async fn context(
     if let Some(p) = &project {
         db.attach_open_tasks(&mut context, p.id).await?;
     }
+    db.attach_temporary(&mut context, chrono::Utc::now())
+        .await?;
     if json {
         let mut value = serde_json::to_value(&context)?;
         if is_compact && let Some(obj) = value.as_object_mut() {
@@ -936,6 +950,23 @@ async fn import_engram(db: &Db, source: Option<PathBuf>) -> CliResult<()> {
     Ok(())
 }
 
+/// Sets (`Some`) or clears (`None`) a memory's expiry and prints it.
+async fn set_until(db: &Db, id: Uuid, until: Option<&str>) -> CliResult<()> {
+    let at = until
+        .map(|raw| saispace_core::db::memory_expiry::parse_until(raw, chrono::Utc::now()))
+        .transpose()?;
+    db.set_memory_expiry(id, at).await?;
+    crate::out!(
+        "caduca: {}",
+        at.map_or_else(
+            || "nunca".to_string(),
+            |at| at.format("%Y-%m-%d %H:%M UTC").to_string()
+        )
+    );
+    Ok(())
+}
+
+#[allow(clippy::too_many_lines)] // one arm per subcommand
 async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
     let db_path = default_db_path()?;
     let db = Db::open(&db_path).await?;
@@ -947,7 +978,17 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
             topic,
             global,
             triggers,
-        } => save(&db, title, content, &kind, topic, global, &triggers).await?,
+            until,
+        } => {
+            // Parse first so a bad date never leaves a half-saved memory.
+            if let Some(raw) = &until {
+                saispace_core::db::memory_expiry::parse_until(raw, chrono::Utc::now())?;
+            }
+            let id = save(&db, title, content, &kind, topic, global, &triggers).await?;
+            if until.is_some() {
+                set_until(&db, id, until.as_deref()).await?;
+            }
+        }
         MemoryCommand::List {
             kind,
             all,
@@ -962,8 +1003,22 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
             topic,
             triggers,
             no_triggers,
+            until,
+            no_until,
         } => {
             let id = db.resolve_memory_id(&id).await?;
+            let expiry_only = title.is_none()
+                && content.is_none()
+                && kind.is_none()
+                && topic.is_none()
+                && triggers.is_empty()
+                && !no_triggers;
+            if until.is_some() || no_until {
+                set_until(&db, id, until.as_deref()).await?;
+                if expiry_only {
+                    return Ok(());
+                }
+            }
             // --no-triggers conflicts with --trigger, so it means an empty list.
             let triggers = (no_triggers || !triggers.is_empty()).then_some(triggers);
             edit(

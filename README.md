@@ -1,8 +1,8 @@
 # saispace
 
-Local project memory for AI coding agents. One SQLite database, three front ends:
+Local project memory and static checks for AI coding agents. One SQLite database, three front ends:
 
-- **`sai`** — CLI for memories, verifiable repo rules and stored secrets.
+- **`sai`** — CLI for memories, the `sai check` static checker, the plan and stored secrets.
 - **`saispace-mcp`** — MCP server (stdio) exposing the same data to agents.
 - **Desktop app** — Tauri UI over the same database.
 
@@ -124,6 +124,19 @@ Tools include `save_memory`, `search_memory`, `memory_context`, `get_memory`, `l
 ```
 
 The memory is scoped to the project of the server's working directory, or to `path` / `project_id` if given; `"global": true` makes it cross-project.
+
+## Static checks (`sai check`)
+
+Project rules live as TOML files in `.agents/checks/` and run with `sai check`: a Rust engine, parallel and deterministic, that costs agents zero tokens. A rule that can be checked is a check, not a line in `AGENTS.md`.
+
+- Match kinds: `forbid`, `require`, `max_lines`, path references that must exist, and more (see [crates/rules/README.md](crates/rules/README.md)).
+- Scope with globs, file guards (`only_if`, `unless`), line and match exceptions, `within` a captured span.
+- `--json` output for agents, `--strict` to fail on warnings; the pre-push hook and CI run it.
+
+```sh
+$ sai check                 # all rules
+$ sai check src/ --rule ui-no-raw-colors --json
+```
 
 ## Learning from mistakes
 

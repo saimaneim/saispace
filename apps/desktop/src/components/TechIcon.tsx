@@ -39,6 +39,7 @@ const ALIASES: Record<string, string> = {
   claude: "claude ai",
   "claude code": "claude ai",
   opencode: "opencode",
+  antigravity: "gemini",
 };
 
 /** Scopes whose packages all share the project's logo. */

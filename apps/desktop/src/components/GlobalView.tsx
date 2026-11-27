@@ -1,4 +1,4 @@
-import { Brain, FileText, KeyRound, Plug, Search, Wand2, X } from "lucide-react";
+import { Brain, FileText, Globe, KeyRound, Plug, Search, Wand2, X } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, formatError } from "../lib/api";
@@ -221,13 +221,51 @@ function groupHooks(hooks: AiInventory["hooks"]) {
   return [...map.values()];
 }
 
-function ConnectionsPanel({ inventory }: { inventory: AiInventory }) {
-  const isEmpty =
-    inventory.mcp_servers.length === 0 &&
-    inventory.plugins.length === 0 &&
-    inventory.hooks.length === 0;
+interface Merged {
+  name: string;
+  detail: string;
+  tools: { tool: string; enabled: boolean }[];
+}
 
-  if (isEmpty && inventory.warnings.length === 0) {
+/** One row per name; the agents that use it become badges. */
+function mergeByName(items: { name: string; detail: string; tool: string; enabled: boolean }[]) {
+  const map = new Map<string, Merged>();
+  for (const item of items) {
+    const entry = map.get(item.name) ?? { name: item.name, detail: item.detail, tools: [] };
+    if (!entry.tools.some((t) => t.tool === item.tool)) {
+      entry.tools.push({ tool: item.tool, enabled: item.enabled });
+    }
+    map.set(item.name, entry);
+  }
+  return [...map.values()].sort(
+    (a, b) => b.tools.length - a.tools.length || a.name.localeCompare(b.name),
+  );
+}
+
+function ConnectionsPanel({ inventory }: { inventory: AiInventory }) {
+  const [agent, setAgent] = useState<string | null>(null);
+  const servers = inventory.mcp_servers.map((s) => ({
+    name: s.name,
+    detail: s.target,
+    tool: s.tool,
+    enabled: s.enabled,
+  }));
+  const plugins = inventory.plugins.map((p) => ({
+    name: p.name.split("@")[0],
+    detail: p.version ? `v${p.version}` : "",
+    tool: p.tool,
+    enabled: p.enabled,
+  }));
+  const agents = [
+    ...new Set([...servers, ...plugins, ...inventory.hooks].map((i) => i.tool)),
+  ].sort();
+  const mine = <T extends { tool: string }>(list: T[]) =>
+    agent ? list.filter((i) => i.tool === agent) : list;
+  const shownServers = mergeByName(mine(servers));
+  const shownPlugins = mergeByName(mine(plugins));
+  const shownHooks = groupHooks(mine(inventory.hooks));
+
+  if (agents.length === 0 && inventory.warnings.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-sm text-fog">
         Sin integraciones detectadas.
@@ -235,44 +273,69 @@ function ConnectionsPanel({ inventory }: { inventory: AiInventory }) {
     );
   }
 
+  const chip = (id: string | null, label: string, count: number) => (
+    <button
+      key={label}
+      type="button"
+      onClick={() => setAgent(id)}
+      aria-pressed={agent === id}
+      className={cn(
+        "h-8 px-2.5 rounded-md flex items-center gap-1.5 text-sm transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
+        agent === id ? "bg-elevated text-paper" : "text-fog hover:text-paper hover:bg-obsidian",
+      )}
+    >
+      {id ? <TechIcon name={id} className="w-4 h-4" /> : <Globe className="w-4 h-4" />}
+      <span>{label}</span>
+      <span className="text-xs text-ash tabular-nums">{count}</span>
+    </button>
+  );
+  const countFor = (tool: string) => [...servers, ...plugins].filter((i) => i.tool === tool).length;
+
+  const renderMerged = (list: Merged[], iconOf: (m: Merged) => string) =>
+    list.map((m) => {
+      const off = m.tools.every((t) => !t.enabled);
+      return (
+        <Row
+          key={m.name}
+          icon={iconOf(m)}
+          title={m.name}
+          detail={m.detail}
+          muted={off}
+          meta={
+            !agent && (
+              <span className="flex items-center gap-1.5 flex-shrink-0">
+                {m.tools.map((t) => (
+                  <ToolBadge key={t.tool} tool={t.tool} disabled={!t.enabled && !off} />
+                ))}
+              </span>
+            )
+          }
+        />
+      );
+    });
+
   return (
     <div className="flex-1 overflow-y-auto px-6 pt-2 pb-6 space-y-1.5">
-      {inventory.mcp_servers.length > 0 && (
+      <div className="flex flex-wrap items-center gap-1 pb-1">
+        {chip(null, "Global", mergeByName([...servers, ...plugins]).length)}
+        {agents.map((tool) => chip(tool, tool, countFor(tool)))}
+      </div>
+      {shownServers.length > 0 && (
         <>
           <SectionTitle className="pt-1">Servidores MCP</SectionTitle>
-          {inventory.mcp_servers.map((server) => (
-            <Row
-              key={`${server.tool}-${server.name}`}
-              icon={server.name}
-              title={server.name}
-              detail={server.target}
-              meta={<ToolBadge tool={server.tool} disabled={!server.enabled} />}
-              muted={!server.enabled}
-            />
-          ))}
+          {renderMerged(shownServers, (m) => m.name)}
         </>
       )}
-      {inventory.plugins.length > 0 && (
+      {shownPlugins.length > 0 && (
         <>
-          <SectionTitle className={inventory.mcp_servers.length === 0 ? "pt-1" : undefined}>
-            Plugins
-          </SectionTitle>
-          {inventory.plugins.map((plugin) => (
-            <Row
-              key={`${plugin.tool}-${plugin.name}`}
-              icon={plugin.name.split("@")[0]}
-              title={plugin.name.split("@")[0]}
-              detail={plugin.version ? `v${plugin.version}` : ""}
-              meta={<ToolBadge tool={plugin.tool} disabled={!plugin.enabled} />}
-              muted={!plugin.enabled}
-            />
-          ))}
+          <SectionTitle>Plugins</SectionTitle>
+          {renderMerged(shownPlugins, (m) => m.name)}
         </>
       )}
-      {inventory.hooks.length > 0 && (
+      {shownHooks.length > 0 && (
         <>
           <SectionTitle>Hooks</SectionTitle>
-          {groupHooks(inventory.hooks).map((hook) => (
+          {shownHooks.map((hook) => (
             <div
               key={`${hook.tool}-${hook.command}-${hook.purpose}`}
               title={hook.command}
