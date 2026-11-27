@@ -1,21 +1,5 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
-import type { ProjectStatus } from "../lib/types";
-import { cn } from "../lib/utils";
-
-const STATUS_DOT: Record<ProjectStatus, string> = {
-  active: "bg-pulse-green",
-  on_hold: "bg-status-amber",
-  completed: "bg-fog",
-  archived: "bg-ash",
-};
-
-const STATUS_LABEL: Record<ProjectStatus, string> = {
-  active: "Activo",
-  on_hold: "En pausa",
-  completed: "Completado",
-  archived: "Archivado",
-};
 
 const memo = new Map<string, Promise<string | null>>();
 
@@ -31,11 +15,10 @@ function loadFavicon(projectId: string): Promise<string | null> {
 interface ProjectIconProps {
   projectId: string;
   name: string;
-  status: ProjectStatus;
 }
 
-/** The project's favicon (or its initial) with the status as a corner dot. */
-export function ProjectIcon({ projectId, name, status }: ProjectIconProps) {
+/** The sidebar zone already says the status: the icon is just the project. */
+export function ProjectIcon({ projectId, name }: ProjectIconProps) {
   const [src, setSrc] = useState<string | null>(null);
 
   useEffect(() => {
@@ -48,27 +31,25 @@ export function ProjectIcon({ projectId, name, status }: ProjectIconProps) {
     };
   }, [projectId]);
 
+  const initial = (name.trim().charAt(0) || "?").toUpperCase();
+
   return (
-    <span className="relative w-5 h-5 flex-shrink-0" title={STATUS_LABEL[status]}>
+    <span className="relative w-5 h-5 flex-shrink-0">
       {src ? (
         <img
           src={src}
           alt=""
+          width={20}
+          height={20}
           draggable={false}
           className="w-5 h-5 rounded object-contain"
           onError={() => setSrc(null)}
         />
       ) : (
-        <span className="w-5 h-5 rounded bg-obsidian text-[10px] font-semibold text-mist flex items-center justify-center uppercase">
-          {name.trim().charAt(0) || "?"}
+        <span className="w-5 h-5 rounded bg-obsidian text-[11px] font-semibold text-mist flex items-center justify-center">
+          {initial}
         </span>
       )}
-      <span
-        className={cn(
-          "absolute -right-0.5 -bottom-0.5 w-2 h-2 rounded-full ring-2 ring-carbon",
-          STATUS_DOT[status],
-        )}
-      />
     </span>
   );
 }

@@ -4,7 +4,7 @@ use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, ContentBlock};
 use rmcp::{tool, tool_router};
 use saispace_core::models::{
-    ActionKind, CreateTaskInput, EntityKind, RecordActivityInput, Task, TaskPriority, TaskStatus,
+    ActionKind, CreateTaskInput, EntityKind, RecordActivityInput, TaskPriority, TaskStatus,
     TaskUpdate, UpdateTaskInput,
 };
 use saispace_core::short_id;
@@ -51,13 +51,6 @@ impl From<TaskPriorityParam> for TaskPriority {
             TaskPriorityParam::Urgent => TaskPriority::Urgent,
         }
     }
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-pub struct ListTasksParams {
-    pub project_id: Option<String>,
-    pub path: Option<String>,
-    pub status: Option<TaskStatusParam>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -136,58 +129,8 @@ pub(crate) fn task_update_view(update: &TaskUpdate) -> TaskUpdateView {
 #[tool_router(router = task_tool_router, vis = "pub")]
 impl SaiSpaceServer {
     #[tool(
-        name = "list_tasks",
-        description = "List tasks for a project (by project_id or path) with optional status filter"
-    )]
-    async fn list_tasks(&self, Parameters(params): Parameters<ListTasksParams>) -> CallToolResult {
-        let project_id = match params.project_id.as_deref() {
-            Some(id_str) => match parse_uuid(id_str) {
-                Ok(id) => Some(id),
-                Err(err) => return format_error(&err),
-            },
-            None => None,
-        };
-        let project_opt = match self
-            .resolve_project(project_id, params.path.as_deref())
-            .await
-        {
-            Ok(p) => p,
-            Err(err) => return format_error(&err),
-        };
-        let Some(project) = project_opt else {
-            return CallToolResult::error(vec![ContentBlock::text("Project not found")]);
-        };
-        let tasks = match self.db.list_tasks_by_project(project.id).await {
-            Ok(t) => t,
-            Err(err) => return format_error(&err),
-        };
-        let filtered: Vec<Task> = match params.status {
-            Some(status_param) => {
-                let target_status: TaskStatus = status_param.into();
-                tasks
-                    .into_iter()
-                    .filter(|t| t.status == target_status)
-                    .collect()
-            }
-            None => tasks,
-        };
-        let _ = self
-            .db
-            .record_activity(RecordActivityInput {
-                project_id: Some(project.id),
-                actor: self.actor(),
-                action: ActionKind::Read,
-                entity: EntityKind::Task,
-                entity_id: None,
-                details: None,
-            })
-            .await;
-        format_success(&filtered)
-    }
-
-    #[tool(
         name = "create_task",
-        description = "Create a step under a project (project_id, path, or a goal_id that supplies the project). Record only steps that matter across sessions, not ephemeral micro-steps"
+        description = "Create a task (project_id, path, or goal_id). Only steps that matter across sessions"
     )]
     async fn create_task(
         &self,
@@ -282,7 +225,7 @@ impl SaiSpaceServer {
 
     #[tool(
         name = "update_task",
-        description = "Update status, priority, or title of a task (full or short id). Returns the goal's new done/total when the task belongs to one; complete the goal with update_goal once every task is done"
+        description = "Update a task's status, priority or title (full or short id); returns its goal's progress"
     )]
     async fn update_task(
         &self,

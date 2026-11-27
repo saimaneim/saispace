@@ -1,18 +1,19 @@
 @import "tailwindcss";
 
 @theme {
-  --color-void: #141414;
-  --color-carbon: #1a1a1a;
-  --color-obsidian: #212121;
-  --color-elevated: #2a2a2a;
-  --color-graphite: #333333;
-  --color-smoke: #444444;
+  --color-void: #0b0b0c;
+  --color-carbon: #121213;
+  --color-obsidian: #19191a;
+  --color-elevated: #212123;
+  --color-graphite: #2a2a2c;
+  --color-smoke: #3a3a3c;
   --color-ash: #6b6b6b;
   --color-fog: #9a9a9a;
   --color-mist: #d4d4d4;
   --color-bone: #e8e8e8;
   --color-paper: #f5f5f5;
-  --color-acid-lime: #e2f928;
+  --color-accent: #3b82f6;
+  --color-accent-ink: #ffffff;
   --color-pulse-green: #22c55e;
   --color-status-amber: #f59e0b;
   --color-coral-red: #ef4444;
@@ -24,6 +25,10 @@
     "Plus Jakarta Sans Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono:
     "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+}
+
+html {
+  color-scheme: dark;
 }
 
 html,
@@ -65,7 +70,7 @@ button:disabled {
 }
 
 ::selection {
-  background-color: rgba(226, 249, 40, 0.28);
+  background-color: color-mix(in srgb, var(--color-accent) 28%, transparent);
   color: var(--color-paper);
 }
 
@@ -79,10 +84,40 @@ button:disabled {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--color-paper) 10%, transparent);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: color-mix(in srgb, var(--color-paper) 20%, transparent);
+}
+
+@keyframes surface-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-state="open"].ui-surface-motion {
+    animation: surface-in 120ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  [data-state="open"].ui-overlay-motion {
+    animation: overlay-in 120ms ease-out;
+  }
 }

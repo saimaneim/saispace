@@ -182,6 +182,7 @@ pub fn rule(cmd: RuleCommand) -> CliResult<()> {
                         Some(Check::Forbid { .. }) => "prohíbe",
                         Some(Check::Require { .. }) => "exige",
                         Some(Check::MaxLines { .. }) => "máx. líneas",
+                        Some(Check::RefsExist { .. }) => "rutas válidas",
                         None => "guía",
                     };
                     crate::out!(
@@ -217,6 +218,11 @@ fn add(root: &Path, args: AddArgs) -> CliResult<()> {
         (Some(pattern), None, None) => Some(Check::Forbid {
             pattern,
             stop_at: args.stop_at,
+            multiline: false,
+            unless_line: None,
+            except: None,
+            within: None,
+            unless_span: None,
         }),
         (None, Some(pattern), None) => Some(Check::Require { pattern }),
         (None, None, Some(max)) => Some(Check::MaxLines { max }),
@@ -236,6 +242,8 @@ fn add(root: &Path, args: AddArgs) -> CliResult<()> {
         },
         files: args.files,
         exclude: args.exclude,
+        only_if: None,
+        unless: None,
         check,
         fix: args.fix,
         guide: args.guide,

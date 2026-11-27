@@ -39,8 +39,8 @@ Never store secrets, raw logs, routine progress, or anything the code or git his
 Save the lesson when it happens, not at the end:
 
 - The user corrects you or states a rule: `kind: preference` once resolved (same `topic_key` if that preference exists).
-- Your own mistake with a non-obvious cause: `kind: bugfix` with the root cause, plus `triggers`: the exact, stable error line (`"exit code 144"`, `"permission denied (publickey)"`), never a generic word like `error`. When that text shows up in a later tool call, the hook hands the lesson back before you retry.
-- A quirk of the host you run in (T3 Code, OpenCode: no TTY, `!` does not run commands…): add the trigger `env:t3code` / `env:opencode`. Those lessons open the session index under "Entorno".
+- Your own mistake with a non-obvious cause: `kind: bugfix` with the root cause, plus `triggers`: a stable, specific piece of the error message, never a generic word like `error`. When that text shows up in a later tool call, the hook hands the lesson back before you retry.
+- A quirk of the host you run in: add the trigger `env:<host>` (`t3code`, `opencode`, `claude-code`…). Those lessons open the session index under "Entorno".
 - Before handing a step to the user (a password, a command for their terminal), check whether a saved lesson already solves it.
 - `memory_context` lists pairs under `consolidate` (the CLI index calls it "Para consolidar"): merge them with `consolidate_memories` before finishing.
 
@@ -51,7 +51,7 @@ Hooks remind you. `sai setup claude` installs `sai memory context` on SessionSta
 | Item | Tool |
 |---|---|
 | Plan | `get_active_plan` when starting work. Goals (`create_goal`, `update_goal`) are milestones with a short "done when" `criteria`; tasks (`create_task` with `goal_id`, `update_task`/`complete_task`) are their executable steps. Record only milestones and steps that matter across sessions, not ephemeral micro-steps. Complete a goal with `update_goal` once every task is done. |
-| Stack | `sync_project_stack` after dependencies change. Never type versions by hand. |
+| Stack | `get_project_context` re-detects it from the manifests on every call. Never type versions by hand. |
 | Rules about a technology | `upsert_tech_rule`: one short sentence per dependency name and optional version prefix (`tauri`, `2`). |
 
 ## Secrets

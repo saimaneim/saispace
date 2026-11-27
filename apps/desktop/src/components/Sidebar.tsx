@@ -1,31 +1,38 @@
-import { FolderOpen, Globe, Pin, PinOff, Plus, Search } from "lucide-react";
+import { FolderOpen, Globe, Plus, Search, Settings, X } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { Project } from "../lib/types";
+import type { Project, ProjectStatus } from "../lib/types";
 import { cn } from "../lib/utils";
 import { ProjectIcon } from "./ProjectIcon";
+import { SettingsDialog } from "./SettingsDialog";
 
 interface SidebarProps {
   projects: Project[];
   selectedProjectId: string | null;
   onSelectProject: (id: string) => void;
   onOpenDirectoryPicker: () => void;
-  taskCounts: Record<string, number>;
-  onTogglePin: (id: string, pinned: boolean) => void;
-  /** Drop result: the project, whether it ends up pinned, and the full new order. */
-  onMove: (id: string, pinned: boolean, ids: string[]) => void;
+  onMove: (id: string, target: { pinned: boolean; status: ProjectStatus }, ids: string[]) => void;
   isOpen: boolean;
   isGlobalSelected: boolean;
   onSelectGlobal: () => void;
   pendingRequests: number;
 }
 
-type Group = "pinned" | "rest";
+/** Sidebar zones: dropping a project in one pins it or sets its status. */
+type Group = "pinned" | ProjectStatus;
+const GROUPS: Group[] = ["pinned", "active", "on_hold", "completed", "archived"];
+const GROUP_LABEL: Record<Group, string> = {
+  pinned: "Fijados",
+  active: "Activos",
+  on_hold: "En pausa",
+  completed: "Completados",
+  archived: "Archivados",
+};
+const groupOf = (p: Project): Group => (p.pinned ? "pinned" : p.status);
 
 interface DragState {
   id: string;
   startY: number;
   pointerY: number;
-  /** Pointer offset inside the grabbed row, so the card does not jump. */
   grabOffset: number;
   left: number;
   width: number;
@@ -40,10 +47,8 @@ const PLACEHOLDER = "__placeholder__";
 interface RowProps {
   project: Project;
   isSelected: boolean;
-  openTasks: number;
   canDrag: boolean;
   onSelect: (id: string) => void;
-  onTogglePin: (id: string, pinned: boolean) => void;
   onPointerDown?: (e: React.PointerEvent<HTMLElement>) => void;
   floating?: boolean;
 }
@@ -51,10 +56,8 @@ interface RowProps {
 function ProjectRow({
   project: p,
   isSelected,
-  openTasks,
   canDrag,
   onSelect,
-  onTogglePin,
   onPointerDown,
   floating = false,
 }: RowProps) {
@@ -66,7 +69,7 @@ function ProjectRow({
         onPointerDown={onPointerDown}
         aria-current={isSelected ? "page" : undefined}
         className={cn(
-          "w-full flex items-center gap-2.5 pl-2.5 pr-9 h-10 rounded-md text-sm text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+          "relative w-full flex items-center gap-2.5 px-3 h-10 rounded-md text-sm text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
           isSelected || floating
             ? "bg-elevated text-paper font-medium"
             : "text-mist hover:text-paper hover:bg-obsidian",
@@ -74,31 +77,13 @@ function ProjectRow({
           floating && "cursor-grabbing",
         )}
       >
-        <ProjectIcon projectId={p.id} name={p.name} status={p.status} />
+        <ProjectIcon projectId={p.id} name={p.name} />
         <span className="truncate flex-1">{p.name}</span>
-        {openTasks > 0 && (
-          <span className="text-xs text-fog tabular-nums flex-shrink-0 group-hover:opacity-0">
-            {openTasks}
-          </span>
-        )}
       </button>
-      {!floating && (
-        <button
-          type="button"
-          onClick={() => onTogglePin(p.id, !p.pinned)}
-          aria-label={p.pinned ? `Desfijar ${p.name}` : `Fijar ${p.name}`}
-          title={p.pinned ? "Desfijar" : "Fijar arriba"}
-          className="absolute right-1.5 top-1/2 -translate-y-1/2 h-7 w-7 rounded-md flex items-center justify-center text-fog opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-paper hover:bg-graphite transition-opacity duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
-        >
-          {p.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
-        </button>
-      )}
     </div>
   );
 }
 
-/** Animates rows from their previous position to the new one (FLIP), so the
- * list opens a gap for the dragged card the way a kanban column does. */
 function useFlip(order: string) {
   const nodes = useRef(new Map<string, HTMLElement>());
   const last = useRef(new Map<string, number>());
@@ -113,7 +98,7 @@ function useFlip(order: string) {
       el.style.transition = "none";
       el.style.transform = `translateY(${prev - top}px)`;
       el.getBoundingClientRect();
-      el.style.transition = "transform 160ms cubic-bezier(0.2, 0, 0, 1)";
+      el.style.transition = "transform 150ms cubic-bezier(0.2, 0, 0, 1)";
       el.style.transform = "";
     }
     last.current = next;
@@ -130,8 +115,6 @@ export function Sidebar({
   selectedProjectId,
   onSelectProject,
   onOpenDirectoryPicker,
-  taskCounts,
-  onTogglePin,
   onMove,
   isOpen,
   isGlobalSelected,
@@ -139,11 +122,17 @@ export function Sidebar({
   pendingRequests,
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const closeSearch = () => {
+    setSearchQuery("");
+    setIsSearchOpen(false);
+  };
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [drag, setDrag] = useState<DragState | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const suppressClick = useRef(false);
   const navRef = useRef<HTMLElement | null>(null);
-  const zoneRefs = useRef<Record<Group, HTMLElement | null>>({ pinned: null, rest: null });
+  const zoneRefs = useRef<Partial<Record<Group, HTMLElement | null>>>({});
 
   const isFiltering = searchQuery.trim() !== "";
   const filteredProjects = projects.filter((p) =>
@@ -152,20 +141,33 @@ export function Sidebar({
   const byId = new Map(projects.map((p) => [p.id, p]));
   const dragging = drag?.active ? drag : null;
 
-  // Ids per group as shown: the dragged card leaves its slot and a gap
-  // (placeholder) opens where it would land.
+  useEffect(() => {
+    if (projects.length <= 4 && searchQuery) {
+      setSearchQuery("");
+    }
+  }, [projects.length, searchQuery]);
+
+  useEffect(() => {
+    if (!isOpen && dragRef.current) {
+      dragRef.current = null;
+      setDrag(null);
+    }
+  }, [isOpen]);
+
   const columns = (group: Group): string[] => {
     const ids = filteredProjects
-      .filter((p) => p.pinned === (group === "pinned") && p.id !== dragging?.id)
+      .filter((p) => groupOf(p) === group && p.id !== dragging?.id)
       .map((p) => p.id);
     if (dragging?.target.group === group) {
       ids.splice(Math.min(dragging.target.index, ids.length), 0, PLACEHOLDER);
     }
     return ids;
   };
-  const pinnedIds = columns("pinned");
-  const restIds = columns("rest");
-  const setRowRef = useFlip(`${pinnedIds.join()}|${restIds.join()}`);
+  const groupIds = Object.fromEntries(GROUPS.map((g) => [g, columns(g)])) as Record<
+    Group,
+    string[]
+  >;
+  const setRowRef = useFlip(GROUPS.map((g) => groupIds[g].join()).join("|"));
 
   const update = (next: DragState | null) => {
     dragRef.current = next;
@@ -178,10 +180,11 @@ export function Sidebar({
     if (!isArmed) return;
 
     const targetAt = (y: number, id: string): DragState["target"] => {
-      const zones = (["pinned", "rest"] as const).flatMap((group) => {
+      const zones = GROUPS.flatMap((group) => {
         const el = zoneRefs.current[group];
         return el ? [{ group, rect: el.getBoundingClientRect(), el }] : [];
       });
+      if (zones.length === 0) return { group: "active", index: 0 };
       const zone =
         zones.find((z) => y >= z.rect.top && y <= z.rect.bottom) ??
         zones.reduce((best, z) => {
@@ -222,19 +225,23 @@ export function Sidebar({
         suppressClick.current = false;
       }, 0);
       if (!commit) return;
-      const pinned = current.target.group === "pinned";
-      const without = (group: Group) =>
-        projects
-          .filter((p) => p.pinned === (group === "pinned") && p.id !== current.id)
-          .map((p) => p.id);
-      const pinnedOrder = without("pinned");
-      const restOrder = without("rest");
-      (pinned ? pinnedOrder : restOrder).splice(current.target.index, 0, current.id);
-      const ids = [...pinnedOrder, ...restOrder];
+      const moved = projects.find((p) => p.id === current.id);
+      if (!moved) return;
+      const targetGroup = current.target.group;
+      const orders = Object.fromEntries(
+        GROUPS.map((g) => [
+          g,
+          projects.filter((p) => groupOf(p) === g && p.id !== current.id).map((p) => p.id),
+        ]),
+      ) as Record<Group, string[]>;
+      orders[targetGroup].splice(current.target.index, 0, current.id);
+      const ids = GROUPS.flatMap((g) => orders[g]);
+      const pinned = targetGroup === "pinned";
+      // Pinning keeps the status; any other zone is the new status.
+      const status = pinned ? moved.status : targetGroup;
       const before = projects.map((p) => p.id).join();
-      const wasPinned = projects.find((p) => p.id === current.id)?.pinned;
-      if (ids.join() === before && wasPinned === pinned) return;
-      onMove(current.id, pinned, ids);
+      if (ids.join() === before && groupOf(moved) === targetGroup) return;
+      onMove(current.id, { pinned, status }, ids);
     };
 
     const onUp = () => finish(true);
@@ -245,11 +252,13 @@ export function Sidebar({
     window.addEventListener("pointermove", onMovePointer);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onCancel);
+    window.addEventListener("blur", onCancel);
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("pointermove", onMovePointer);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onCancel);
+      window.removeEventListener("blur", onCancel);
       window.removeEventListener("keydown", onKey);
     };
   }, [isArmed, projects, onMove]);
@@ -257,9 +266,9 @@ export function Sidebar({
   const startDrag = (project: Project, e: React.PointerEvent<HTMLElement>) => {
     if (isFiltering || e.button !== 0) return;
     const row = e.currentTarget.getBoundingClientRect();
-    const group: Group = project.pinned ? "pinned" : "rest";
+    const group = groupOf(project);
     const index = projects
-      .filter((p) => p.pinned === project.pinned)
+      .filter((p) => groupOf(p) === group)
       .findIndex((p) => p.id === project.id);
     update({
       id: project.id,
@@ -306,10 +315,8 @@ export function Sidebar({
             <ProjectRow
               project={p}
               isSelected={id === selectedProjectId}
-              openTasks={taskCounts[id] ?? 0}
               canDrag={!isFiltering}
               onSelect={select}
-              onTogglePin={onTogglePin}
               onPointerDown={(e) => startDrag(p, e)}
             />
           </li>
@@ -318,7 +325,6 @@ export function Sidebar({
     </ul>
   );
 
-  const showPinned = pinnedIds.length > 0 || dragging !== null;
   const draggedProject = dragging ? byId.get(dragging.id) : undefined;
 
   return (
@@ -326,7 +332,7 @@ export function Sidebar({
       aria-hidden={!isOpen}
       inert={!isOpen}
       className={cn(
-        "flex-shrink-0 bg-carbon overflow-hidden transition-[width] duration-200 ease-out select-none",
+        "flex-shrink-0 bg-carbon overflow-hidden transition-[width] duration-[150ms] ease-out select-none border-r border-obsidian",
         isOpen ? "w-64" : "w-0",
       )}
     >
@@ -344,12 +350,12 @@ export function Sidebar({
             <rect width="24" height="24" rx="6" className="fill-elevated" />
             <path
               d="M15 7.5H9.5C8.11929 7.5 7 8.61929 7 10C7 11.3807 8.11929 12.5 9.5 12.5H14.5C15.8807 12.5 17 13.6193 17 15C17 16.3807 15.8807 17.5 14.5 17.5H9"
-              className="stroke-acid-lime"
+              className="stroke-accent"
               strokeWidth="2.2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
-            <circle cx="15.5" cy="7.5" r="1.5" className="fill-acid-lime" />
+            <circle cx="15.5" cy="7.5" r="1.5" className="fill-accent" />
           </svg>
           <span className="text-sm font-semibold tracking-tight text-paper pointer-events-none">
             saispace
@@ -362,17 +368,19 @@ export function Sidebar({
             onClick={onSelectGlobal}
             aria-current={isGlobalSelected ? "page" : undefined}
             className={cn(
-              "w-full flex items-center gap-2.5 px-2.5 h-10 rounded-md text-sm text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+              "relative w-full flex items-center gap-2.5 px-3 h-10 rounded-md text-sm text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
               isGlobalSelected
                 ? "bg-elevated text-paper font-medium"
                 : "text-mist hover:text-paper hover:bg-obsidian",
             )}
           >
-            <Globe className="w-4 h-4 flex-shrink-0 text-fog" />
+            <Globe
+              className={cn("w-4 h-4 flex-shrink-0", isGlobalSelected ? "text-paper" : "text-fog")}
+            />
             <span className="flex-1">Global</span>
             {pendingRequests > 0 && (
               <span
-                className="min-w-5 h-5 px-1.5 rounded-full bg-acid-lime text-void text-xs font-semibold flex items-center justify-center tabular-nums"
+                className="min-w-5 h-5 px-1.5 rounded-full bg-accent text-accent-ink text-xs font-semibold flex items-center justify-center tabular-nums"
                 title="Solicitudes de acceso a claves"
               >
                 {pendingRequests}
@@ -381,50 +389,76 @@ export function Sidebar({
           </button>
         </div>
 
-        {projects.length > 4 && (
-          <div className="px-3 pb-2 flex-shrink-0">
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-fog pointer-events-none" />
+        <div className="flex items-center gap-0.5 pl-4 pr-3 h-9 flex-shrink-0">
+          {isSearchOpen ? (
+            <div className="relative flex-1 min-w-0 -ml-1.5">
+              <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-fog pointer-events-none" />
               <input
+                // biome-ignore lint/a11y/noAutofocus: opened on demand by the search button
+                autoFocus
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar proyectos…"
+                onKeyDown={(e) => e.key === "Escape" && closeSearch()}
+                onBlur={() => !searchQuery && setIsSearchOpen(false)}
+                placeholder="Buscar…"
                 aria-label="Buscar proyectos"
-                className="w-full h-8 pl-8 pr-2.5 text-xs bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 transition-colors duration-[120ms]"
+                className="w-full h-7 pl-7 pr-7 text-xs bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
               />
+              <button
+                type="button"
+                onClick={closeSearch}
+                aria-label="Cerrar búsqueda"
+                className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6 rounded flex items-center justify-center text-fog hover:text-paper hover:bg-elevated transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+              >
+                <X className="w-3 h-3" />
+              </button>
             </div>
-          </div>
-        )}
-
-        <div className="flex items-center justify-between pl-4 pr-3 h-8 flex-shrink-0">
-          <span className="text-xs font-semibold text-fog">Proyectos</span>
+          ) : (
+            <>
+              <span className="flex-1 text-xs font-semibold text-fog">Proyectos</span>
+              {projects.length > 4 && (
+                <button
+                  type="button"
+                  onClick={() => setIsSearchOpen(true)}
+                  aria-label="Buscar proyectos"
+                  title="Buscar proyectos"
+                  className="h-7 w-7 flex items-center justify-center rounded-md text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                >
+                  <Search className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </>
+          )}
           <button
             type="button"
             onClick={onOpenDirectoryPicker}
             aria-label="Añadir carpeta"
             title="Añadir carpeta"
-            className="h-7 w-7 flex items-center justify-center rounded-md text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+            className="h-7 w-7 flex-shrink-0 flex items-center justify-center rounded-md text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
           >
             <Plus className="w-4 h-4" />
           </button>
         </div>
 
-        <nav ref={navRef} className="flex-1 overflow-y-auto px-3 pb-3" aria-label="Proyectos">
-          {showPinned && (
-            <Fragment>
-              <p className="flex items-center gap-1.5 px-2.5 pt-1 pb-1 text-xs text-fog">
-                <Pin className="w-3 h-3" />
-                Fijados
-                {dragging && pinnedIds.length === 0 && (
-                  <span className="text-ash">· suelta aquí para fijar</span>
-                )}
-              </p>
-              {renderColumn("pinned", pinnedIds)}
-              <div className="h-px bg-obsidian mx-2.5 my-2" />
-            </Fragment>
-          )}
-          {renderColumn("rest", restIds)}
+        <nav
+          ref={navRef}
+          className="flex-1 min-h-0 overflow-y-auto px-3 pb-3"
+          aria-label="Proyectos"
+        >
+          {GROUPS.map((group) => {
+            const ids = groupIds[group];
+            // Empty zones appear only while dragging, as drop targets.
+            if (ids.length === 0 && !dragging) return null;
+            return (
+              <Fragment key={group}>
+                <p className="px-2.5 pt-3 pb-1 text-[11px] font-medium text-ash first:pt-1">
+                  {GROUP_LABEL[group]}
+                </p>
+                {renderColumn(group, ids)}
+              </Fragment>
+            );
+          })}
 
           {filteredProjects.length === 0 && (
             <div className="py-8 text-center text-xs text-fog space-y-1">
@@ -433,6 +467,19 @@ export function Sidebar({
             </div>
           )}
         </nav>
+        <div className="px-3 pb-3 pt-1 flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            aria-label="Configuración"
+            title="Configuración"
+            className="w-full flex h-9 items-center gap-2.5 px-3 rounded-md text-sm text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+          >
+            <Settings className="h-4 w-4 flex-shrink-0" />
+            <span className="truncate">Configuración</span>
+          </button>
+        </div>
+        <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       </div>
       {dragging && draggedProject && (
         <div
@@ -446,10 +493,8 @@ export function Sidebar({
           <ProjectRow
             project={draggedProject}
             isSelected={false}
-            openTasks={taskCounts[draggedProject.id] ?? 0}
             canDrag
             onSelect={() => {}}
-            onTogglePin={() => {}}
             floating
           />
         </div>

@@ -111,6 +111,18 @@ pub struct MemoryContext {
     /// Lessons tied to those hosts with an `env:<host>` trigger.
     #[serde(default)]
     pub environment: Vec<Memory>,
+    /// Open tasks of the project's active plan, so a new or compacted session
+    /// still sees what was left to finish.
+    #[serde(default)]
+    pub open_tasks: Vec<OpenTask>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OpenTask {
+    pub id: Uuid,
+    pub title: String,
+    pub goal: Option<String>,
+    pub status: super::task::TaskStatus,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

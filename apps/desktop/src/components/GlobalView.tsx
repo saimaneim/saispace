@@ -1,13 +1,11 @@
-import { Brain, FileText, KeyRound, Plug, Sparkles } from "lucide-react";
+import { Brain, FileText, KeyRound, Plug, Search, Wand2, X } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, formatError } from "../lib/api";
 import type { AiInventory } from "../lib/types";
 import { cn } from "../lib/utils";
-import { KpiPanel } from "./KpiPanel";
 import { Markdown } from "./Markdown";
 import { MemoryTab } from "./MemoryTab";
-import { MemoryUsagePanel } from "./MemoryUsagePanel";
 import { SecretsPanel } from "./SecretsPanel";
 import { TechIcon } from "./TechIcon";
 
@@ -30,11 +28,12 @@ const EMPTY: AiInventory = {
 
 function SectionTitle({ children, className }: { children: string; className?: string }) {
   return (
-    <h3 className={cn("text-xs font-semibold text-fog px-1 pt-5 pb-2", className)}>{children}</h3>
+    <h3 className={cn("text-xs font-semibold text-fog px-1 pt-5 pb-2 tabular-nums", className)}>
+      {children}
+    </h3>
   );
 }
 
-/** Agent logo (Claude, OpenCode…) with its name as tooltip. */
 function ToolBadge({ tool, disabled }: { tool: string; disabled?: boolean }) {
   return (
     <span
@@ -54,38 +53,61 @@ function InstructionsPanel({ inventory }: { inventory: AiInventory }) {
   if (!file) {
     return (
       <p className="flex-1 flex items-center justify-center text-sm text-fog">
-        No hay instrucciones globales (CLAUDE.md, AGENTS.md, GEMINI.md).
+        Sin instrucciones globales.
       </p>
     );
   }
   return (
     <div className="flex-1 flex min-h-0">
-      <aside className="w-64 flex-shrink-0 bg-carbon p-3 space-y-1 overflow-y-auto">
-        {inventory.instructions.map((item, index) => (
-          <button
-            key={item.path}
-            type="button"
-            onClick={() => setSelected(index)}
-            className={cn(
-              "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
-              index === selected ? "bg-elevated text-paper" : "text-mist hover:bg-obsidian",
-            )}
-          >
-            <TechIcon name={item.tool} className="w-5 h-5" />
-            <span className="min-w-0">
-              <span className="block text-sm font-medium">{item.tool}</span>
-              <span className="block text-xs text-fog truncate">{item.path.split("/").pop()}</span>
-            </span>
-          </button>
-        ))}
+      <aside className="w-64 flex-shrink-0 bg-carbon p-3 space-y-0.5 overflow-y-auto">
+        {inventory.instructions.map((item, index) => {
+          const isSelected = index === selected;
+          return (
+            <button
+              key={item.path}
+              type="button"
+              onClick={() => setSelected(index)}
+              aria-current={isSelected ? "true" : undefined}
+              className={cn(
+                "relative w-full flex items-center gap-2.5 pl-3 pr-2.5 py-2 rounded-md text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
+                isSelected ? "bg-elevated text-paper" : "text-mist hover:bg-obsidian",
+              )}
+            >
+              <TechIcon name={item.tool} className="w-5 h-5" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium truncate">{item.tool}</span>
+                <span className="block text-xs text-fog truncate font-mono">
+                  {item.path.split("/").pop()}
+                </span>
+              </span>
+            </button>
+          );
+        })}
       </aside>
-      <div className="flex-1 overflow-y-auto px-8 py-6">
-        <p className="text-xs text-fog mb-4 select-text">{file.path}</p>
-        <Markdown content={file.content} className="max-w-[72ch]" />
-        {file.truncated && <p className="text-xs text-status-amber mt-4">Fichero recortado.</p>}
+      <div className="flex-1 overflow-y-auto px-7 py-5">
+        <div className="max-w-[76ch] space-y-3">
+          <p className="text-xs text-fog font-mono truncate select-text" title={file.path}>
+            {file.path}
+          </p>
+          <div className="bg-carbon rounded-xl px-6 py-5">
+            <Markdown content={file.content} />
+          </div>
+          {file.truncated && <p className="text-xs text-status-amber">Fichero recortado.</p>}
+        </div>
       </div>
     </div>
   );
+}
+
+/** What a hook does, in words: the command itself stays in the tooltip-free detail. */
+function hookPurpose(command: string, event: string): string {
+  if (command.includes("sai memory context")) return "Carga la memoria al empezar";
+  if (command.includes("sai memory nudge")) {
+    if (event === "UserPromptSubmit") return "Detecta cuando corriges al agente";
+    if (event === "Stop") return "Pide guardar lo aprendido al terminar";
+    if (event.startsWith("PostToolUse")) return "Recuerda la solución si un error se repite";
+  }
+  return command;
 }
 
 function SkillsPanel({ inventory }: { inventory: AiInventory }) {
@@ -102,34 +124,53 @@ function SkillsPanel({ inventory }: { inventory: AiInventory }) {
 
   return (
     <div className="flex-1 overflow-y-auto px-6 pt-3 pb-6">
-      <input
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder={`Filtrar ${inventory.skills.length} skills…`}
-        aria-label="Filtrar skills"
-        className="w-full max-w-sm h-9 px-3 mb-4 text-sm bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
-      />
-      {groups.map(([source, skills], index) => (
-        <section key={source}>
-          <SectionTitle className={index === 0 ? "pt-1" : "pt-6"}>
-            {`${source} · ${skills.length}`}
-          </SectionTitle>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
-            {skills.map((skill) => (
-              <div
-                key={skill.path}
-                className="bg-carbon rounded-lg px-4 py-3.5 min-w-0"
-                title={skill.path}
-              >
-                <p className="text-sm font-medium text-paper truncate">{skill.name}</p>
-                <p className="text-xs text-fog line-clamp-2 mt-1 leading-relaxed">
-                  {skill.description || "Sin descripción"}
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-      ))}
+      <div className="relative w-full max-w-sm mb-4">
+        <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-fog pointer-events-none" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={`Filtrar ${inventory.skills.length} skills…`}
+          aria-label="Filtrar skills"
+          className="w-full h-9 pl-8 pr-8 text-sm bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 transition-colors duration-[120ms]"
+        />
+        {query && (
+          <button
+            type="button"
+            onClick={() => setQuery("")}
+            aria-label="Limpiar filtro"
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 h-6 w-6 rounded flex items-center justify-center text-fog hover:text-paper hover:bg-elevated transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+      {groups.length === 0 ? (
+        <p className="py-12 text-center text-sm text-fog">
+          {query ? "Ninguna skill coincide con el filtro." : "Sin skills instaladas."}
+        </p>
+      ) : (
+        groups.map(([source, skills], index) => (
+          <section key={source}>
+            <SectionTitle className={index === 0 ? "pt-1" : "pt-6"}>
+              {`${source} · ${skills.length}`}
+            </SectionTitle>
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
+              {skills.map((skill) => (
+                <div
+                  key={skill.path}
+                  className="bg-carbon hover:bg-obsidian/80 transition-colors duration-[120ms] rounded-xl px-4 py-3.5 min-w-0"
+                  title={skill.path}
+                >
+                  <p className="text-sm font-medium text-paper truncate">{skill.name}</p>
+                  <p className="text-xs text-fog line-clamp-2 mt-1 leading-relaxed break-words">
+                    {skill.description || "Sin descripción"}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        ))
+      )}
     </div>
   );
 }
@@ -150,55 +191,111 @@ function Row({
   return (
     <div
       className={cn(
-        "flex items-center gap-3 px-3 h-12 rounded-md bg-carbon",
+        "flex items-center gap-3 px-3.5 h-11 rounded-lg bg-carbon hover:bg-obsidian/80 transition-colors duration-[120ms] min-w-0",
         muted && "opacity-50",
       )}
     >
       <TechIcon name={icon} className="w-5 h-5" />
       <span className="text-sm font-medium text-paper w-44 truncate flex-shrink-0">{title}</span>
-      <span className="text-xs text-fog font-mono truncate flex-1 select-text">{detail}</span>
+      <span className="text-xs text-fog font-mono truncate flex-1 min-w-0 select-text">
+        {detail}
+      </span>
       {meta}
     </div>
   );
 }
 
+/** One row per hook purpose: the same job on several events shows once. */
+function groupHooks(hooks: AiInventory["hooks"]) {
+  const map = new Map<
+    string,
+    { tool: string; command: string; purpose: string; events: string[] }
+  >();
+  for (const hook of hooks) {
+    const purpose = hookPurpose(hook.command, hook.event);
+    const key = `${hook.tool}\u0000${hook.command}\u0000${purpose}`;
+    const entry = map.get(key) ?? { tool: hook.tool, command: hook.command, purpose, events: [] };
+    if (!entry.events.includes(hook.event)) entry.events.push(hook.event);
+    map.set(key, entry);
+  }
+  return [...map.values()];
+}
+
 function ConnectionsPanel({ inventory }: { inventory: AiInventory }) {
+  const isEmpty =
+    inventory.mcp_servers.length === 0 &&
+    inventory.plugins.length === 0 &&
+    inventory.hooks.length === 0;
+
+  if (isEmpty && inventory.warnings.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-sm text-fog">
+        Sin integraciones detectadas.
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 overflow-y-auto px-6 pt-2 pb-6 space-y-1.5">
-      <SectionTitle className="pt-1">Servidores MCP</SectionTitle>
-      {inventory.mcp_servers.map((server) => (
-        <Row
-          key={`${server.tool}-${server.name}`}
-          icon={server.name}
-          title={server.name}
-          detail={server.target}
-          meta={<ToolBadge tool={server.tool} disabled={!server.enabled} />}
-          muted={!server.enabled}
-        />
-      ))}
-      <SectionTitle>Plugins</SectionTitle>
-      {inventory.plugins.map((plugin) => (
-        <Row
-          key={`${plugin.tool}-${plugin.name}`}
-          icon={plugin.name.split("@")[0]}
-          title={plugin.name.split("@")[0]}
-          detail={plugin.version ? `v${plugin.version}` : ""}
-          meta={<ToolBadge tool={plugin.tool} disabled={!plugin.enabled} />}
-          muted={!plugin.enabled}
-        />
-      ))}
-      {inventory.hooks.length > 0 && <SectionTitle>Hooks</SectionTitle>}
-      {inventory.hooks.map((hook) => (
-        <Row
-          key={`${hook.tool}-${hook.event}-${hook.command}`}
-          icon={hook.tool}
-          title={hook.event}
-          detail={hook.command}
-          meta={<ToolBadge tool={hook.tool} />}
-        />
-      ))}
+      {inventory.mcp_servers.length > 0 && (
+        <>
+          <SectionTitle className="pt-1">Servidores MCP</SectionTitle>
+          {inventory.mcp_servers.map((server) => (
+            <Row
+              key={`${server.tool}-${server.name}`}
+              icon={server.name}
+              title={server.name}
+              detail={server.target}
+              meta={<ToolBadge tool={server.tool} disabled={!server.enabled} />}
+              muted={!server.enabled}
+            />
+          ))}
+        </>
+      )}
+      {inventory.plugins.length > 0 && (
+        <>
+          <SectionTitle className={inventory.mcp_servers.length === 0 ? "pt-1" : undefined}>
+            Plugins
+          </SectionTitle>
+          {inventory.plugins.map((plugin) => (
+            <Row
+              key={`${plugin.tool}-${plugin.name}`}
+              icon={plugin.name.split("@")[0]}
+              title={plugin.name.split("@")[0]}
+              detail={plugin.version ? `v${plugin.version}` : ""}
+              meta={<ToolBadge tool={plugin.tool} disabled={!plugin.enabled} />}
+              muted={!plugin.enabled}
+            />
+          ))}
+        </>
+      )}
+      {inventory.hooks.length > 0 && (
+        <>
+          <SectionTitle>Hooks</SectionTitle>
+          {groupHooks(inventory.hooks).map((hook) => (
+            <div
+              key={`${hook.tool}-${hook.command}-${hook.purpose}`}
+              title={hook.command}
+              className="flex items-center gap-3 px-3 min-h-10 py-2 rounded-md bg-carbon min-w-0"
+            >
+              <TechIcon name={hook.tool} className="w-5 h-5" />
+              <span className="text-sm text-paper flex-1 min-w-0 break-words">{hook.purpose}</span>
+              <span className="flex flex-wrap justify-end gap-1 flex-shrink-0">
+                {hook.events.map((event) => (
+                  <span
+                    key={event}
+                    className="h-5 px-1.5 rounded bg-obsidian text-[11px] text-fog font-mono flex items-center"
+                  >
+                    {event}
+                  </span>
+                ))}
+              </span>
+            </div>
+          ))}
+        </>
+      )}
       {inventory.warnings.map((warning) => (
-        <p key={warning} className="text-xs text-status-amber pt-2">
+        <p key={warning} className="text-xs text-status-amber pt-2 break-words">
           {warning}
         </p>
       ))}
@@ -209,7 +306,6 @@ function ConnectionsPanel({ inventory }: { inventory: AiInventory }) {
 export function GlobalView({ refreshKey, pendingRequests, onSecretsChanged }: GlobalViewProps) {
   const [tab, setTab] = useState<GlobalTab>("memory");
   const [inventory, setInventory] = useState<AiInventory>(EMPTY);
-  const [focusMemoryId, setFocusMemoryId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadInventory = useCallback(async () => {
@@ -227,7 +323,7 @@ export function GlobalView({ refreshKey, pendingRequests, onSecretsChanged }: Gl
   const tabs: { id: GlobalTab; label: string; icon: typeof Brain; count?: number }[] = [
     { id: "memory", label: "Memoria", icon: Brain },
     { id: "instructions", label: "Instrucciones", icon: FileText },
-    { id: "skills", label: "Skills", icon: Sparkles, count: inventory.skills.length },
+    { id: "skills", label: "Skills", icon: Wand2, count: inventory.skills.length },
     {
       id: "connections",
       label: "MCP y plugins",
@@ -248,7 +344,7 @@ export function GlobalView({ refreshKey, pendingRequests, onSecretsChanged }: Gl
             aria-selected={tab === id}
             onClick={() => setTab(id)}
             className={cn(
-              "h-9 px-3 rounded-md text-sm font-medium flex items-center gap-2 transition-colors duration-[120ms] focus-visible:ring-2 focus-visible:ring-acid-lime/40 focus:outline-none",
+              "h-9 px-3 rounded-md text-sm font-medium flex items-center gap-2 transition-colors duration-[120ms] focus-visible:ring-2 focus-visible:ring-accent/40 focus:outline-none",
               tab === id ? "bg-elevated text-paper" : "text-fog hover:text-mist hover:bg-obsidian",
             )}
           >
@@ -258,7 +354,7 @@ export function GlobalView({ refreshKey, pendingRequests, onSecretsChanged }: Gl
               <span
                 className={cn(
                   "text-xs tabular-nums",
-                  id === "secrets" ? "text-acid-lime" : "text-fog",
+                  id === "secrets" ? "text-accent" : "text-fog",
                 )}
               >
                 {count}
@@ -271,9 +367,7 @@ export function GlobalView({ refreshKey, pendingRequests, onSecretsChanged }: Gl
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {tab === "memory" && (
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            <KpiPanel scope="global" refreshKey={refreshKey} />
-            <MemoryUsagePanel refreshKey={refreshKey} onSelectMemory={setFocusMemoryId} />
-            <MemoryTab project={null} refreshKey={refreshKey} focusId={focusMemoryId} />
+            <MemoryTab project={null} refreshKey={refreshKey} />
           </div>
         )}
         {tab === "instructions" && <InstructionsPanel inventory={inventory} />}

@@ -1,10 +1,22 @@
+import { Info, Lightbulb, MapPin, MessageCircleQuestion } from "lucide-react";
 import type { ReactNode } from "react";
+import { api } from "../lib/api";
 import { cn } from "../lib/utils";
 
 export interface MarkdownProps {
   content: string;
   className?: string;
 }
+
+const STRUCTURED_BOLD_RE = /^\*\*(.+?)(?:\*\*:\s*|:\*\*\s*)(.*)$/;
+const STRUCTURED_PLAIN_RE = /^(What|Why|Where|Learned):\s*(.*)$/i;
+
+const ROLE_META: Record<string, { icon: typeof Info; title: string }> = {
+  what: { icon: Info, title: "Qué (What)" },
+  why: { icon: MessageCircleQuestion, title: "Por qué (Why)" },
+  where: { icon: MapPin, title: "Dónde (Where)" },
+  learned: { icon: Lightbulb, title: "Aprendido (Learned)" },
+};
 
 function renderInline(text: string): ReactNode[] {
   const parts: ReactNode[] = [];
@@ -14,16 +26,18 @@ function renderInline(text: string): ReactNode[] {
   while (remaining.length > 0) {
     const codeMatch = remaining.match(/`([^`]+)`/);
     const boldMatch = remaining.match(/\*\*([^*]+)\*\*/);
+    const linkMatch = remaining.match(/\[([^\]]+)\]\(([^)\s]+)\)/);
 
-    let earliestMatch: {
-      type: "code" | "bold";
+    let earliest: {
+      type: "code" | "bold" | "link";
       index: number;
       length: number;
       content: string;
+      extra?: string;
     } | null = null;
 
     if (codeMatch && codeMatch.index !== undefined) {
-      earliestMatch = {
+      earliest = {
         type: "code",
         index: codeMatch.index,
         length: codeMatch[0].length,
@@ -32,8 +46,8 @@ function renderInline(text: string): ReactNode[] {
     }
 
     if (boldMatch && boldMatch.index !== undefined) {
-      if (!earliestMatch || boldMatch.index < earliestMatch.index) {
-        earliestMatch = {
+      if (!earliest || boldMatch.index < earliest.index) {
+        earliest = {
           type: "bold",
           index: boldMatch.index,
           length: boldMatch[0].length,
@@ -42,77 +56,177 @@ function renderInline(text: string): ReactNode[] {
       }
     }
 
-    if (!earliestMatch) {
+    if (linkMatch && linkMatch.index !== undefined) {
+      if (!earliest || linkMatch.index < earliest.index) {
+        earliest = {
+          type: "link",
+          index: linkMatch.index,
+          length: linkMatch[0].length,
+          content: linkMatch[1],
+          extra: linkMatch[2],
+        };
+      }
+    }
+
+    if (!earliest) {
       parts.push(remaining);
       break;
     }
 
-    if (earliestMatch.index > 0) {
-      parts.push(remaining.slice(0, earliestMatch.index));
+    if (earliest.index > 0) {
+      parts.push(remaining.slice(0, earliest.index));
     }
 
-    if (earliestMatch.type === "code") {
+    if (earliest.type === "code") {
       parts.push(
         <code
           key={`c-${key++}`}
-          className="px-1.5 py-0.5 rounded bg-obsidian text-bone font-mono text-xs"
+          className="px-1.5 py-0.5 rounded bg-obsidian text-bone font-mono text-xs break-words"
         >
-          {earliestMatch.content}
+          {earliest.content}
         </code>,
+      );
+    } else if (earliest.type === "bold") {
+      parts.push(
+        <strong key={`b-${key++}`} className="font-semibold text-paper">
+          {earliest.content}
+        </strong>,
+      );
+    } else if (earliest.extra && /^https?:\/\//i.test(earliest.extra)) {
+      const href = earliest.extra;
+      parts.push(
+        <button
+          key={`l-${key++}`}
+          type="button"
+          title={href}
+          onClick={() => void api.openUrl(href)}
+          className="text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent break-words inline text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/40 rounded-sm"
+        >
+          {earliest.content}
+        </button>,
       );
     } else {
       parts.push(
-        <strong key={`b-${key++}`} className="font-semibold text-paper">
-          {earliestMatch.content}
-        </strong>,
+        <span
+          key={`l-${key++}`}
+          title={earliest.extra}
+          className="text-paper underline decoration-smoke underline-offset-2 break-words"
+        >
+          {earliest.content}
+        </span>,
       );
     }
 
-    remaining = remaining.slice(earliestMatch.index + earliestMatch.length);
+    remaining = remaining.slice(earliest.index + earliest.length);
   }
 
   return parts;
 }
 
-export function Markdown({ content, className }: MarkdownProps) {
-  if (!content?.trim()) return null;
+function matchStructuredHeader(line: string): { label: string; value: string } | null {
+  const boldMatch = line.match(STRUCTURED_BOLD_RE);
+  if (boldMatch) {
+    return { label: boldMatch[1].trim(), value: boldMatch[2] };
+  }
+  const plainMatch = line.match(STRUCTURED_PLAIN_RE);
+  if (plainMatch) {
+    const raw = plainMatch[1];
+    const normalized = raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+    return { label: normalized, value: plainMatch[2] };
+  }
+  return null;
+}
 
-  const lines = content.split("\n");
+/** `| a | b |` -> ["a", "b"]; `\|` stays a literal pipe. */
+function splitRow(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split(/(?<!\\)\|/)
+    .map((cell) => cell.trim().replace(/\\\|/g, "|"));
+}
+
+function renderFlowBlocks(lines: string[], keyPrefix: string): ReactNode[] {
   const elements: ReactNode[] = [];
   let inCodeBlock = false;
   let codeBuffer: string[] = [];
   let listBuffer: { type: "ul" | "ol"; items: string[] } | null = null;
 
-  const flushList = (keyPrefix: string) => {
+  const flushList = (suffix: string) => {
     if (!listBuffer) return;
-    if (listBuffer.type === "ul") {
-      elements.push(
-        <ul key={`${keyPrefix}-ul`} className="my-2 space-y-1 pl-4 list-disc text-sm text-mist">
-          {listBuffer.items.map((item, i) => (
-            <li key={`li-${i}`}>{renderInline(item)}</li>
-          ))}
-        </ul>,
-      );
-    } else {
-      elements.push(
-        <ol key={`${keyPrefix}-ol`} className="my-2 space-y-1 pl-4 list-decimal text-sm text-mist">
-          {listBuffer.items.map((item, i) => (
-            <li key={`ol-${i}`}>{renderInline(item)}</li>
-          ))}
-        </ol>,
-      );
-    }
+    const Tag = listBuffer.type;
+    elements.push(
+      <Tag
+        key={`${keyPrefix}-${suffix}`}
+        className={cn(
+          "my-2 space-y-1 pl-4 text-sm text-mist",
+          listBuffer.type === "ul" ? "list-disc" : "list-decimal",
+        )}
+      >
+        {listBuffer.items.map((item, i) => (
+          <li key={`li-${i}`} className="break-words leading-relaxed">
+            {renderInline(item)}
+          </li>
+        ))}
+      </Tag>,
+    );
     listBuffer = null;
   };
 
+  let tableBuffer: string[] = [];
+  const flushTable = (suffix: string) => {
+    if (tableBuffer.length === 0) return;
+    const rows = tableBuffer.map(splitRow);
+    tableBuffer = [];
+    const hasHeader = rows.length > 1 && rows[1].every((c) => /^:?-{2,}:?$/.test(c));
+    const head = hasHeader ? rows[0] : null;
+    const body = hasHeader ? rows.slice(2) : rows;
+    elements.push(
+      <div key={`${keyPrefix}-tbl-${suffix}`} className="my-3 overflow-x-auto">
+        <table className="w-full text-xs border-collapse">
+          {head && (
+            <thead>
+              <tr className="border-b border-obsidian">
+                {head.map((cell, i) => (
+                  <th key={`th-${i}`} className="text-left font-semibold text-paper px-2.5 py-1.5">
+                    {renderInline(cell)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+          )}
+          <tbody>
+            {body.map((row, r) => (
+              <tr key={`tr-${r}`} className="border-b border-obsidian/60 last:border-0">
+                {row.map((cell, i) => (
+                  <td key={`td-${i}`} className="px-2.5 py-1.5 align-top text-mist break-words">
+                    {renderInline(cell)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>,
+    );
+  };
+
   lines.forEach((line, idx) => {
+    if (!inCodeBlock && /^\s*\|.*\|\s*$/.test(line)) {
+      flushList(`fl-t-${idx}`);
+      tableBuffer.push(line);
+      return;
+    }
+    flushTable(`${idx}`);
+
     if (line.startsWith("```")) {
       flushList(`fl-${idx}`);
       if (inCodeBlock) {
         elements.push(
           <pre
-            key={`code-${idx}`}
-            className="my-3 p-3.5 bg-obsidian rounded-md font-mono text-xs text-mist overflow-x-auto leading-relaxed"
+            key={`${keyPrefix}-code-${idx}`}
+            className="my-2.5 p-3.5 bg-obsidian rounded-md font-mono text-xs text-mist overflow-x-auto leading-relaxed"
           >
             <code>{codeBuffer.join("\n")}</code>
           </pre>,
@@ -133,34 +247,46 @@ export function Markdown({ content, className }: MarkdownProps) {
 
     const ulMatch = line.match(/^[-*]\s+(.*)$/);
     if (ulMatch) {
-      if (listBuffer && listBuffer.type !== "ul") {
-        flushList(`fl-ul-${idx}`);
-      }
-      if (!listBuffer) {
-        listBuffer = { type: "ul", items: [] };
-      }
+      if (listBuffer && listBuffer.type !== "ul") flushList(`fl-ul-${idx}`);
+      if (!listBuffer) listBuffer = { type: "ul", items: [] };
       listBuffer.items.push(ulMatch[1]);
       return;
     }
 
     const olMatch = line.match(/^\d+\.\s+(.*)$/);
     if (olMatch) {
-      if (listBuffer && listBuffer.type !== "ol") {
-        flushList(`fl-ol-${idx}`);
-      }
-      if (!listBuffer) {
-        listBuffer = { type: "ol", items: [] };
-      }
+      if (listBuffer && listBuffer.type !== "ol") flushList(`fl-ol-${idx}`);
+      if (!listBuffer) listBuffer = { type: "ol", items: [] };
       listBuffer.items.push(olMatch[1]);
       return;
     }
 
     flushList(`fl-post-${idx}`);
 
+    if (/^[-*_]{3,}\s*$/.test(line)) {
+      elements.push(<div key={`${keyPrefix}-hr-${idx}`} className="h-px bg-obsidian my-4" />);
+      return;
+    }
+
+    if (line.startsWith("#### ")) {
+      elements.push(
+        <h4
+          key={`${keyPrefix}-h4-${idx}`}
+          className="text-xs font-semibold text-bone mt-3 mb-1 font-sans break-words"
+        >
+          {renderInline(line.slice(5))}
+        </h4>,
+      );
+      return;
+    }
+
     if (line.startsWith("### ")) {
       elements.push(
-        <h3 key={`h3-${idx}`} className="text-sm font-semibold text-paper mt-4 mb-1.5 font-sans">
-          {renderInline(line.replace("### ", ""))}
+        <h3
+          key={`${keyPrefix}-h3-${idx}`}
+          className="text-sm font-semibold text-paper mt-4 mb-1.5 font-sans break-words"
+        >
+          {renderInline(line.slice(4))}
         </h3>,
       );
       return;
@@ -169,10 +295,10 @@ export function Markdown({ content, className }: MarkdownProps) {
     if (line.startsWith("## ")) {
       elements.push(
         <h2
-          key={`h2-${idx}`}
-          className="text-base font-semibold text-paper tracking-tight mt-5 mb-2 font-sans"
+          key={`${keyPrefix}-h2-${idx}`}
+          className="text-base font-semibold text-paper tracking-tight mt-5 mb-2 font-sans break-words"
         >
-          {renderInline(line.replace("## ", ""))}
+          {renderInline(line.slice(3))}
         </h2>,
       );
       return;
@@ -181,10 +307,10 @@ export function Markdown({ content, className }: MarkdownProps) {
     if (line.startsWith("# ")) {
       elements.push(
         <h1
-          key={`h1-${idx}`}
-          className="text-lg font-bold text-paper tracking-tight mt-6 mb-2 font-sans"
+          key={`${keyPrefix}-h1-${idx}`}
+          className="text-lg font-bold text-paper tracking-tight mt-5 mb-2 font-sans break-words"
         >
-          {renderInline(line.replace("# ", ""))}
+          {renderInline(line.slice(2))}
         </h1>,
       );
       return;
@@ -193,59 +319,138 @@ export function Markdown({ content, className }: MarkdownProps) {
     if (line.startsWith("> ")) {
       elements.push(
         <blockquote
-          key={`quote-${idx}`}
-          className="bg-obsidian/60 px-3 py-2 rounded-md text-fog italic my-2 text-sm font-sans"
+          key={`${keyPrefix}-quote-${idx}`}
+          className="bg-obsidian/60 px-3.5 py-2 rounded-md my-2 text-sm text-fog font-sans flex gap-2.5 min-w-0"
         >
-          {renderInline(line.replace("> ", ""))}
+          <span className="w-0.5 rounded-full bg-smoke flex-shrink-0" aria-hidden="true" />
+          <span className="min-w-0 flex-1 italic break-words">{renderInline(line.slice(2))}</span>
         </blockquote>,
       );
       return;
     }
 
-    const sectionMatch = line.match(/^\*\*(.+?)(?:\*\*:\s*|:\*\*\s*)(.*)$/);
-    if (sectionMatch) {
-      const keyLabel = sectionMatch[1];
-      const valText = sectionMatch[2];
-      elements.push(
-        <div key={`sec-${idx}`} className="my-3">
-          <span className="block text-xs uppercase tracking-wider text-fog font-medium mb-1">
-            {keyLabel}
-          </span>
-          {valText ? (
-            <div className="text-sm text-mist leading-relaxed">{renderInline(valText)}</div>
-          ) : null}
-        </div>,
-      );
-      return;
-    }
-
-    if (!line.trim()) {
-      return;
-    }
+    if (!line.trim()) return;
 
     elements.push(
-      <p key={`p-${idx}`} className="text-sm text-mist leading-relaxed my-2">
+      <p
+        key={`${keyPrefix}-p-${idx}`}
+        className="text-sm text-mist leading-relaxed my-1.5 break-words"
+      >
         {renderInline(line)}
       </p>,
     );
   });
 
   flushList("final");
+  flushTable("final");
 
   if (inCodeBlock && codeBuffer.length > 0) {
     elements.push(
       <pre
-        key="code-final"
-        className="my-3 p-3.5 bg-obsidian rounded-md font-mono text-xs text-mist overflow-x-auto leading-relaxed"
+        key={`${keyPrefix}-code-final`}
+        className="my-2.5 p-3.5 bg-obsidian rounded-md font-mono text-xs text-mist overflow-x-auto leading-relaxed"
       >
         <code>{codeBuffer.join("\n")}</code>
       </pre>,
     );
   }
 
+  return elements;
+}
+
+export function Markdown({ content, className }: MarkdownProps) {
+  if (!content?.trim()) return null;
+
+  const lines = content.split("\n");
+  const blocks: ReactNode[] = [];
+  let plainBuffer: string[] = [];
+  let activeSection: { label: string; lines: string[] } | null = null;
+  let inCodeBlock = false;
+
+  const flushPlain = (suffix: string) => {
+    if (plainBuffer.length === 0) return;
+    blocks.push(...renderFlowBlocks(plainBuffer, `plain-${suffix}`));
+    plainBuffer = [];
+  };
+
+  const flushSection = (suffix: string) => {
+    if (!activeSection) return;
+    const roleKey = activeSection.label.toLowerCase();
+    const role = Object.hasOwn(ROLE_META, roleKey) ? ROLE_META[roleKey] : undefined;
+    const body = renderFlowBlocks(activeSection.lines, `sec-${suffix}`);
+
+    if (role) {
+      const Icon = role.icon;
+      blocks.push(
+        <div
+          key={`section-${suffix}`}
+          className="py-2 first:pt-0 last:pb-0 flex items-start gap-3 min-w-0"
+        >
+          <span title={role.title} className="mt-1 flex-shrink-0">
+            <Icon
+              className={cn("h-4 w-4", roleKey === "learned" ? "text-accent" : "text-fog")}
+              aria-label={activeSection.label}
+            />
+          </span>
+          <div className="min-w-0 flex-1 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">{body}</div>
+        </div>,
+      );
+    } else {
+      blocks.push(
+        <div key={`section-${suffix}`} className="py-1.5 min-w-0">
+          <p className="text-xs font-semibold text-paper mb-0.5 break-words">
+            {activeSection.label}
+          </p>
+          <div className="min-w-0 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">{body}</div>
+        </div>,
+      );
+    }
+    activeSection = null;
+  };
+
+  lines.forEach((line, idx) => {
+    if (line.startsWith("```")) {
+      inCodeBlock = !inCodeBlock;
+      if (activeSection) activeSection.lines.push(line);
+      else plainBuffer.push(line);
+      return;
+    }
+
+    if (!inCodeBlock) {
+      const section = matchStructuredHeader(line);
+      if (section) {
+        flushPlain(`pre-${idx}`);
+        flushSection(`pre-${idx}`);
+        activeSection = {
+          label: section.label,
+          lines: section.value ? [section.value] : [],
+        };
+        return;
+      }
+
+      if (activeSection && (/^#{1,4}\s/.test(line) || /^[-*_]{3,}\s*$/.test(line))) {
+        flushSection(`head-${idx}`);
+      }
+    }
+
+    if (activeSection) {
+      activeSection.lines.push(line);
+    } else {
+      plainBuffer.push(line);
+    }
+  });
+
+  flushPlain("end");
+  flushSection("end");
+
   return (
-    <div className={cn("max-w-[70ch] text-sm leading-relaxed text-mist select-text", className)}>
-      {elements}
+    <div
+      className={cn(
+        "max-w-[70ch] text-sm leading-relaxed text-mist select-text min-w-0",
+        className,
+      )}
+    >
+      {blocks}
     </div>
   );
 }

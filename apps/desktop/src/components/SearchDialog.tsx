@@ -1,4 +1,4 @@
-import { Brain, FileText, ListTodo, ScrollText, Search } from "lucide-react";
+import { Brain, FileText, ListTodo, ScrollText, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api, formatError } from "../lib/api";
 import type { SearchHit, SearchKind } from "../lib/types";
@@ -34,7 +34,7 @@ function Snippet({ text }: { text: string }) {
     <>
       {parts.map((part, i) =>
         part.startsWith("[") && part.endsWith("]") ? (
-          <span key={i} className="text-acid-lime">
+          <span key={i} className="text-accent font-medium">
             {part.slice(1, -1)}
           </span>
         ) : (
@@ -71,7 +71,6 @@ export function SearchDialog({
     if (!open) return;
     const trimmed = query.trim();
     if (!/[\p{L}\p{N}]/u.test(trimmed)) {
-      // Invalidate any search still in flight so it cannot refill the list.
       requestId.current++;
       setHits([]);
       setError(null);
@@ -115,10 +114,10 @@ export function SearchDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl p-0 top-[22%] translate-y-0 overflow-hidden">
+      <DialogContent className="max-w-xl p-0 top-[14%] translate-y-0 overflow-hidden bg-carbon">
         <DialogTitle className="sr-only">Buscar</DialogTitle>
         <DialogDescription className="sr-only">
-          Busca en notas de contexto, tareas y reglas por tecnología.
+          Busca en notas de contexto, tareas, reglas y memorias.
         </DialogDescription>
 
         <div className="flex items-center gap-3 px-4 h-12 bg-obsidian" onKeyDown={onKeyDown}>
@@ -127,17 +126,27 @@ export function SearchDialog({
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar en contexto, tareas y reglas…"
+            placeholder="Buscar…"
             aria-label="Consulta de búsqueda"
             className="flex-1 min-w-0 h-full bg-transparent text-sm text-paper placeholder:text-fog focus:outline-none"
           />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Limpiar consulta"
+              className="h-6 w-6 rounded flex items-center justify-center text-fog hover:text-paper hover:bg-elevated transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 flex-shrink-0"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
           {activeProjectId && (
             <button
               type="button"
               onClick={() => setOnlyProject((v) => !v)}
               aria-pressed={onlyProject}
               className={cn(
-                "h-7 px-2.5 mr-6 rounded-md text-xs flex-shrink-0 transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+                "h-7 px-2.5 mr-8 rounded-md text-xs font-medium flex-shrink-0 transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
                 onlyProject ? "bg-elevated text-paper" : "text-fog hover:text-mist",
               )}
             >
@@ -146,10 +155,14 @@ export function SearchDialog({
           )}
         </div>
 
-        <div className="max-h-96 overflow-y-auto p-2" onKeyDown={onKeyDown}>
+        <div
+          className="max-h-[min(24rem,calc(100vh-12rem))] overflow-y-auto overscroll-contain p-2 space-y-0.5"
+          onKeyDown={onKeyDown}
+        >
           {error && <p className="px-3 py-2 text-sm text-coral-red">{error}</p>}
           {hits.map((hit, i) => {
             const Icon = KIND_ICON[hit.kind];
+            const isSelected = i === selected;
             return (
               <button
                 key={`${hit.kind}-${hit.id}`}
@@ -157,27 +170,29 @@ export function SearchDialog({
                 onClick={() => choose(hit)}
                 onMouseEnter={() => setSelected(i)}
                 className={cn(
-                  "w-full flex items-start gap-3 px-3 py-2 rounded-md text-left transition-colors duration-[120ms] focus:outline-none",
-                  i === selected ? "bg-elevated" : "hover:bg-obsidian",
+                  "relative w-full flex items-start gap-3 pl-3.5 pr-3 py-2.5 rounded-md text-left transition-colors duration-[120ms] focus:outline-none",
+                  isSelected ? "bg-elevated" : "hover:bg-obsidian",
                 )}
               >
                 <Icon className="w-4 h-4 mt-0.5 text-fog flex-shrink-0" />
                 <span className="flex-1 min-w-0">
-                  <span className="block text-sm text-paper truncate">{hit.title}</span>
-                  <span className="block text-xs text-fog line-clamp-2">
+                  <span className="block text-sm font-medium text-paper truncate">{hit.title}</span>
+                  <span className="block text-xs text-fog line-clamp-2 mt-0.5 break-words">
                     <Snippet text={hit.snippet} />
                   </span>
                 </span>
-                <span className="text-xs text-fog flex-shrink-0">{KIND_LABEL[hit.kind]}</span>
+                <span className="text-[11px] text-fog bg-obsidian px-2 py-0.5 rounded-md flex-shrink-0">
+                  {KIND_LABEL[hit.kind]}
+                </span>
               </button>
             );
           })}
           {!error && hasQuery && hits.length === 0 && (
-            <p className="px-3 py-6 text-center text-sm text-fog">Sin resultados.</p>
+            <p className="px-3 py-8 text-center text-sm text-fog">Sin resultados</p>
           )}
           {!hasQuery && (
-            <p className="px-3 py-6 text-center text-sm text-fog">
-              Escribe para buscar. Usa las flechas y Enter para abrir.
+            <p className="px-3 py-8 text-center text-xs text-fog">
+              ↑↓ navegar · Enter abrir · Esc cerrar
             </p>
           )}
         </div>

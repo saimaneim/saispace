@@ -2,17 +2,20 @@ import { emit } from "@tauri-apps/api/event";
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import type {
   ActivityEvent,
+  AiInventory,
+  ContextFile,
   CreateProjectInput,
   CreateTaskInput,
   DirectoryListing,
   Goal,
-  KpiHistory,
   Memory,
   MemoryKind,
   Plan,
   PlanFilter,
   Project,
   Task,
+  Technology,
+  TechRule,
   UpdateGoalInput,
   UpdateMemoryInput,
   UpdateProjectInput,
@@ -35,9 +38,13 @@ export interface FakeBackendOptions {
   /** Directory tree for the picker: absolute path -> child folder names. */
   directories?: Record<string, string[]>;
   home?: string;
-  kpiHistory?: KpiHistory | ((args: { days?: number; scope?: string }) => KpiHistory);
   /** Triggers by memory id (`memory_triggers`). */
   triggers?: Record<string, string[]>;
+  contextFiles?: ContextFile[];
+  contextContents?: Record<string, string>;
+  technologies?: Technology[];
+  techRules?: TechRule[];
+  inventory?: Partial<AiInventory>;
 }
 
 export interface InvokeCall {
@@ -124,12 +131,44 @@ export function makeMemory(overrides: Partial<Memory> = {}): Memory {
   };
 }
 
+export function makeContextFile(overrides: Partial<ContextFile> = {}): ContextFile {
+  const path = overrides.path ?? "AGENTS.md";
+  return {
+    path,
+    name: overrides.name ?? path.split("/").pop() ?? path,
+    kind: overrides.kind ?? "agents",
+    size: overrides.size ?? 100,
+    modified_at: overrides.modified_at ?? now(),
+    link: overrides.link ?? null,
+    ...overrides,
+  };
+}
+
+export function makeTechnology(overrides: Partial<Technology> = {}): Technology {
+  const name = overrides.name ?? "react";
+  return {
+    id: overrides.id ?? nextId("tech"),
+    project_id: overrides.project_id ?? "proj-1",
+    name,
+    version: overrides.version ?? "19.0.0",
+    ecosystem: overrides.ecosystem ?? "npm",
+    source: overrides.source ?? "package.json",
+    docs_url: overrides.docs_url ?? `https://example.com/${name}`,
+    detected_at: overrides.detected_at ?? now(),
+    ...overrides,
+  };
+}
+
 export function installFakeBackend(options: FakeBackendOptions = {}) {
   const home = options.home ?? "/home/test";
   const projects: Project[] = [...(options.projects ?? [])];
   const memories: Memory[] = [...(options.memories ?? [])];
   const tasks: Task[] = [...(options.tasks ?? [])];
   const goals: Goal[] = [...(options.goals ?? [])];
+  const contextFiles: ContextFile[] = [...(options.contextFiles ?? [])];
+  const contextContents: Record<string, string> = { ...(options.contextContents ?? {}) };
+  const technologies: Technology[] = [...(options.technologies ?? [])];
+  const techRules: TechRule[] = [...(options.techRules ?? [])];
   const activity: ActivityEvent[] = [];
   const directories: Record<string, string[]> = options.directories ?? { [home]: [] };
   const calls: InvokeCall[] = [];
@@ -408,77 +447,33 @@ export function installFakeBackend(options: FakeBackendOptions = {}) {
     },
     memory_duplicates: () => [],
     memory_stale: () => ({ stale: [], surplus_sessions: [] }),
-    kpi_history: ({ days, scope }) => {
-      if (options.kpiHistory) {
-        return typeof options.kpiHistory === "function"
-          ? options.kpiHistory({
-              days: days as number | undefined,
-              scope: scope as string | undefined,
-            })
-          : options.kpiHistory;
-      }
-      const count = Math.max(1, Math.min(30, Number(days ?? 7)));
-      const isGlobal = !scope || scope === "global";
-      const makeDays = (values: number[]) =>
-        values.slice(-count).map((value, idx, arr) => {
-          const d = new Date();
-          d.setUTCDate(d.getUTCDate() - (arr.length - 1 - idx));
-          return { day: d.toISOString().slice(0, 10), value };
-        });
-      const history: KpiHistory = {
-        metrics: [
-          {
-            name: "memories_active",
-            label: "Memorias activas",
-            unit: "count",
-            higher_is_better: null,
-            points: makeDays([18, 20, 21, 22, 24, 25, 27]),
-          },
-          {
-            name: "duplicate_pairs",
-            label: "Pares duplicados",
-            unit: "count",
-            higher_is_better: false,
-            points: makeDays([4, 4, 3, 3, 2, 1, 1]),
-          },
-          {
-            name: "reuse_rate_30d",
-            label: "Tasa de reuso (30d)",
-            unit: "ratio",
-            higher_is_better: true,
-            points: makeDays([0.4, 0.45, 0.5, 0.52, 0.58, 0.6, 0.64]),
-          },
-          ...(isGlobal
-            ? [
-                {
-                  name: "lesson_conversion_7d",
-                  label: "Conversión a lección (7d)",
-                  unit: "ratio",
-                  higher_is_better: true,
-                  points: makeDays([0.5, 0.5, 0.6, 0.67, 0.75, 0.75, 0.8]),
-                },
-              ]
-            : [
-                {
-                  name: "index_bytes",
-                  label: "Tamaño del índice",
-                  unit: "bytes",
-                  higher_is_better: false,
-                  points: makeDays([2400, 2450, 2510, 2380, 2320, 2290, 2260]),
-                },
-              ]),
-        ],
-      };
-      return history;
-    },
 
     // Everything else the shell polls on mount.
     list_activity: ({ limit }) => activity.slice(0, (limit as number | undefined) ?? 60),
     list_activity_by_project: ({ projectId }) => activity.filter((a) => a.project_id === projectId),
     list_secret_grants: () => [],
-    list_context_files: () => [],
-    list_technologies: () => [],
-    list_project_tech_rules: () => [],
+    list_context_files: () => contextFiles,
+    read_context_file: ({ relativePath }) => contextContents[String(relativePath)] ?? "",
+    write_context_file: ({ relativePath, content }) => {
+      const path = String(relativePath);
+      const text = String(content);
+      contextContents[path] = text;
+      const idx = contextFiles.findIndex((f) => f.path === path);
+      const file: ContextFile = {
+        path,
+        name: path.split("/").pop() || path,
+        // Saving keeps the class the listing gave the file.
+        kind: contextFiles[idx]?.kind ?? "other",
+        size: text.length,
+        modified_at: now(),
+      };
+      if (idx >= 0) contextFiles[idx] = file;
+      else contextFiles.push(file);
+      return file;
+    },
+    list_technologies: () => technologies,
+    sync_project_stack: () => technologies,
+    list_project_tech_rules: () => techRules,
     search_memory: () => [],
     tech_icon: () => null,
     memory_usage_stats: () => ({
@@ -495,6 +490,7 @@ export function installFakeBackend(options: FakeBackendOptions = {}) {
       plugins: [],
       hooks: [],
       warnings: [],
+      ...options.inventory,
     }),
 
     // Window plugin (WindowControls).
@@ -526,6 +522,10 @@ export function installFakeBackend(options: FakeBackendOptions = {}) {
     memories,
     tasks,
     goals,
+    contextFiles,
+    contextContents,
+    technologies,
+    techRules,
     calls,
     /** Calls to one command, in order. */
     callsTo: (cmd: string) => calls.filter((c) => c.cmd === cmd),

@@ -32,7 +32,7 @@ pub enum MemoryCommand {
         #[arg(help = "Memoria global, no ligada al proyecto", long)]
         global: bool,
         #[arg(
-            help = "Disparador que la recuerda sola: texto del error (\"exit code 144\"), fragmento de comando, o env:t3code / env:opencode. Repetible",
+            help = "Disparador que la recuerda sola: texto del error (\"exit code 144\") o env:t3code / env:opencode. Repetible",
             long = "trigger"
         )]
         triggers: Vec<String>,
@@ -68,7 +68,7 @@ pub enum MemoryCommand {
         #[arg(long)]
         topic: Option<String>,
         #[arg(
-            help = "Reemplaza los disparadores (texto de error, comando o env:<host>). Repetible",
+            help = "Reemplaza los disparadores (texto de error o env:<host>). Repetible",
             long = "trigger"
         )]
         triggers: Vec<String>,
@@ -827,6 +827,9 @@ async fn context(
     let mut context = db.memory_context(scope, limit).await?;
     let hosts = saispace_core::recall::detect_hosts(|key| std::env::var(key).ok());
     db.attach_environment(&mut context, scope, &hosts).await?;
+    if let Some(p) = &project {
+        db.attach_open_tasks(&mut context, p.id).await?;
+    }
     if json {
         let mut value = serde_json::to_value(&context)?;
         if is_compact && let Some(obj) = value.as_object_mut() {

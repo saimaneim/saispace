@@ -208,6 +208,13 @@ async fn unregistered_project_memories_stay_out_of_other_projects() {
         .await
         .expect("recent");
     assert_eq!(visible.len(), 1, "only the true global memory");
+    assert!(
+        db.project_memories(mine.id, 10)
+            .await
+            .expect("own")
+            .is_empty(),
+        "the project's own list leaves globals and orphans out"
+    );
     assert_eq!(
         db.recent_memories(MemoryScope::GlobalOnly, 10)
             .await

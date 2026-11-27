@@ -4,7 +4,7 @@ import { formatError } from "../lib/api";
 import type { DuplicatePair, Memory } from "../lib/types";
 import { formatTimeAgo } from "../lib/utils";
 import { Markdown } from "./Markdown";
-import { KIND_LABELS } from "./MemoryTab";
+import { MemoryKindBadge } from "./MemoryKindBadge";
 import { Button } from "./ui/button";
 import {
   Dialog,
@@ -20,6 +20,39 @@ export interface DuplicatesPanelProps {
   onDeleteMemory: (id: string) => Promise<void>;
   onDismissPair: (pair: DuplicatePair) => void;
   onClose: () => void;
+}
+
+function DuplicateCard({ memory, onDelete }: { memory: Memory; onDelete: () => void }) {
+  return (
+    <div className="bg-obsidian rounded-lg p-3.5 flex flex-col gap-2.5 min-w-0">
+      <div className="flex items-start justify-between gap-2 min-w-0">
+        <div className="min-w-0 flex-1 space-y-1">
+          <h3 className="text-sm font-semibold text-paper truncate">{memory.title}</h3>
+          <div className="flex items-center gap-1.5 text-xs text-fog min-w-0">
+            <MemoryKindBadge kind={memory.kind} compact />
+            <span className="tabular-nums truncate">{formatTimeAgo(memory.updated_at)}</span>
+          </div>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onDelete}
+          aria-label="Eliminar memoria"
+          title="Eliminar esta memoria"
+          className="h-7 w-7 text-fog hover:text-coral-red hover:bg-coral-red/10 flex-shrink-0"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </Button>
+      </div>
+      <div className="h-36 min-w-0 overflow-y-auto overscroll-contain rounded-md bg-void/60 p-3 text-xs text-mist">
+        {memory.content.trim() ? (
+          <Markdown content={memory.content} />
+        ) : (
+          <span className="text-ash">Sin contenido</span>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function DuplicatesPanel({
@@ -46,23 +79,27 @@ export function DuplicatesPanel({
   };
 
   return (
-    <section className="flex-1 min-w-0 flex flex-col px-6 pb-6">
-      <div className="h-14 flex items-center justify-between gap-3 flex-shrink-0">
-        <div>
-          <h2 className="text-base font-semibold text-paper">Posibles duplicados</h2>
-          <p className="text-xs text-fog">
-            {pairs.length} {pairs.length === 1 ? "par detectado" : "pares detectados"}
-          </p>
+    <section className="flex-1 min-w-0 flex flex-col px-7 pt-5 pb-6">
+      <div className="flex items-center justify-between gap-3 pb-4 flex-shrink-0">
+        <div className="flex items-baseline gap-2.5 min-w-0">
+          <h2 className="text-lg font-semibold text-paper tracking-tight">Duplicados</h2>
+          <span className="text-xs text-fog tabular-nums">{pairs.length}</span>
         </div>
-        <Button variant="secondary" onClick={onClose}>
-          <X className="w-4 h-4 mr-2" />
-          Cerrar
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          aria-label="Cerrar"
+          title="Cerrar"
+          className="h-8 w-8 text-fog hover:text-paper hover:bg-obsidian"
+        >
+          <X className="w-4 h-4" />
         </Button>
       </div>
 
       {error && (
         <div
-          className="mb-2 px-3 py-2 rounded-md bg-coral-red/10 text-coral-red text-sm"
+          className="mb-3 px-3 py-2 rounded-md bg-coral-red/10 text-coral-red text-sm"
           role="alert"
         >
           {error}
@@ -70,14 +107,11 @@ export function DuplicatesPanel({
       )}
 
       {pairs.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center bg-carbon rounded-lg p-6">
-          <CopyCheck className="w-8 h-8 text-ash" />
-          <p className="text-sm text-paper">Sin duplicados pendientes</p>
-          <p className="text-sm text-fog max-w-sm">
-            Todas las memorias duplicadas han sido resueltas o descartadas para esta sesión.
-          </p>
-          <Button variant="secondary" onClick={onClose} className="mt-2">
-            Volver a memorias
+        <div className="flex-1 flex flex-col items-center justify-center gap-2.5 text-center bg-carbon rounded-xl p-6">
+          <CopyCheck className="w-7 h-7 text-ash" />
+          <p className="text-sm font-medium text-paper">Sin duplicados</p>
+          <Button variant="secondary" size="sm" onClick={onClose}>
+            Volver
           </Button>
         </div>
       ) : (
@@ -85,59 +119,16 @@ export function DuplicatesPanel({
           {pairs.map((pair) => (
             <div
               key={`${pair.a.id}:${pair.b.id}`}
-              className="bg-carbon rounded-lg p-4 flex flex-col gap-3"
+              className="bg-carbon rounded-xl p-4 flex flex-col gap-3"
             >
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-obsidian rounded-md p-3 flex flex-col gap-2 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <h3 className="text-sm font-semibold text-paper truncate">{pair.a.title}</h3>
-                      <p className="text-xs text-fog">
-                        {KIND_LABELS[pair.a.kind]} · {formatTimeAgo(pair.a.updated_at)}
-                      </p>
-                    </div>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => setPendingDelete(pair.a)}
-                    >
-                      <Trash2 className="w-3.5 h-3.5 mr-1" />
-                      Borrar esta
-                    </Button>
-                  </div>
-                  <div className="h-28 overflow-hidden rounded bg-void/50 p-2.5 text-xs text-mist relative">
-                    <Markdown content={pair.a.content} />
-                    <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-void to-transparent pointer-events-none" />
-                  </div>
-                </div>
-
-                <div className="bg-obsidian rounded-md p-3 flex flex-col gap-2 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <h3 className="text-sm font-semibold text-paper truncate">{pair.b.title}</h3>
-                      <p className="text-xs text-fog">
-                        {KIND_LABELS[pair.b.kind]} · {formatTimeAgo(pair.b.updated_at)}
-                      </p>
-                    </div>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => setPendingDelete(pair.b)}
-                    >
-                      <Trash2 className="w-3.5 h-3.5 mr-1" />
-                      Borrar esta
-                    </Button>
-                  </div>
-                  <div className="h-28 overflow-hidden rounded bg-void/50 p-2.5 text-xs text-mist relative">
-                    <Markdown content={pair.b.content} />
-                    <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-void to-transparent pointer-events-none" />
-                  </div>
-                </div>
+              <div className="grid grid-cols-1 xl:grid-cols-[repeat(2,minmax(0,1fr))] gap-3">
+                <DuplicateCard memory={pair.a} onDelete={() => setPendingDelete(pair.a)} />
+                <DuplicateCard memory={pair.b} onDelete={() => setPendingDelete(pair.b)} />
               </div>
 
-              <div className="flex justify-end pt-1">
+              <div className="flex justify-end">
                 <Button variant="secondary" size="sm" onClick={() => onDismissPair(pair)}>
-                  No son duplicados
+                  Descartar
                 </Button>
               </div>
             </div>

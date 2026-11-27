@@ -1,5 +1,5 @@
 //! Lessons that come back on their own: a memory can carry triggers (an error
-//! text, a command fragment, or `env:<host>`), so when the same failure shows
+//! text from a tool's output, or `env:<host>`), so when the same failure shows
 //! up again the agent gets the fix before retrying, and when it runs inside a
 //! given host (T3 Code, `OpenCode`…) it starts with that host's lessons.
 

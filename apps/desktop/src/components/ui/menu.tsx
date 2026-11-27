@@ -58,7 +58,7 @@ export function Menu({ trigger, items, align = "right" }: MenuProps) {
                 onSelect();
               }}
               className={cn(
-                "w-full flex items-center gap-2.5 text-left px-3 h-9 text-sm rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 disabled:opacity-40",
+                "w-full flex items-center gap-2.5 text-left px-3 h-9 text-sm rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-40",
                 danger
                   ? "text-coral-red hover:bg-coral-red/10"
                   : "text-mist hover:text-paper hover:bg-obsidian",

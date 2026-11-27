@@ -75,6 +75,29 @@ impl Db {
             })?;
         let root = PathBuf::from(project.path);
         let detected = tokio::task::spawn_blocking(move || detect_technologies(&root)).await??;
+        // Called whenever the app or an agent looks at the stack: write only
+        // when the manifests actually changed.
+        let current = self.list_technologies(project_id).await?;
+        if same_stack(&current, &detected) {
+            return Ok(current);
+        }
         self.replace_technologies(project_id, &detected).await
     }
+}
+
+fn same_stack(current: &[Technology], detected: &[DetectedTechnology]) -> bool {
+    let key = |name: &str, version: &str, ecosystem: &str, source: &str, docs: &str| {
+        format!("{ecosystem}\u{1}{name}\u{1}{version}\u{1}{source}\u{1}{docs}")
+    };
+    let mut a: Vec<String> = current
+        .iter()
+        .map(|t| key(&t.name, &t.version, &t.ecosystem, &t.source, &t.docs_url))
+        .collect();
+    let mut b: Vec<String> = detected
+        .iter()
+        .map(|t| key(&t.name, &t.version, &t.ecosystem, &t.source, &t.docs_url))
+        .collect();
+    a.sort();
+    b.sort();
+    a == b
 }

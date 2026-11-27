@@ -39,6 +39,9 @@ impl SaiSpaceServer {
         tool_router.merge(Self::technology_tool_router());
         tool_router.merge(Self::memory_tool_router());
         tool_router.merge(Self::secret_tool_router());
+        for route in tool_router.map.values_mut() {
+            route.attr.input_schema = std::sync::Arc::new(compact_schema(&route.attr.input_schema));
+        }
 
         Self {
             db,
@@ -101,5 +104,40 @@ impl SaiSpaceServer {
         Err(CoreError::Validation(
             "Either project_id or path must be provided".to_string(),
         ))
+    }
+}
+
+/// Every session loads the tool list, so drop schema keys that cost tokens
+/// and tell the model nothing: the `$schema` URL and integer `format`s.
+fn compact_schema(
+    schema: &serde_json::Map<String, serde_json::Value>,
+) -> serde_json::Map<String, serde_json::Value> {
+    fn strip(value: &mut serde_json::Value) {
+        match value {
+            serde_json::Value::Object(map) => {
+                map.remove("$schema");
+                if map
+                    .get("format")
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(|f| {
+                        matches!(
+                            f,
+                            "int64" | "int32" | "uint" | "uint32" | "uint64" | "double" | "float"
+                        )
+                    })
+                {
+                    map.remove("format");
+                }
+                map.values_mut().for_each(strip);
+            }
+            serde_json::Value::Array(items) => items.iter_mut().for_each(strip),
+            _ => {}
+        }
+    }
+    let mut value = serde_json::Value::Object(schema.clone());
+    strip(&mut value);
+    match value {
+        serde_json::Value::Object(map) => map,
+        _ => schema.clone(),
     }
 }

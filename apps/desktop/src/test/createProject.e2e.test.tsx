@@ -1,5 +1,5 @@
+import { describe, expect, it } from "bun:test";
 import { screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
 import { makeProject } from "./fakeBackend";
 import { renderApp } from "./renderApp";
 

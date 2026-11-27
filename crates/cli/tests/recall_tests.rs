@@ -221,6 +221,29 @@ fn recalls_a_lesson_once_per_session_when_its_error_repeats() {
     });
     assert!(sb.hook(&success).contains("Clave SSH con passphrase"));
 
+    // A command that quotes the error (a heredoc, a fixture) but fails for
+    // another reason recalls nothing: only the tool's answer counts.
+    let quoting = serde_json::json!({
+        "hook_event_name": "PostToolUseFailure",
+        "session_id": "s6c",
+        "cwd": cwd,
+        "tool_name": "Bash",
+        "tool_input": { "command": "cat > f.ts <<'EOF'\nPermission denied (publickey)\nEOF\ncurl localhost:1" },
+        "error": "Exit code 7",
+    });
+    assert_eq!(sb.hook(&quoting).trim(), "");
+
+    // Listing the lessons (their ids in the output) is not the error.
+    let listing = serde_json::json!({
+        "hook_event_name": "PostToolUse",
+        "session_id": "s6b",
+        "cwd": cwd,
+        "tool_name": "Bash",
+        "tool_input": { "command": "sh seed.sh" },
+        "tool_response": { "stdout": format!("{} Clave SSH: Permission denied (publickey)", ssh.split_whitespace().next().unwrap_or_default()) },
+    });
+    assert_eq!(sb.hook(&listing).trim(), "");
+
     // The project lesson does not leak into another project.
     let other = sb.root.join("work/other");
     fs::create_dir_all(other.join(".git")).expect("mkdir other");

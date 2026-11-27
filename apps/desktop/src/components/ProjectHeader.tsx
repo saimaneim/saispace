@@ -1,4 +1,16 @@
-import { Activity, Check, MoreHorizontal, Trash2 } from "lucide-react";
+import {
+  Activity,
+  Archive,
+  Check,
+  CircleCheck,
+  CirclePause,
+  CirclePlay,
+  Copy,
+  MoreHorizontal,
+  Pin,
+  PinOff,
+  Trash2,
+} from "lucide-react";
 import { useState } from "react";
 import type { Project, ProjectStatus } from "../lib/types";
 import { cn } from "../lib/utils";
@@ -12,29 +24,28 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { Menu } from "./ui/menu";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 interface ProjectHeaderProps {
   project: Project;
-  onUpdateStatus: (status: ProjectStatus) => Promise<void>;
   onDeleteProject: () => Promise<void>;
   isFeedOpen: boolean;
   onToggleFeed: () => void;
+  onMove: (target: { pinned: boolean; status: ProjectStatus }) => void;
 }
 
-const STATUS_OPTIONS: { value: ProjectStatus; label: string; dot: string }[] = [
-  { value: "active", label: "Activo", dot: "bg-pulse-green" },
-  { value: "on_hold", label: "En pausa", dot: "bg-status-amber" },
-  { value: "completed", label: "Completado", dot: "bg-fog" },
-  { value: "archived", label: "Archivado", dot: "bg-ash" },
+const MOVE_TO: { status: ProjectStatus; label: string; icon: typeof Pin }[] = [
+  { status: "active", label: "Mover a Activos", icon: CirclePlay },
+  { status: "on_hold", label: "Mover a En pausa", icon: CirclePause },
+  { status: "completed", label: "Mover a Completados", icon: CircleCheck },
+  { status: "archived", label: "Mover a Archivados", icon: Archive },
 ];
 
 export function ProjectHeader({
   project,
-  onUpdateStatus,
   onDeleteProject,
   isFeedOpen,
   onToggleFeed,
+  onMove,
 }: ProjectHeaderProps) {
   const [hasCopiedPath, setHasCopiedPath] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -63,43 +74,14 @@ export function ProjectHeader({
   return (
     <>
       <div className="flex items-baseline gap-3 min-w-0 pointer-events-none">
-        <h1 className="text-sm font-semibold text-paper truncate">{project.name}</h1>
-        <button
-          type="button"
-          onClick={copyPath}
-          title="Copiar ruta"
-          className="pointer-events-auto flex items-center gap-1.5 min-w-0 text-xs text-fog hover:text-mist transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 rounded"
-        >
-          <span className="truncate">{project.path}</span>
-          {hasCopiedPath && <Check className="w-3.5 h-3.5 text-pulse-green flex-shrink-0" />}
-        </button>
+        <h1 className="text-sm font-semibold text-paper truncate" title={project.path}>
+          {project.name}
+        </h1>
       </div>
 
       <div className="flex-1 pointer-events-none" />
 
       <div className="flex items-center gap-1 flex-shrink-0 pointer-events-auto">
-        <Select
-          value={project.status}
-          onValueChange={(val) => onUpdateStatus(val as ProjectStatus)}
-        >
-          <SelectTrigger
-            aria-label="Estado del proyecto"
-            className="w-auto gap-2 h-8 bg-transparent rounded-md text-sm text-mist hover:text-paper hover:bg-obsidian focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUS_OPTIONS.map(({ value, label, dot }) => (
-              <SelectItem key={value} value={value}>
-                <div className="flex items-center gap-2">
-                  <span className={cn("w-2 h-2 rounded-full flex-shrink-0", dot)} />
-                  <span>{label}</span>
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
         <button
           type="button"
           onClick={onToggleFeed}
@@ -107,7 +89,7 @@ export function ProjectHeader({
           aria-label={isFeedOpen ? "Ocultar actividad" : "Mostrar actividad"}
           aria-pressed={isFeedOpen}
           className={cn(
-            "h-8 w-8 rounded-md flex items-center justify-center transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+            "h-8 w-8 rounded-md flex items-center justify-center transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
             isFeedOpen ? "bg-elevated text-paper" : "text-fog hover:text-paper hover:bg-obsidian",
           )}
         >
@@ -121,12 +103,27 @@ export function ProjectHeader({
               onClick={toggle}
               aria-label="Más opciones"
               title="Más opciones"
-              className="h-8 w-8 rounded-md flex items-center justify-center text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+              className="h-8 w-8 rounded-md flex items-center justify-center text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
             >
               <MoreHorizontal className="w-4 h-4" />
             </button>
           )}
           items={[
+            {
+              label: project.pinned ? "Desfijar" : "Fijar",
+              icon: project.pinned ? PinOff : Pin,
+              onSelect: () => onMove({ pinned: !project.pinned, status: project.status }),
+            },
+            ...MOVE_TO.filter((m) => project.pinned || m.status !== project.status).map((m) => ({
+              label: m.label,
+              icon: m.icon,
+              onSelect: () => onMove({ pinned: false, status: m.status }),
+            })),
+            {
+              label: hasCopiedPath ? "Ruta copiada" : "Copiar ruta",
+              icon: hasCopiedPath ? Check : Copy,
+              onSelect: () => void copyPath(),
+            },
             {
               label: "Eliminar proyecto…",
               icon: Trash2,

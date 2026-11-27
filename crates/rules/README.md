@@ -69,6 +69,26 @@ Salida (`sai check --json`):
 `line` y `column` empiezan en 1. `column` cuenta bytes, no caracteres.
 `snippet` es la línea sin espacios a los lados, cortada a 160 caracteres.
 
+#### Opciones de `forbid`
+
+| Campo | Efecto |
+| --- | --- |
+| `multiline = true` | La regex se aplica al texto entero (puede cruzar líneas). El hallazgo cae en la línea donde empieza la coincidencia. `'\A'` prohíbe un fichero entero. |
+| `unless_line` | Salta las coincidencias cuya línea cumpla esta regex. |
+| `except` | Descarta las coincidencias cuyo propio texto cumpla esta regex. |
+| `within` | Solo busca dentro de los tramos que encaje esta regex (su grupo 1 si lo tiene, si no toda la coincidencia). Sirve para acotar a «el `className` de un `<DialogTitle>`». |
+| `unless_span` | Con `within`: salta el tramo si la coincidencia completa de `within` (no solo el grupo 1) cumple esta regex. Sirve para marcas de exención en el mismo elemento. |
+
+```toml
+[check]
+kind = "forbid"
+within = '''<DialogTitle\b(?:[^>"']|"[^"]*"|'[^']*')*?className\s*=\s*("[^"]*"|\{[^}]*\})'''
+pattern = '''(?:^|[\s"'`{(,])text-[^\s"'`{}(),]*'''
+except = '''(?:^|[\s"'`{(,])text-(?:base|lg)$'''
+```
+
+`stop_at` y `sai-ignore` también valen con `multiline` y `within`.
+
 ### `require`: regex que debe aparecer en el fichero
 
 Se evalúa sobre el texto completo. Para anclar a inicio de línea usa `(?m)^...`.
@@ -96,6 +116,29 @@ max = 300
 ```
 
 Con 412 líneas da un hallazgo en la línea 301 con `snippet = "412 lines (max 300)"`.
+
+### `refs_exist`: rutas citadas que deben existir
+
+Cada coincidencia de `pattern` nombra una ruta relativa a la raíz del repo
+(grupo 1, o toda la coincidencia si no hay grupo). Falla si no existe tal cual
+ni con alguno de los `suffixes`. Solo se evalúa con `check_tree` o
+`check_text_at(Some(root), ..)`.
+
+```toml
+[check]
+kind = "refs_exist"
+pattern = '`(src/[^`]+)`'
+suffixes = [".ts", ".tsx"]
+```
+
+### Guardas de fichero (`only_if` / `unless`)
+
+Campos de la regla (valen para cualquier `check`): `only_if` aplica la regla solo
+a ficheros cuyo texto cumple la regex; `unless` la salta si la cumple.
+
+```toml
+only_if = '''["']use client["']'''
+```
 
 ### Solo guía (sin `check`)
 

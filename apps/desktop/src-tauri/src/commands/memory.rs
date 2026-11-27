@@ -17,12 +17,13 @@ pub async fn list_memories(
     limit: Option<i64>,
     db: State<'_, Db>,
 ) -> CommandResult<Vec<Memory>> {
-    Ok(db
-        .recent_memories(
-            project_id.map_or(MemoryScope::All, MemoryScope::Project),
-            limit.unwrap_or(100),
-        )
-        .await?)
+    let limit = limit.unwrap_or(100);
+    // A project lists only its own memories: globals would crowd them out of
+    // the limit and they already live in the Global view.
+    Ok(match project_id {
+        Some(id) => db.project_memories(id, limit).await?,
+        None => db.recent_memories(MemoryScope::All, limit).await?,
+    })
 }
 
 /// # Errors

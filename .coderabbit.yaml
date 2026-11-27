@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: es-ES
+tone_instructions: "Breve y directo. Solo bugs reales, seguridad y regresiones; cada hallazgo en 1-2 frases con el arreglo. Sin elogios ni nits de estilo."
+reviews:
+  profile: chill
+  poem: false
+  high_level_summary: true
+  collapse_walkthrough: true
+  sequence_diagrams: false
+  path_filters:
+    - "!**/bun.lock"
+    - "!**/Cargo.lock"
+    - "!bench/history.jsonl"
+    - "!bench/holdout/**"
+    - "!apps/desktop/dist/**"
+  auto_review:
+    enabled: true
+    drafts: false
+chat:
+  auto_reply: true

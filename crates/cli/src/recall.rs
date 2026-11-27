@@ -103,12 +103,10 @@ pub(crate) fn haystack(payload: &HookPayload) -> Option<String> {
     if !content_tool && input.contains("sai memory") {
         return None;
     }
+    // Only what the tool answered counts: the input is text the agent wrote
+    // (a heredoc, a test fixture) and may quote any error. A content tool's
+    // output is file or search content, so only its error counts.
     let mut text = String::new();
-    // A content tool's input is file text (an edit quoting an error); its
-    // output is file or search content: only its error says what went wrong.
-    if !content_tool {
-        text.push_str(&input);
-    }
     if !content_tool && let Some(v) = &payload.tool_response {
         collect_strings(v, &mut text);
     }
@@ -195,6 +193,9 @@ pub async fn run(payload: HookPayload) {
     let hits: Vec<_> = found
         .into_iter()
         .filter(|m| !already.contains(&m.id))
+        // Output that names the memory's id is a listing of the lesson itself
+        // (`sai memory list`, a seed script), not the error happening again.
+        .filter(|m| !haystack.contains(&saispace_core::short_id(m.id)))
         .take(MAX_RECALL_HITS)
         .collect();
     if hits.is_empty() {

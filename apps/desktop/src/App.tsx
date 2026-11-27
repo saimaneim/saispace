@@ -9,7 +9,7 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityFeed } from "./components/ActivityFeed";
 import { ContextTab } from "./components/ContextTab";
 import { DirectoryPickerModal } from "./components/DirectoryPickerModal";
@@ -85,30 +85,22 @@ export function App() {
   const projectsRef = useRef(projects);
   projectsRef.current = projects;
 
-  const toggleProjectPin = useCallback(
-    async (id: string, pinned: boolean) => {
-      try {
-        await api.setProjectPinned(id, pinned);
-        setProjects(await api.listProjects());
-      } catch (err) {
-        reportError(err);
-      }
-    },
-    [reportError],
-  );
-
   // Drag and drop: moves a project to a new slot, pinning or unpinning it
   // when it crosses groups. The list updates first so the drop feels instant.
   const moveProject = useCallback(
-    async (id: string, pinned: boolean, ids: string[]) => {
-      const pinChanged = projectsRef.current.some((p) => p.id === id && p.pinned !== pinned);
+    async (id: string, target: { pinned: boolean; status: ProjectStatus }, ids: string[]) => {
+      const { pinned, status } = target;
+      const current = projectsRef.current.find((p) => p.id === id);
+      const pinChanged = current?.pinned !== pinned;
+      const statusChanged = current?.status !== status;
       setProjects((prev) => {
-        const byId = new Map(prev.map((p) => [p.id, p.id === id ? { ...p, pinned } : p]));
+        const byId = new Map(prev.map((p) => [p.id, p.id === id ? { ...p, pinned, status } : p]));
         const ordered = ids.flatMap((pid) => byId.get(pid) ?? []);
         return [...ordered, ...[...byId.values()].filter((p) => !ids.includes(p.id))];
       });
       try {
         if (pinChanged) await api.setProjectPinned(id, pinned);
+        if (statusChanged) await api.updateProject(id, { status });
         await api.reorderProjects(ids);
       } catch (err) {
         reportError(err);
@@ -231,19 +223,6 @@ export function App() {
 
   const handleDeleteProject = (id: string) => run(() => api.deleteProject(id));
 
-  const handleUpdateProjectStatus = async (status: ProjectStatus) => {
-    if (!activeProject) return;
-    await run(() => api.updateProject(activeProject.id, { status }));
-  };
-
-  const taskCounts = useMemo(
-    () =>
-      Object.fromEntries(
-        Object.entries(tasksByProject).map(([id, list]) => [id, list.filter(isOpenTask).length]),
-      ),
-    [tasksByProject],
-  );
-
   const openTasksCount = tasks.filter(isOpenTask).length;
 
   const tabs: { id: TabId; label: string; icon: typeof ListTodo; count?: number }[] = [
@@ -263,8 +242,6 @@ export function App() {
         onSelectGlobal={() => setIsGlobal(true)}
         pendingRequests={pendingRequests}
         onOpenDirectoryPicker={() => setIsPickerOpen(true)}
-        taskCounts={taskCounts}
-        onTogglePin={toggleProjectPin}
         onMove={moveProject}
         isOpen={isSidebarOpen}
       />
@@ -279,24 +256,27 @@ export function App() {
             onClick={() => setIsSidebarOpen((open) => !open)}
             aria-label={isSidebarOpen ? "Ocultar barra lateral" : "Mostrar barra lateral"}
             title="Barra lateral (Ctrl+B)"
-            className="h-8 w-8 flex-shrink-0 rounded-md flex items-center justify-center text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 pointer-events-auto"
+            className="h-8 w-8 flex-shrink-0 rounded-md flex items-center justify-center text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 pointer-events-auto"
           >
             <PanelLeft className="w-4 h-4" />
           </button>
           {isGlobal ? (
             <div className="flex items-baseline gap-3 min-w-0 flex-1 pointer-events-none">
               <h1 className="text-sm font-semibold text-paper">Global</h1>
-              <span className="text-xs text-fog truncate">
-                Memoria y configuración de IA de este equipo
-              </span>
             </div>
           ) : activeProject ? (
             <ProjectHeader
               project={activeProject}
-              onUpdateStatus={handleUpdateProjectStatus}
               onDeleteProject={() => handleDeleteProject(activeProject.id)}
               isFeedOpen={isFeedOpen}
               onToggleFeed={() => setIsFeedOpen((open) => !open)}
+              onMove={(target) =>
+                void moveProject(
+                  activeProject.id,
+                  target,
+                  projects.map((p) => p.id),
+                )
+              }
             />
           ) : (
             <div className="flex-1 pointer-events-none" />
@@ -306,7 +286,7 @@ export function App() {
             onClick={() => setIsSearchOpen(true)}
             aria-label="Buscar"
             title="Buscar (Ctrl+K)"
-            className="h-8 w-8 flex-shrink-0 rounded-md flex items-center justify-center text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 pointer-events-auto"
+            className="h-8 w-8 flex-shrink-0 rounded-md flex items-center justify-center text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 pointer-events-auto"
           >
             <Search className="w-4 h-4" />
           </button>
@@ -359,7 +339,7 @@ export function App() {
                           aria-selected={selected}
                           onClick={() => setActiveTab(id)}
                           className={cn(
-                            "h-9 px-3 rounded-md text-sm font-medium flex items-center gap-2 transition-colors duration-[120ms] focus-visible:ring-2 focus-visible:ring-acid-lime/40 focus:outline-none",
+                            "h-9 px-3 rounded-md text-sm font-medium flex items-center gap-2 transition-colors duration-[120ms] focus-visible:ring-2 focus-visible:ring-accent/40 focus:outline-none",
                             selected
                               ? "bg-elevated text-paper font-medium"
                               : "text-fog hover:text-mist hover:bg-obsidian",

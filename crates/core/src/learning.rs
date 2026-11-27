@@ -283,6 +283,13 @@ const CORRECTION_PHRASES: &[&[&str]] = &[
     &["parece", "hecho", "por", "ia"],
     &["totalmente", "equivocado"],
     &["puedes", "hacerlo", "mejor"],
+    &["se", "ve", "feo"],
+    &["se", "ve", "raro"],
+    &["esta", "feo"],
+    &["odio", "esto"],
+    &["odio", "que"],
+    &["robotizado"],
+    &["revisa", "la", "mierda"],
     &["empeoraste"],
     &["enpeoraste"],
 ];
@@ -1646,6 +1653,8 @@ mod tests {
             "oye no cambia nada... sigue igual",
             "se ve horrible, límpialo",
             "la estás cagando",
+            "se sigue viendo feo el hero, y odio esto",
+            "el texto sigue viendose robotizado",
             "no los dupliques",
         ] {
             assert!(is_correction(sample), "{sample}");

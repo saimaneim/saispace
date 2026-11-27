@@ -1,5 +1,7 @@
 use crate::db::memory_graph::short_id;
-use crate::models::{Memory, MemoryContext, MemoryKind, MemoryLink, MemoryRelation, Project};
+use crate::models::{
+    Memory, MemoryContext, MemoryKind, MemoryLink, MemoryRelation, Project, TaskStatus,
+};
 use std::fmt::Write as _;
 
 pub const CONTEXT_BUDGET: usize = 6_000;
@@ -87,6 +89,32 @@ fn render_environment(out: &mut String, context: &MemoryContext) {
     }
 }
 
+fn render_open_tasks(out: &mut String, context: &MemoryContext) {
+    if context.open_tasks.is_empty() {
+        return;
+    }
+    out.push_str(
+        "\n## Pendiente del plan\nTareas sin cerrar. Termínalas o di al usuario por qué no; al acabar una, `sai plan done <id>` (o complete_task).\n",
+    );
+    for t in &context.open_tasks {
+        let status = match t.status {
+            TaskStatus::InProgress => " (en curso)",
+            TaskStatus::Blocked => " (bloqueada)",
+            _ => "",
+        };
+        let goal = t
+            .goal
+            .as_deref()
+            .map_or_default(|g| format!(" · {}", excerpt(g, 50)));
+        let _ = writeln!(
+            out,
+            "- {}{status}{goal} · {}",
+            excerpt(&t.title, 90),
+            short_id(t.id)
+        );
+    }
+}
+
 #[must_use]
 pub fn render_context(project: Option<&Project>, context: &MemoryContext) -> String {
     let mut out = String::new();
@@ -126,6 +154,7 @@ pub fn render_context(project: Option<&Project>, context: &MemoryContext) -> Str
             );
         }
     }
+    render_open_tasks(&mut out, context);
     if let Some(m) = &context.last_session {
         let _ = writeln!(
             out,
@@ -172,6 +201,7 @@ pub fn render_context(project: Option<&Project>, context: &MemoryContext) -> Str
         && context.pinned.is_empty()
         && context.last_session.is_none()
         && context.memories.is_empty()
+        && context.open_tasks.is_empty()
     {
         out.push_str("\nSin memorias todavía.\n");
     }

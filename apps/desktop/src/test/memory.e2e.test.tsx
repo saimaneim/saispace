@@ -1,5 +1,5 @@
+import { describe, expect, it } from "bun:test";
 import { screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
 import { makeMemory, makeProject } from "./fakeBackend";
 import { renderApp } from "./renderApp";
 
@@ -23,6 +23,7 @@ describe("flujo: guardar y leer memoria", () => {
           topic_key: "arch/db",
         }),
         makeMemory({ project_id: "otro", title: "De otro proyecto" }),
+        makeMemory({ project_id: null, title: "Global, vive en la vista Global" }),
       ],
     });
 
@@ -30,11 +31,54 @@ describe("flujo: guardar y leer memoria", () => {
 
     expect(await screen.findByRole("heading", { name: "Usar SQLite en WAL" })).toBeInTheDocument();
     expect(screen.getByText("Varios procesos leen a la vez.")).toBeInTheDocument();
-    expect(screen.getByText(/Decisión · arch\/db/)).toBeInTheDocument();
+    expect(screen.getAllByText("Decisión").length).toBeGreaterThan(0);
     expect(screen.queryByText("De otro proyecto")).not.toBeInTheDocument();
+    expect(screen.queryByText("Global, vive en la vista Global")).not.toBeInTheDocument();
     expect(backend.callsTo("list_memories").at(-1)?.args).toMatchObject({
       projectId: project.id,
     });
+  });
+
+  it("filtra memorias por texto y abre la seleccionada", async () => {
+    const m1 = makeMemory({
+      project_id: project.id,
+      title: "Configuración SQLite",
+      content: "Modo WAL activado.",
+      topic_key: "arch/db",
+      // Newest first in the list: it must be the one selected on open.
+      updated_at: "2026-11-27T10:00:00.000Z",
+    });
+    const m2 = makeMemory({
+      project_id: project.id,
+      title: "Convención de nombres",
+      content: "Usar snake_case para variables.",
+      topic_key: "style/naming",
+      updated_at: "2026-11-26T10:00:00.000Z",
+    });
+
+    const { user } = await renderApp({
+      projects: [project],
+      memories: [m1, m2],
+    });
+
+    await openMemoryTab(user);
+    expect(
+      await screen.findByRole("heading", { name: "Configuración SQLite" }),
+    ).toBeInTheDocument();
+
+    const searchInput = screen.getByRole("textbox", { name: "Filtrar memorias" });
+    await user.type(searchInput, "nombres");
+
+    expect(
+      await screen.findByRole("button", { name: /Convención de nombres/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Configuración SQLite/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Convención de nombres/ }));
+    expect(
+      await screen.findByRole("heading", { name: "Convención de nombres" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Usar snake_case para variables.")).toBeInTheDocument();
   });
 
   it("una memoria guardada por un agente aparece sin recargar (evento saispace:activity)", async () => {
