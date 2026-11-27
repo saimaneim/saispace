@@ -397,6 +397,28 @@ impl Db {
         Ok(items)
     }
 
+    /// The project's own live memories, newest first (no global ones).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the memories cannot be loaded.
+    pub async fn project_memories(&self, project_id: Uuid, limit: i64) -> CoreResult<Vec<Memory>> {
+        let sql = format!(
+            r"
+            SELECT {MEMORY_COLUMNS}
+            FROM memories
+            WHERE superseded_by IS NULL AND project_id = ?1
+            ORDER BY updated_at DESC
+            LIMIT ?2
+            "
+        );
+        Ok(sqlx::query_as::<_, Memory>(&sql)
+            .bind(project_id)
+            .bind(limit.clamp(1, 200))
+            .fetch_all(&self.pool)
+            .await?)
+    }
+
     /// Session-start context: every preference, pinned memories, the newest
     /// session summary (older ones are superseded) and up to `limit` others.
     ///

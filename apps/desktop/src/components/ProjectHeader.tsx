@@ -1,6 +1,18 @@
-import { Activity, Check, Copy, MoreHorizontal, Trash2 } from "lucide-react";
+import {
+  Activity,
+  Archive,
+  Check,
+  CircleCheck,
+  CirclePause,
+  CirclePlay,
+  Copy,
+  MoreHorizontal,
+  Pin,
+  PinOff,
+  Trash2,
+} from "lucide-react";
 import { useState } from "react";
-import type { Project } from "../lib/types";
+import type { Project, ProjectStatus } from "../lib/types";
 import { cn } from "../lib/utils";
 import { Button } from "./ui/button";
 import {
@@ -18,13 +30,22 @@ interface ProjectHeaderProps {
   onDeleteProject: () => Promise<void>;
   isFeedOpen: boolean;
   onToggleFeed: () => void;
+  onMove: (target: { pinned: boolean; status: ProjectStatus }) => void;
 }
+
+const MOVE_TO: { status: ProjectStatus; label: string; icon: typeof Pin }[] = [
+  { status: "active", label: "Mover a Activos", icon: CirclePlay },
+  { status: "on_hold", label: "Mover a En pausa", icon: CirclePause },
+  { status: "completed", label: "Mover a Completados", icon: CircleCheck },
+  { status: "archived", label: "Mover a Archivados", icon: Archive },
+];
 
 export function ProjectHeader({
   project,
   onDeleteProject,
   isFeedOpen,
   onToggleFeed,
+  onMove,
 }: ProjectHeaderProps) {
   const [hasCopiedPath, setHasCopiedPath] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -88,6 +109,16 @@ export function ProjectHeader({
             </button>
           )}
           items={[
+            {
+              label: project.pinned ? "Desfijar" : "Fijar",
+              icon: project.pinned ? PinOff : Pin,
+              onSelect: () => onMove({ pinned: !project.pinned, status: project.status }),
+            },
+            ...MOVE_TO.filter((m) => project.pinned || m.status !== project.status).map((m) => ({
+              label: m.label,
+              icon: m.icon,
+              onSelect: () => onMove({ pinned: false, status: m.status }),
+            })),
             {
               label: hasCopiedPath ? "Ruta copiada" : "Copiar ruta",
               icon: hasCopiedPath ? Check : Copy,

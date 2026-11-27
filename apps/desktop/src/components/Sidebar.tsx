@@ -122,6 +122,11 @@ export function Sidebar({
   pendingRequests,
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const closeSearch = () => {
+    setSearchQuery("");
+    setIsSearchOpen(false);
+  };
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [drag, setDrag] = useState<DragState | null>(null);
   const dragRef = useRef<DragState | null>(null);
@@ -384,40 +389,53 @@ export function Sidebar({
           </button>
         </div>
 
-        {projects.length > 4 && (
-          <div className="px-3 pb-2 flex-shrink-0">
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-fog pointer-events-none" />
+        <div className="flex items-center gap-0.5 pl-4 pr-3 h-9 flex-shrink-0">
+          {isSearchOpen ? (
+            <div className="relative flex-1 min-w-0 -ml-1.5">
+              <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-fog pointer-events-none" />
               <input
+                // biome-ignore lint/a11y/noAutofocus: opened on demand by the search button
+                autoFocus
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar proyectos…"
+                onKeyDown={(e) => e.key === "Escape" && closeSearch()}
+                onBlur={() => !searchQuery && setIsSearchOpen(false)}
+                placeholder="Buscar…"
                 aria-label="Buscar proyectos"
-                className="w-full h-8 pl-8 pr-7 text-xs bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 transition-colors duration-[120ms]"
+                className="w-full h-7 pl-7 pr-7 text-xs bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
               />
-              {searchQuery && (
+              <button
+                type="button"
+                onClick={closeSearch}
+                aria-label="Cerrar búsqueda"
+                className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6 rounded flex items-center justify-center text-fog hover:text-paper hover:bg-elevated transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ) : (
+            <>
+              <span className="flex-1 text-xs font-semibold text-fog">Proyectos</span>
+              {projects.length > 4 && (
                 <button
                   type="button"
-                  onClick={() => setSearchQuery("")}
-                  aria-label="Limpiar búsqueda de proyectos"
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 rounded flex items-center justify-center text-fog hover:text-paper hover:bg-elevated transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                  onClick={() => setIsSearchOpen(true)}
+                  aria-label="Buscar proyectos"
+                  title="Buscar proyectos"
+                  className="h-7 w-7 flex items-center justify-center rounded-md text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                 >
-                  <X className="w-3 h-3" />
+                  <Search className="w-3.5 h-3.5" />
                 </button>
               )}
-            </div>
-          </div>
-        )}
-
-        <div className="flex items-center justify-between pl-4 pr-3 h-8 flex-shrink-0">
-          <span className="text-xs font-semibold text-fog">Proyectos</span>
+            </>
+          )}
           <button
             type="button"
             onClick={onOpenDirectoryPicker}
             aria-label="Añadir carpeta"
             title="Añadir carpeta"
-            className="h-7 w-7 flex items-center justify-center rounded-md text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            className="h-7 w-7 flex-shrink-0 flex items-center justify-center rounded-md text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
           >
             <Plus className="w-4 h-4" />
           </button>

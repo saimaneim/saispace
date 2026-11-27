@@ -270,6 +270,13 @@ export function App() {
               onDeleteProject={() => handleDeleteProject(activeProject.id)}
               isFeedOpen={isFeedOpen}
               onToggleFeed={() => setIsFeedOpen((open) => !open)}
+              onMove={(target) =>
+                void moveProject(
+                  activeProject.id,
+                  target,
+                  projects.map((p) => p.id),
+                )
+              }
             />
           ) : (
             <div className="flex-1 pointer-events-none" />

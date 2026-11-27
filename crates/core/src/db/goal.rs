@@ -398,3 +398,52 @@ impl Db {
         self.resolve_short_id("goals", "goal", raw).await
     }
 }
+
+/// How many open tasks a session-start context lists at most.
+pub const MAX_OPEN_TASKS: usize = 8;
+
+impl Db {
+    /// Adds the active plan's unfinished tasks to a session-start context:
+    /// in progress first, then blocked, then to do, in plan order.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the plan cannot be loaded.
+    pub async fn attach_open_tasks(
+        &self,
+        context: &mut crate::models::MemoryContext,
+        project_id: Uuid,
+    ) -> CoreResult<()> {
+        use crate::models::{OpenTask, TaskStatus};
+        let plan = self.get_plan(project_id, PlanFilter::Active).await?;
+        let goal_tasks = plan
+            .goals
+            .iter()
+            .flat_map(|g| g.tasks.iter().map(move |t| (Some(g.goal.title.clone()), t)));
+        let loose = plan.loose_tasks.iter().map(|t| (None, t));
+        let mut open: Vec<OpenTask> = goal_tasks
+            .chain(loose)
+            .filter(|(_, t)| {
+                matches!(
+                    t.status,
+                    TaskStatus::Todo | TaskStatus::InProgress | TaskStatus::Blocked
+                )
+            })
+            .map(|(goal, t)| OpenTask {
+                id: t.id,
+                title: t.title.clone(),
+                goal,
+                status: t.status,
+            })
+            .collect();
+        let rank = |s: TaskStatus| match s {
+            TaskStatus::InProgress => 0,
+            TaskStatus::Blocked => 1,
+            _ => 2,
+        };
+        open.sort_by_key(|t| rank(t.status));
+        open.truncate(MAX_OPEN_TASKS);
+        context.open_tasks = open;
+        Ok(())
+    }
+}

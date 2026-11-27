@@ -827,6 +827,9 @@ async fn context(
     let mut context = db.memory_context(scope, limit).await?;
     let hosts = saispace_core::recall::detect_hosts(|key| std::env::var(key).ok());
     db.attach_environment(&mut context, scope, &hosts).await?;
+    if let Some(p) = &project {
+        db.attach_open_tasks(&mut context, p.id).await?;
+    }
     if json {
         let mut value = serde_json::to_value(&context)?;
         if is_compact && let Some(obj) = value.as_object_mut() {

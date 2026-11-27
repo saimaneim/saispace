@@ -42,9 +42,16 @@ fn forbid(id: &str, files: &[&str], pattern: &str) -> RuleDef {
         severity: Severity::Error,
         files: files.iter().map(|s| (*s).to_string()).collect(),
         exclude: Vec::new(),
+        only_if: None,
+        unless: None,
         check: Some(Check::Forbid {
             pattern: pattern.to_string(),
             stop_at: None,
+            multiline: false,
+            unless_line: None,
+            except: None,
+            within: None,
+            unless_span: None,
         }),
         fix: Some("use ? instead".to_string()),
         guide: None,
@@ -57,6 +64,11 @@ fn forbid_reports_line_column_and_respects_stop_at_and_suppression() {
     rule.check = Some(Check::Forbid {
         pattern: r"\.unwrap\(\)".to_string(),
         stop_at: Some(r"^#\[cfg\(test\)\]".to_string()),
+        multiline: false,
+        unless_line: None,
+        except: None,
+        within: None,
+        unless_span: None,
     });
     let engine = Engine::new(&[rule]).expect("engine");
     let text = "fn a() {\n    x.unwrap();\n    y.unwrap(); // sai-ignore: no-unwrap\n    // sai-ignore: other, no-unwrap\n    z.unwrap();\n}\n#[cfg(test)]\nmod t { fn b() { q.unwrap(); } }\n";
@@ -75,6 +87,8 @@ fn require_and_max_lines_checks() {
         severity: Severity::Warn,
         files: vec!["*.ts".to_string()],
         exclude: vec!["gen.ts".to_string()],
+        only_if: None,
+        unless: None,
         check: Some(Check::Require {
             pattern: "SPDX-License-Identifier".to_string(),
         }),
@@ -87,6 +101,8 @@ fn require_and_max_lines_checks() {
         severity: Severity::Error,
         files: vec!["*.ts".to_string()],
         exclude: Vec::new(),
+        only_if: None,
+        unless: None,
         check: Some(Check::MaxLines { max: 3 }),
         fix: None,
         guide: None,

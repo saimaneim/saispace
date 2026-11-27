@@ -42,6 +42,18 @@ pub enum SetupCommand {
         #[arg(help = "Quita los hooks de saispace en vez de instalarlos", long)]
         uninstall: bool,
     },
+    #[command(
+        about = "Copia tus reglas globales al fichero propio de cada agente instalado (Claude, OpenCode, Codex, Gemini, Windsurf, Kiro)"
+    )]
+    Rules {
+        #[arg(
+            help = "Fichero de reglas (por defecto ~/.config/saispace/rules.md)",
+            long
+        )]
+        from: Option<PathBuf>,
+        #[arg(help = "Quita el bloque de saispace de cada fichero", long)]
+        uninstall: bool,
+    },
 }
 
 fn opencode_dir() -> CliResult<PathBuf> {
@@ -341,6 +353,9 @@ pub fn uninstall_claude(config: &Path) -> CliResult<bool> {
 
 pub fn run(cmd: &SetupCommand) -> CliResult<ExitCode> {
     match cmd {
+        SetupCommand::Rules { from, uninstall } => {
+            crate::setup_rules::run(from.as_deref(), *uninstall)?;
+        }
         SetupCommand::Opencode {
             uninstall: true, ..
         } => {

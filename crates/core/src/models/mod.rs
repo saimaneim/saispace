@@ -20,7 +20,7 @@ pub use kpi::{
 };
 pub use memory::{
     AgentMemorySaves, Memory, MemoryContext, MemoryKind, MemoryScope, MemoryUsageStats,
-    MostUsedMemory, ProjectMemoryUsage, SaveMemoryInput, UpdateMemoryInput,
+    MostUsedMemory, OpenTask, ProjectMemoryUsage, SaveMemoryInput, UpdateMemoryInput,
 };
 pub use memory_graph::{
     ConsolidateHint, ConsolidateInput, LinkDirection, MemoryLink, MemoryRelation,

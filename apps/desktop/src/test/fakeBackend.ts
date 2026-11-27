@@ -2,6 +2,7 @@ import { emit } from "@tauri-apps/api/event";
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import type {
   ActivityEvent,
+  AiInventory,
   ContextFile,
   CreateProjectInput,
   CreateTaskInput,
@@ -43,6 +44,7 @@ export interface FakeBackendOptions {
   contextContents?: Record<string, string>;
   technologies?: Technology[];
   techRules?: TechRule[];
+  inventory?: Partial<AiInventory>;
 }
 
 export interface InvokeCall {
@@ -487,6 +489,7 @@ export function installFakeBackend(options: FakeBackendOptions = {}) {
       plugins: [],
       hooks: [],
       warnings: [],
+      ...options.inventory,
     }),
 
     // Window plugin (WindowControls).

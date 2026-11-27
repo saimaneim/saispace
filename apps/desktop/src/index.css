@@ -1,12 +1,12 @@
 @import "tailwindcss";
 
 @theme {
-  --color-void: #141414;
-  --color-carbon: #1a1a1a;
-  --color-obsidian: #212121;
-  --color-elevated: #2a2a2a;
-  --color-graphite: #333333;
-  --color-smoke: #444444;
+  --color-void: #0b0b0c;
+  --color-carbon: #121213;
+  --color-obsidian: #19191a;
+  --color-elevated: #212123;
+  --color-graphite: #2a2a2c;
+  --color-smoke: #3a3a3c;
   --color-ash: #6b6b6b;
   --color-fog: #9a9a9a;
   --color-mist: #d4d4d4;

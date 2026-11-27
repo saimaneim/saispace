@@ -16,7 +16,7 @@ import {
   Scale,
   Search,
   ShieldCheck,
-  Sparkles,
+  Wand2,
   X,
 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -524,7 +524,7 @@ export function ContextTab({ project }: ContextTabProps) {
 
           {categorized.skills.length > 0 && (
             <CategorySection
-              icon={Sparkles}
+              icon={Wand2}
               label="Skills"
               count={categorized.skills.length}
               open={isCategoryOpen("skills")}
@@ -724,7 +724,7 @@ export function ContextTab({ project }: ContextTabProps) {
               Sin ficheros de contexto. Crea un AGENTS.md desde la barra lateral.
             </div>
           ) : isLoadingFile ? (
-            <div className="max-w-[76ch] bg-carbon rounded-xl p-6 space-y-3">
+            <div className="bg-carbon rounded-xl p-6 space-y-3">
               <div className="h-5 w-48 rounded bg-obsidian" />
               <div className="h-4 w-full rounded bg-obsidian/70" />
               <div className="h-4 w-5/6 rounded bg-obsidian/70" />
@@ -735,10 +735,10 @@ export function ContextTab({ project }: ContextTabProps) {
               No se pudo leer el fichero. Vuelve a seleccionarlo para reintentar.
             </div>
           ) : isPreview ? (
-            <div className="max-w-[76ch]">
+            <div>
               {content.trim() ? (
                 <div className="bg-carbon rounded-xl px-6 py-5">
-                  <Markdown content={content} />
+                  <Markdown content={content} className="max-w-none" />
                 </div>
               ) : (
                 <div className="py-16 text-center text-xs text-fog space-y-2">

@@ -137,6 +137,16 @@ function matchStructuredHeader(line: string): { label: string; value: string } |
   return null;
 }
 
+/** `| a | b |` -> ["a", "b"]; `\|` stays a literal pipe. */
+function splitRow(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split(/(?<!\\)\|/)
+    .map((cell) => cell.trim().replace(/\\\|/g, "|"));
+}
+
 function renderFlowBlocks(lines: string[], keyPrefix: string): ReactNode[] {
   const elements: ReactNode[] = [];
   let inCodeBlock = false;
@@ -164,7 +174,52 @@ function renderFlowBlocks(lines: string[], keyPrefix: string): ReactNode[] {
     listBuffer = null;
   };
 
+  let tableBuffer: string[] = [];
+  const flushTable = (suffix: string) => {
+    if (tableBuffer.length === 0) return;
+    const rows = tableBuffer.map(splitRow);
+    tableBuffer = [];
+    const hasHeader = rows.length > 1 && rows[1].every((c) => /^:?-{2,}:?$/.test(c));
+    const head = hasHeader ? rows[0] : null;
+    const body = hasHeader ? rows.slice(2) : rows;
+    elements.push(
+      <div key={`${keyPrefix}-tbl-${suffix}`} className="my-3 overflow-x-auto">
+        <table className="w-full text-xs border-collapse">
+          {head && (
+            <thead>
+              <tr className="border-b border-obsidian">
+                {head.map((cell, i) => (
+                  <th key={`th-${i}`} className="text-left font-semibold text-paper px-2.5 py-1.5">
+                    {renderInline(cell)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+          )}
+          <tbody>
+            {body.map((row, r) => (
+              <tr key={`tr-${r}`} className="border-b border-obsidian/60 last:border-0">
+                {row.map((cell, i) => (
+                  <td key={`td-${i}`} className="px-2.5 py-1.5 align-top text-mist break-words">
+                    {renderInline(cell)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>,
+    );
+  };
+
   lines.forEach((line, idx) => {
+    if (!inCodeBlock && /^\s*\|.*\|\s*$/.test(line)) {
+      flushList(`fl-t-${idx}`);
+      tableBuffer.push(line);
+      return;
+    }
+    flushTable(`${idx}`);
+
     if (line.startsWith("```")) {
       flushList(`fl-${idx}`);
       if (inCodeBlock) {
@@ -287,6 +342,7 @@ function renderFlowBlocks(lines: string[], keyPrefix: string): ReactNode[] {
   });
 
   flushList("final");
+  flushTable("final");
 
   if (inCodeBlock && codeBuffer.length > 0) {
     elements.push(

@@ -126,14 +126,10 @@ function TechRow({
       title={`Abrir documentación de ${tech.name} ${tech.version}`}
       className={cn(
         "group w-full flex items-center gap-2.5 px-2.5 rounded-md text-left hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 min-w-0",
-        nested ? "h-8" : "h-10",
+        nested ? "h-8 pl-3.5" : "h-10",
       )}
     >
-      {nested ? (
-        <span className="w-5 flex-shrink-0" />
-      ) : (
-        <TechIcon name={tech.name} className="w-5 h-5" />
-      )}
+      {!nested && <TechIcon name={tech.name} className="w-5 h-5" />}
       <span
         className={cn(
           "truncate flex-1 min-w-0",
@@ -174,10 +170,12 @@ export function TechnologiesTab({ project }: TechnologiesTabProps) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      const seq = syncSeq.current;
       try {
         const stored = await api.listTechnologies(project.id);
         if (cancelled) return;
-        setItems(stored);
+        // A focus sync that finished first holds fresher data.
+        if (seq === syncSeq.current) setItems(stored);
       } catch (err) {
         if (!cancelled) setError(formatError(err));
       } finally {
@@ -250,54 +248,38 @@ export function TechnologiesTab({ project }: TechnologiesTabProps) {
           </div>
         )}
 
-        {grouped.map(([ecosystem, list]) => {
-          const families = groupFamilies(list);
-          const multi = families.filter((f) => f.members.length > 1);
-          const singles = families.filter((f) => f.members.length === 1).map((f) => f.members[0]);
-          return (
-            <section key={ecosystem} className="space-y-2">
-              <h3 className="flex items-center gap-2 text-xs font-semibold text-fog px-1 tabular-nums">
-                <span>{ECOSYSTEM_LABELS[ecosystem]}</span>
-                <span className="text-ash font-normal">{list.length}</span>
-              </h3>
-              {multi.length > 0 && (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-2.5 items-start">
-                  {multi.map((family) => (
-                    <div key={family.key} className="bg-carbon rounded-xl p-1.5 min-w-0">
-                      <div className="flex items-center gap-2.5 px-2.5 pt-1.5 pb-1.5">
-                        <TechIcon name={family.icon} className="w-5 h-5" />
-                        <span className="text-sm font-medium text-paper truncate flex-1">
-                          {family.label}
-                        </span>
-                        <span className="text-xs text-fog tabular-nums">
-                          {family.members.length}
-                        </span>
-                      </div>
-                      <ul>
-                        {family.members.map((tech) => (
-                          <li key={tech.id}>
-                            <TechRow tech={tech} nested onError={setError} />
-                          </li>
-                        ))}
-                      </ul>
+        {grouped.map(([ecosystem, list]) => (
+          <section key={ecosystem} className="space-y-2">
+            <h3 className="flex items-center gap-2 text-xs font-semibold text-fog px-1 tabular-nums">
+              <span>{ECOSYSTEM_LABELS[ecosystem]}</span>
+              <span className="text-ash font-normal">{list.length}</span>
+            </h3>
+            <ul className="bg-carbon rounded-xl p-1.5 columns-[250px] gap-x-1.5">
+              {groupFamilies(list).map((family) =>
+                family.members.length === 1 ? (
+                  <li key={family.key} className="break-inside-avoid">
+                    <TechRow tech={family.members[0]} onError={setError} />
+                  </li>
+                ) : (
+                  <li key={family.key} className="break-inside-avoid pb-1">
+                    <div className="flex items-center gap-2.5 px-2.5 h-10 min-w-0">
+                      <TechIcon name={family.icon} className="w-5 h-5" />
+                      <span className="text-sm text-paper truncate flex-1">{family.label}</span>
+                      <span className="text-xs text-fog tabular-nums">{family.members.length}</span>
                     </div>
-                  ))}
-                </div>
+                    <ul className="ml-[19px] border-l border-obsidian">
+                      {family.members.map((tech) => (
+                        <li key={tech.id}>
+                          <TechRow tech={tech} nested onError={setError} />
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ),
               )}
-              {singles.length > 0 && (
-                <div className="bg-carbon rounded-xl p-1.5">
-                  <ul className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-0.5">
-                    {singles.map((tech) => (
-                      <li key={tech.id}>
-                        <TechRow tech={tech} onError={setError} />
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </section>
-          );
-        })}
+            </ul>
+          </section>
+        ))}
 
         {isLoaded && syncCount > 0 && grouped.length === 0 && !query && (
           <div className="py-16 text-center text-sm text-fog">Sin dependencias detectadas</div>

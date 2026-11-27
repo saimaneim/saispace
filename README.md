@@ -86,6 +86,7 @@ $ sai check                 # run .agents/checks against the repo
 $ sai skills sync           # link .agents/skills into .claude/skills (Claude Code)
 $ sai setup opencode        # install the OpenCode plugin
 $ sai setup claude          # install the Claude Code memory hooks
+$ sai setup rules           # copy ~/.config/saispace/rules.md into every installed agent's global file
 ```
 
 Saving again with the same `--topic` updates the memory instead of creating a duplicate. Mentioning another memory's id or `topic_key` in the content links them, and only the latest 3 session summaries per project stay active.

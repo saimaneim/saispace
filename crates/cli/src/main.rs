@@ -19,6 +19,7 @@ mod recall;
 mod rules;
 mod secret;
 mod setup;
+mod setup_rules;
 mod skills;
 
 use clap::{Parser, Subcommand};

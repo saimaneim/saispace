@@ -107,7 +107,7 @@ function hookPurpose(command: string, event: string): string {
     if (event === "Stop") return "Pide guardar lo aprendido al terminar";
     if (event.startsWith("PostToolUse")) return "Recuerda la solución si un error se repite";
   }
-  return event;
+  return command;
 }
 
 function SkillsPanel({ inventory }: { inventory: AiInventory }) {
@@ -205,6 +205,22 @@ function Row({
   );
 }
 
+/** One row per hook purpose: the same job on several events shows once. */
+function groupHooks(hooks: AiInventory["hooks"]) {
+  const map = new Map<
+    string,
+    { tool: string; command: string; purpose: string; events: string[] }
+  >();
+  for (const hook of hooks) {
+    const purpose = hookPurpose(hook.command, hook.event);
+    const key = `${hook.tool}\u0000${hook.command}\u0000${purpose}`;
+    const entry = map.get(key) ?? { tool: hook.tool, command: hook.command, purpose, events: [] };
+    if (!entry.events.includes(hook.event)) entry.events.push(hook.event);
+    map.set(key, entry);
+  }
+  return [...map.values()];
+}
+
 function ConnectionsPanel({ inventory }: { inventory: AiInventory }) {
   const isEmpty =
     inventory.mcp_servers.length === 0 &&
@@ -256,14 +272,25 @@ function ConnectionsPanel({ inventory }: { inventory: AiInventory }) {
       {inventory.hooks.length > 0 && (
         <>
           <SectionTitle>Hooks</SectionTitle>
-          {inventory.hooks.map((hook) => (
-            <Row
-              key={`${hook.tool}-${hook.event}-${hook.command}`}
-              icon={hook.tool}
-              title={hookPurpose(hook.command, hook.event)}
-              detail={hook.event}
-              meta={<ToolBadge tool={hook.tool} />}
-            />
+          {groupHooks(inventory.hooks).map((hook) => (
+            <div
+              key={`${hook.tool}-${hook.command}-${hook.purpose}`}
+              title={hook.command}
+              className="flex items-center gap-3 px-3 min-h-10 py-2 rounded-md bg-carbon min-w-0"
+            >
+              <TechIcon name={hook.tool} className="w-5 h-5" />
+              <span className="text-sm text-paper flex-1 min-w-0 break-words">{hook.purpose}</span>
+              <span className="flex flex-wrap justify-end gap-1 flex-shrink-0">
+                {hook.events.map((event) => (
+                  <span
+                    key={event}
+                    className="h-5 px-1.5 rounded bg-obsidian text-[11px] text-fog font-mono flex items-center"
+                  >
+                    {event}
+                  </span>
+                ))}
+              </span>
+            </div>
           ))}
         </>
       )}

@@ -205,3 +205,28 @@ fn plan_outside_project_fails_with_usage() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("no es un proyecto"), "{stderr}");
 }
+
+#[test]
+fn session_context_lists_open_tasks_until_done() {
+    let sb = Sandbox::new("context");
+    let fx = create_fixture(&sb);
+    assert!(sb.sai(&["plan", "done", &fx.release]).status.success());
+
+    let context = stdout(&sb.sai(&["memory", "context"]));
+    assert!(context.contains("## Pendiente del plan"), "{context}");
+    assert!(
+        context.contains(&format!("Anunciar · Publicar la v0 · {}", fx.announce)),
+        "{context}"
+    );
+    assert!(context.contains(&fx.loose), "loose tasks too: {context}");
+    assert!(
+        !context.contains("Preparar release"),
+        "done ones leave: {context}"
+    );
+
+    for id in [&fx.announce, &fx.inner, &fx.loose] {
+        assert!(sb.sai(&["plan", "done", id]).status.success());
+    }
+    let after = stdout(&sb.sai(&["memory", "context"]));
+    assert!(!after.contains("## Pendiente del plan"), "{after}");
+}

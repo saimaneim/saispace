@@ -80,8 +80,7 @@ export function MemoryTab({ project, refreshKey, focusId, focusSeq }: MemoryTabP
         api.memoryDuplicates(project?.id ?? null),
         api.memoryStale(project?.id ?? null),
       ]);
-      // A project shows its own memories; global ones live in the Global view.
-      setMemories(project ? mems.filter((m) => m.project_id === project.id) : mems);
+      setMemories(mems);
       setDuplicates(dupes);
       setStaleReport(stale);
     } catch (err) {
