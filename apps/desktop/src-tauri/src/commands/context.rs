@@ -298,6 +298,10 @@ fn scan_project(root: &Path) -> Vec<ContextFile> {
     if !root.is_dir() {
         return Vec::new();
     }
+    // Files are checked against the canonical root: a root reached through a
+    // symlink (macOS /var -> /private/var) would otherwise list nothing.
+    let canonical_root = fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    let root = canonical_root.as_path();
 
     let mut primary: Vec<ContextFile> = ROOT_FILES
         .iter()
@@ -697,6 +701,28 @@ mod tests {
     fn scan_of_missing_root_is_empty() {
         let missing = std::env::temp_dir().join(format!("saispace-missing-{}", Uuid::now_v7()));
         assert_eq!(scan_project(&missing), Vec::<ContextFile>::new());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn root_reached_through_a_symlink_still_lists_files() {
+        // macOS temp dirs live under /var, a symlink to /private/var.
+        let base = tempfile::tempdir().expect("tempdir");
+        let real = base.path().join("real");
+        fs::create_dir(&real).expect("real dir");
+        fs::write(real.join("CLAUDE.md"), "@AGENTS.md\n").expect("claude");
+        let via = base.path().join("via");
+        std::os::unix::fs::symlink(&real, &via).expect("symlink root");
+
+        let files = scan_project(&via);
+        let claude = files.iter().find(|f| f.path == "CLAUDE.md").expect("listed");
+        assert_eq!(
+            claude.link,
+            Some(ContextLink {
+                target: "AGENTS.md".into(),
+                via: ContextLinkVia::Import
+            })
+        );
     }
 
     #[cfg(unix)]
