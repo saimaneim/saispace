@@ -458,14 +458,15 @@ export function installFakeBackend(options: FakeBackendOptions = {}) {
       const path = String(relativePath);
       const text = String(content);
       contextContents[path] = text;
+      const idx = contextFiles.findIndex((f) => f.path === path);
       const file: ContextFile = {
         path,
         name: path.split("/").pop() || path,
-        kind: "other",
+        // Saving keeps the class the listing gave the file.
+        kind: contextFiles[idx]?.kind ?? "other",
         size: text.length,
         modified_at: now(),
       };
-      const idx = contextFiles.findIndex((f) => f.path === path);
       if (idx >= 0) contextFiles[idx] = file;
       else contextFiles.push(file);
       return file;

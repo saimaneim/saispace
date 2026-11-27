@@ -82,32 +82,35 @@ pub fn default_source(home: &Path) -> PathBuf {
 }
 
 /// `text` with the managed block set to `rules` (or removed when `None`).
+/// Text outside the block is kept byte for byte; only the blank lines that
+/// separate it from the block are normalized.
 #[must_use]
 pub fn with_block(text: &str, rules: Option<&str>) -> String {
     let outside = match (text.find(START), text.find(END)) {
         (Some(a), Some(b)) if b > a => {
-            let before = text[..a].trim_end();
-            let after = text[b + END.len()..].trim();
+            let before = text[..a].trim_end_matches('\n');
+            let after = text[b + END.len()..].trim_start_matches('\n');
             match (before.is_empty(), after.is_empty()) {
                 (true, _) => after.to_string(),
-                (false, true) => before.to_string(),
+                (false, true) => format!("{before}\n"),
                 (false, false) => format!("{before}\n\n{after}"),
             }
         }
-        _ => text.trim_end().to_string(),
+        _ => text.to_string(),
+    };
+    let outside = if outside.is_empty() || outside.ends_with('\n') {
+        outside
+    } else {
+        format!("{outside}\n")
     };
     let Some(rules) = rules else {
-        return if outside.is_empty() {
-            String::new()
-        } else {
-            format!("{outside}\n")
-        };
+        return outside;
     };
     let block = format!("{START}\n{}\n{END}\n", rules.trim());
-    if outside.is_empty() {
+    if outside.trim().is_empty() {
         block
     } else {
-        format!("{block}\n{outside}\n")
+        format!("{block}\n{outside}")
     }
 }
 
@@ -118,12 +121,43 @@ pub enum Outcome {
     Removed,
     Manual,
     NotInstalled,
+    /// The target is the rules source itself: left untouched.
+    IsSource,
+}
+
+fn not_found_ok<T: Default>(res: std::io::Result<T>) -> std::io::Result<T> {
+    match res {
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(T::default()),
+        other => other,
+    }
+}
+
+/// Replaces `path` through a temporary sibling so a failed write never
+/// leaves it truncated. A symlink is written through to its target.
+fn write_atomic(path: &Path, content: &str) -> CliResult<()> {
+    let real = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let parent = real
+        .parent()
+        .ok_or_else(|| CliError::Usage(format!("ruta sin directorio: {}", real.display())))?;
+    fs::create_dir_all(parent)?;
+    let tmp = parent.join(format!(".saispace-rules.{}.tmp", std::process::id()));
+    let result = fs::write(&tmp, content)
+        .and_then(|()| match fs::metadata(&real) {
+            Ok(meta) => fs::set_permissions(&tmp, meta.permissions()),
+            Err(_) => Ok(()),
+        })
+        .and_then(|()| fs::rename(&tmp, &real));
+    if result.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    Ok(result?)
 }
 
 /// Writes (or with `rules = None` removes) the block in one target's file.
 ///
 /// A symlink pointing at the rules source itself is replaced by a regular
 /// file, so the tool never reads a file that contains its own block twice.
+/// A target that is the source as a regular file is skipped.
 ///
 /// # Errors
 ///
@@ -135,12 +169,19 @@ pub fn apply(target: &Target, source: &Path, rules: Option<&str>) -> CliResult<O
     let Some(file) = &target.file else {
         return Ok(Outcome::Manual);
     };
-    let points_at_source = fs::symlink_metadata(file).is_ok_and(|m| m.file_type().is_symlink())
-        && fs::canonicalize(file).ok() == fs::canonicalize(source).ok();
+    let same_file = matches!(
+        (fs::canonicalize(file), fs::canonicalize(source)),
+        (Ok(a), Ok(b)) if a == b
+    );
+    let is_link = fs::symlink_metadata(file).is_ok_and(|m| m.file_type().is_symlink());
+    let points_at_source = same_file && is_link;
+    if same_file && !is_link {
+        return Ok(Outcome::IsSource);
+    }
     let current = if points_at_source {
         String::new()
     } else {
-        fs::read_to_string(file).unwrap_or_default()
+        not_found_ok(fs::read_to_string(file))?
     };
     let next = with_block(&current, rules);
     if next == current && !points_at_source {
@@ -158,13 +199,10 @@ pub fn apply(target: &Target, source: &Path, rules: Option<&str>) -> CliResult<O
             fs::copy(file, &backup)?;
         }
     }
-    if let Some(parent) = file.parent() {
-        fs::create_dir_all(parent)?;
-    }
     if next.is_empty() && rules.is_none() {
-        let _ = fs::remove_file(file);
+        not_found_ok(fs::remove_file(file))?;
     } else {
-        fs::write(file, next)?;
+        write_atomic(file, &next)?;
     }
     Ok(if rules.is_some() {
         Outcome::Written
@@ -188,7 +226,7 @@ pub fn run(from: Option<&Path>, uninstall: bool) -> CliResult<()> {
                 source.display()
             ))
         })?;
-        if text.contains(START) {
+        if text.contains(START) || text.contains(END) {
             return Err(CliError::Usage(
                 "el origen contiene un bloque de saispace: usa un fichero propio".to_string(),
             ));
@@ -209,6 +247,7 @@ pub fn run(from: Option<&Path>, uninstall: bool) -> CliResult<()> {
                 target.name,
                 source.display()
             ),
+            Outcome::IsSource => crate::out!("{}: es el origen, se omite", target.name),
             Outcome::Manual | Outcome::NotInstalled => {}
         }
     }
@@ -229,6 +268,32 @@ mod tests {
         assert_eq!(second.matches(START).count(), 1);
         assert_eq!(with_block(&second, Some("- regla B")), second, "idempotent");
         assert_eq!(with_block(&second, None), "Mis reglas propias\n");
+
+        let indented = "    código sangrado\n";
+        let synced = with_block(&with_block(indented, Some("- r")), Some("- r"));
+        assert_eq!(
+            with_block(&synced, None),
+            indented,
+            "outer text kept byte for byte"
+        );
+    }
+
+    #[test]
+    fn the_source_itself_is_never_rewritten() {
+        let home = tempfile::tempdir().expect("tempdir");
+        let source = home.path().join(".a/AGENTS.md");
+        fs::create_dir_all(home.path().join(".a")).expect("dir");
+        fs::write(&source, "- mis reglas\n").expect("source");
+        let target = Target {
+            name: "a",
+            dir: home.path().join(".a"),
+            file: Some(source.clone()),
+        };
+        assert_eq!(
+            apply(&target, &source, Some("- mis reglas")).expect("apply"),
+            Outcome::IsSource
+        );
+        assert_eq!(fs::read_to_string(&source).expect("read"), "- mis reglas\n");
     }
 
     #[test]

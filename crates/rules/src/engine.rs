@@ -96,7 +96,8 @@ impl Hit {
         Self {
             line,
             column,
-            snippet: ctx.line_text(line).to_string(),
+            // Cut now: a minified line with many hits must not be copied whole each time.
+            snippet: snippet(ctx.line_text(line)),
         }
     }
 }
@@ -121,6 +122,16 @@ impl Compiled {
     }
 }
 
+/// The scoped part of a match: group 1 when the regex declares one (and it
+/// took part), else the whole match.
+fn scope<'h>(re: &Regex, caps: &regex::Captures<'h>) -> Option<regex::Match<'h>> {
+    if re.captures_len() > 1 {
+        caps.get(1)
+    } else {
+        caps.get(0)
+    }
+}
+
 impl ForbidSpec {
     fn hits(&self, ctx: &FileCtx<'_>, rule: &str) -> Vec<Hit> {
         let skipped = |m: &regex::Match, line: usize| {
@@ -139,11 +150,15 @@ impl ForbidSpec {
                 .position(|l| stop.is_match(l))
                 .unwrap_or(usize::MAX)
         });
+        // Multiline and scoped searches see only the text before `stop_at`.
+        let searched = ctx
+            .starts
+            .get(stop_line)
+            .map_or(ctx.text, |&end| &ctx.text[..end]);
         let mut hits = Vec::new();
         if let Some(within) = &self.within {
-            for caps in within.captures_iter(ctx.text) {
-                let (Some(whole), Some(span)) = (caps.get(0), caps.get(1).or_else(|| caps.get(0)))
-                else {
+            for caps in within.captures_iter(searched) {
+                let (Some(whole), Some(span)) = (caps.get(0), scope(within, &caps)) else {
                     continue;
                 };
                 if self
@@ -164,7 +179,7 @@ impl ForbidSpec {
                 }
             }
         } else if self.multiline {
-            for m in self.pattern.find_iter(ctx.text) {
+            for m in self.pattern.find_iter(searched) {
                 let (line, column) = locate(&ctx.starts, m.start());
                 if line > stop_line {
                     break;
@@ -199,7 +214,7 @@ impl Compiled {
                 pattern
                     .captures_iter(ctx.text)
                     .filter_map(|caps| {
-                        let reference = caps.get(1).or_else(|| caps.get(0))?;
+                        let reference = scope(pattern, &caps)?;
                         let (line, column) = locate(&ctx.starts, reference.start());
                         let missing = !path_exists(root, reference.as_str(), suffixes)
                             && !is_suppressed(&ctx.lines, line - 1, &self.def.id);

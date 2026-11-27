@@ -186,7 +186,7 @@ CREATE TABLE ai_notes (
 CREATE TABLE drift_alerts (
     id TEXT PRIMARY KEY NOT NULL,
     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    note_id TEXT NOT NULL REFERENCES static_notes(id) ON DELETE CASCADE,
+    note_id TEXT REFERENCES static_notes(id) ON DELETE CASCADE,  -- NULL: alerta de proyecto (p. ej. `undocumented` sin notas)
     kind TEXT NOT NULL,                    -- ver §5
     fact_key TEXT NOT NULL,
     evidence TEXT NOT NULL,                -- JSON: afirmación, línea de la nota, hecho actual
@@ -194,12 +194,12 @@ CREATE TABLE drift_alerts (
     status TEXT NOT NULL CHECK (status IN ('open', 'dismissed', 'resolved')),
     created_at TEXT NOT NULL, resolved_at TEXT
 );
-CREATE UNIQUE INDEX idx_drift_open ON drift_alerts(note_id, kind, fact_key) WHERE status = 'open';
+CREATE UNIQUE INDEX idx_drift_open ON drift_alerts(project_id, COALESCE(note_id, ''), kind, fact_key) WHERE status = 'open';
 ```
 
 - Triggers FTS como los de `memories`: `static_notes` y `ai_notes` en `search_index`.
 - Migración de datos: cada `projects.context_notes` no vacío pasa a `static_notes` (`title = 'Contexto'`, `origin = 'manual'`).
-- Retención: por checker se guardan los últimos 20 snapshots más cualquiera referenciado por `ai_notes`, `drift_alerts` o `project_state_head`. GC al final de cada refresh, nunca en segundo plano.
+- Retención: por checker se guardan los últimos 20 snapshots más cualquiera referenciado por `ai_notes`, `drift_alerts`, propuestas o `project_state_head`. GC al final de cada refresh, nunca en segundo plano, en este orden: 1) borrar `project_states` no protegidos (ni head ni citados por síntesis, alertas o propuestas) y sus filas de `project_state_snapshots`; 2) borrar snapshots que ya no cita ningún estado.
 - La capa 2 no tiene tabla de "notas": su texto se renderiza en lectura desde `facts`, siempre igual para el mismo hash.
 
 ## 3. Contrato de checker
@@ -275,7 +275,9 @@ refresh_facts(project)
  1. Lock por proyecto (BEGIN IMMEDIATE sobre project_state_head) para que CLI, MCP y app no corran a la vez.
  2. RepoView una sola vez: git ls-files -s -z (+ untracked no ignorados), git status --porcelain=v2 -z.
  3. Por checker:
-    a. fp = blake3(version ‖ (path, blob|size+mtime) de los ficheros que casan con inputs())
+    a. fp = blake3(version ‖ (path, blob) de los ficheros que casan con inputs()); para los modificados
+       o sin seguimiento según `git status`, el blob se sustituye por el hash de su contenido en disco
+       (el índice no ve cambios sin `git add`).
     b. fp == checker_state.input_fingerprint → reutiliza snapshot, no ejecuta.
     c. si no: run → canonicaliza → hash.
        hash == hash del snapshot actual → solo actualiza fp, checked_at y sources.
@@ -293,8 +295,8 @@ saispace nunca llama a un modelo ni guarda API keys. Sintetiza el agente que ya 
 ```
 agente → get_synthesis_job(project, scope, kind)
   refresh_facts()                                       (barato, 0 tokens)
-  ai = última ai_note(scope, kind)
-  ai.state_id == head            → {up_to_date: true, note}     ← PUERTA: nada más
+  ai = ai_note(scope, kind, state = head) ?? última ai_note(scope, kind)
+  ai.state_id == head            → {up_to_date: true, note}     ← PUERTA: nada más (también al volver a un estado ya sintetizado)
   ai existe y su estado es otro  → {base: ai.state, target: head,
                                     diff: FactDiff por checker,
                                     commits: git log --oneline base..head (≤ 30),

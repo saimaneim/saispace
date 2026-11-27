@@ -153,12 +153,14 @@ export function TechnologiesTab({ project }: TechnologiesTabProps) {
   const [error, setError] = useState<string | null>(null);
   const [syncCount, setSyncCount] = useState(0);
   const syncSeq = useRef(0);
+  const hasSynced = useRef(false);
 
   const sync = useCallback(async () => {
     const seq = ++syncSeq.current;
     try {
       const synced = await api.syncProjectStack(project.id);
       if (seq !== syncSeq.current) return;
+      hasSynced.current = true;
       setItems(synced);
       setSyncCount((n) => n + 1);
       setError(null);
@@ -170,12 +172,12 @@ export function TechnologiesTab({ project }: TechnologiesTabProps) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const seq = syncSeq.current;
+      hasSynced.current = false;
       try {
         const stored = await api.listTechnologies(project.id);
         if (cancelled) return;
-        // A focus sync that finished first holds fresher data.
-        if (seq === syncSeq.current) setItems(stored);
+        // A sync that already succeeded holds fresher data.
+        if (!hasSynced.current) setItems(stored);
       } catch (err) {
         if (!cancelled) setError(formatError(err));
       } finally {

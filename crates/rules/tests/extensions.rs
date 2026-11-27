@@ -306,3 +306,51 @@ unless_span = 'data-opt'
 pattern = 'bg-red-\d+'
 "#])
 }
+
+#[test]
+fn within_with_a_group_ignores_alternatives_that_skip_it() {
+    let engine = engine(&[r#"
+id = "no-small-text"
+description = "x"
+files = ["*.tsx"]
+
+[check]
+kind = "forbid"
+pattern = 'text-xs'
+within = '//[^\n]*|className="([^"]*)"'
+"#]);
+    assert_eq!(engine.check_text("a.tsx", "// text-xs\n").len(), 0);
+    assert_eq!(
+        engine
+            .check_text("a.tsx", "<p className=\"text-xs\" />\n")
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn multiline_matches_stop_before_stop_at() {
+    let engine = engine(&[r#"
+id = "no-bad"
+description = "x"
+files = ["*.ts"]
+
+[check]
+kind = "forbid"
+pattern = '(?s)BEGIN.*BAD'
+multiline = true
+stop_at = '^// tests below'
+"#]);
+    assert_eq!(
+        engine
+            .check_text("a.ts", "BEGIN\n// tests below\nBAD\n")
+            .len(),
+        0
+    );
+    assert_eq!(
+        engine
+            .check_text("a.ts", "BEGIN\nBAD\n// tests below\n")
+            .len(),
+        1
+    );
+}
