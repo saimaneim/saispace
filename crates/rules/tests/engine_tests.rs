@@ -52,6 +52,8 @@ fn forbid(id: &str, files: &[&str], pattern: &str) -> RuleDef {
             except: None,
             within: None,
             unless_span: None,
+            unless_before: None,
+            before_chars: None,
         }),
         fix: Some("use ? instead".to_string()),
         guide: None,
@@ -69,6 +71,8 @@ fn forbid_reports_line_column_and_respects_stop_at_and_suppression() {
         except: None,
         within: None,
         unless_span: None,
+        unless_before: None,
+        before_chars: None,
     });
     let engine = Engine::new(&[rule]).expect("engine");
     let text = "fn a() {\n    x.unwrap();\n    y.unwrap(); // sai-ignore: no-unwrap\n    // sai-ignore: other, no-unwrap\n    z.unwrap();\n}\n#[cfg(test)]\nmod t { fn b() { q.unwrap(); } }\n";

@@ -183,6 +183,17 @@ pub fn rule(cmd: RuleCommand) -> CliResult<()> {
                         Some(Check::Require { .. }) => "exige",
                         Some(Check::MaxLines { .. }) => "máx. líneas",
                         Some(Check::RefsExist { .. }) => "rutas válidas",
+                        Some(Check::Block { .. }) => "bloques",
+                        Some(Check::UnusedSymbols { .. }) => "sin usar",
+                        Some(Check::SetCovered { .. }) => "conjuntos",
+                        Some(Check::Element(_)) => "elementos",
+                        Some(Check::Contrast(_) | Check::CssContrast { .. }) => "contraste",
+                        Some(
+                            Check::CssLength { .. }
+                            | Check::CssLineHeight { .. }
+                            | Check::CssScale { .. }
+                            | Check::CssRefs { .. },
+                        ) => "tokens CSS",
                         None => "guía",
                     };
                     crate::out!(
@@ -223,6 +234,8 @@ fn add(root: &Path, args: AddArgs) -> CliResult<()> {
             except: None,
             within: None,
             unless_span: None,
+            unless_before: None,
+            before_chars: None,
         }),
         (None, Some(pattern), None) => Some(Check::Require { pattern }),
         (None, None, Some(max)) => Some(Check::MaxLines { max }),

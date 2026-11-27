@@ -1,3 +1,10 @@
+use crate::contrast::ContrastSpec;
+use crate::crossfile::{BlockSpec, CoveredSpec, RefsSpec, SymbolsSpec, is_path_template};
+use crate::csscheck::CssSpec;
+use crate::ctx::{
+    FileCtx, Hit, Repo, expand, is_suppressed, locate, optional_regex, regex, scope, snippet, walk,
+};
+use crate::element::ElementSpec;
 use crate::error::{RulesError, RulesResult};
 use crate::model::{Check, RuleDef, Severity};
 use globset::{Glob, GlobSet, GlobSetBuilder};
@@ -8,7 +15,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const MAX_FILE_BYTES: u64 = 2 * 1024 * 1024;
-const SNIPPET_CHARS: usize = 160;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Finding {
@@ -53,53 +59,29 @@ struct ForbidSpec {
     except: Option<Regex>,
     within: Option<Regex>,
     unless_span: Option<Regex>,
+    unless_before: Option<Regex>,
+    before_chars: usize,
+}
+
+/// A `require` pattern; when it names the file (`{parent}`, `{stem}`..) it is
+/// built per file.
+enum RequireSpec {
+    Fixed(Regex),
+    PerFile(String),
 }
 
 enum Matcher {
     Forbid(ForbidSpec),
-    RefsExist {
-        pattern: Regex,
-        suffixes: Vec<String>,
-    },
-    Require {
-        pattern: Regex,
-    },
-    MaxLines {
-        max: usize,
-    },
+    RefsExist(RefsSpec),
+    Require(RequireSpec),
+    MaxLines { max: usize },
+    Block(BlockSpec),
+    Symbols(SymbolsSpec),
+    Covered(CoveredSpec),
+    Element(Box<ElementSpec>),
+    Contrast(Box<ContrastSpec>),
+    Css(CssSpec),
     None,
-}
-
-/// One file under check, with the line index every matcher shares.
-struct FileCtx<'a> {
-    root: Option<&'a Path>,
-    text: &'a str,
-    lines: Vec<&'a str>,
-    starts: Vec<usize>,
-}
-
-impl FileCtx<'_> {
-    fn line_text(&self, line: usize) -> &str {
-        self.lines.get(line - 1).copied().unwrap_or_default()
-    }
-}
-
-/// A violation: 1-based line and column plus the text to show for it.
-struct Hit {
-    line: usize,
-    column: usize,
-    snippet: String,
-}
-
-impl Hit {
-    fn at(ctx: &FileCtx<'_>, line: usize, column: usize) -> Self {
-        Self {
-            line,
-            column,
-            // Cut now: a minified line with many hits must not be copied whole each time.
-            snippet: snippet(ctx.line_text(line)),
-        }
-    }
 }
 
 struct Compiled {
@@ -119,16 +101,6 @@ impl Compiled {
     fn passes_file_guards(&self, text: &str) -> bool {
         self.only_if.as_ref().is_none_or(|re| re.is_match(text))
             && !self.unless.as_ref().is_some_and(|re| re.is_match(text))
-    }
-}
-
-/// The scoped part of a match: group 1 when the regex declares one (and it
-/// took part), else the whole match.
-fn scope<'h>(re: &Regex, caps: &regex::Captures<'h>) -> Option<regex::Match<'h>> {
-    if re.captures_len() > 1 {
-        caps.get(1)
-    } else {
-        caps.get(0)
     }
 }
 
@@ -155,6 +127,14 @@ impl ForbidSpec {
             .starts
             .get(stop_line)
             .map_or(ctx.text, |&end| &ctx.text[..end]);
+        let after_guard = |offset: usize| {
+            self.unless_before.as_ref().is_some_and(|re| {
+                let from = (offset.saturating_sub(self.before_chars)..=offset)
+                    .find(|&i| ctx.text.is_char_boundary(i))
+                    .unwrap_or(offset);
+                re.is_match(&ctx.text[from..offset])
+            })
+        };
         let mut hits = Vec::new();
         if let Some(within) = &self.within {
             for caps in within.captures_iter(searched) {
@@ -169,11 +149,12 @@ impl ForbidSpec {
                     continue;
                 }
                 for m in self.pattern.find_iter(span.as_str()) {
-                    let (line, column) = locate(&ctx.starts, span.start() + m.start());
+                    let offset = span.start() + m.start();
+                    let (line, column) = locate(&ctx.starts, offset);
                     if line > stop_line {
                         break;
                     }
-                    if !skipped(&m, line) {
+                    if !skipped(&m, line) && !after_guard(offset) {
                         hits.push(Hit::at(ctx, line, column));
                     }
                 }
@@ -184,16 +165,15 @@ impl ForbidSpec {
                 if line > stop_line {
                     break;
                 }
-                if !skipped(&m, line) {
+                if !skipped(&m, line) && !after_guard(m.start()) {
                     hits.push(Hit::at(ctx, line, column));
                 }
             }
         } else {
             for (index, line) in ctx.lines.iter().enumerate().take(stop_line) {
-                let found = self
-                    .pattern
-                    .find_iter(line)
-                    .find(|m| !skipped(m, index + 1));
+                let found = self.pattern.find_iter(line).find(|m| {
+                    !skipped(m, index + 1) && !after_guard(ctx.starts[index] + m.start())
+                });
                 if let Some(m) = found {
                     hits.push(Hit::at(ctx, index + 1, m.start() + 1));
                 }
@@ -204,26 +184,20 @@ impl ForbidSpec {
 }
 
 impl Compiled {
-    fn hits(&self, ctx: &FileCtx<'_>) -> Vec<Hit> {
+    fn hits(&self, ctx: &FileCtx<'_>, index: usize) -> Vec<Hit> {
+        let rule = &self.def.id;
         match &self.matcher {
-            Matcher::Forbid(spec) => spec.hits(ctx, &self.def.id),
-            Matcher::RefsExist { pattern, suffixes } => {
-                let Some(root) = ctx.root else {
-                    return Vec::new();
+            Matcher::Forbid(spec) => spec.hits(ctx, rule),
+            Matcher::RefsExist(spec) => spec.hits(ctx, rule),
+            Matcher::Require(spec) => {
+                let found = match spec {
+                    RequireSpec::Fixed(re) => re.is_match(ctx.text),
+                    RequireSpec::PerFile(template) => {
+                        Regex::new(&expand(template, None, ctx.rel, true))
+                            .is_ok_and(|re| re.is_match(ctx.text))
+                    }
                 };
-                pattern
-                    .captures_iter(ctx.text)
-                    .filter_map(|caps| {
-                        let reference = scope(pattern, &caps)?;
-                        let (line, column) = locate(&ctx.starts, reference.start());
-                        let missing = !path_exists(root, reference.as_str(), suffixes)
-                            && !is_suppressed(&ctx.lines, line - 1, &self.def.id);
-                        missing.then(|| Hit::at(ctx, line, column))
-                    })
-                    .collect()
-            }
-            Matcher::Require { pattern } => {
-                if pattern.is_match(ctx.text) {
+                if found {
                     Vec::new()
                 } else {
                     vec![Hit::at(ctx, 1, 1)]
@@ -235,6 +209,12 @@ impl Compiled {
                 snippet: format!("{} lines (max {max})", ctx.lines.len()),
             }],
             Matcher::MaxLines { .. } | Matcher::None => Vec::new(),
+            Matcher::Block(spec) => spec.hits(ctx, rule),
+            Matcher::Symbols(spec) => spec.hits(ctx, index, rule),
+            Matcher::Covered(spec) => spec.hits(ctx, index),
+            Matcher::Element(spec) => spec.hits(ctx, rule),
+            Matcher::Contrast(spec) => spec.hits(ctx, index),
+            Matcher::Css(spec) => spec.hits(ctx),
         }
     }
 }
@@ -258,47 +238,96 @@ fn glob_set(rule: &str, globs: &[String]) -> RulesResult<GlobSet> {
     })
 }
 
-fn regex(rule: &str, pattern: &str) -> RulesResult<Regex> {
-    Regex::new(pattern).map_err(|source| RulesError::Regex {
-        rule: rule.to_string(),
-        source,
+fn compile_matcher(def: &RuleDef) -> RulesResult<Matcher> {
+    let id = def.id.as_str();
+    Ok(match &def.check {
+        Some(Check::Forbid {
+            pattern,
+            stop_at,
+            multiline,
+            unless_line,
+            except,
+            within,
+            unless_span,
+            unless_before,
+            before_chars,
+        }) => Matcher::Forbid(ForbidSpec {
+            pattern: regex(id, pattern)?,
+            stop_at: optional_regex(id, stop_at.as_deref())?,
+            multiline: *multiline,
+            unless_line: optional_regex(id, unless_line.as_deref())?,
+            except: optional_regex(id, except.as_deref())?,
+            within: optional_regex(id, within.as_deref())?,
+            unless_span: optional_regex(id, unless_span.as_deref())?,
+            unless_before: optional_regex(id, unless_before.as_deref())?,
+            before_chars: before_chars.unwrap_or(80),
+        }),
+        Some(Check::RefsExist {
+            pattern,
+            within,
+            json_keys,
+            template,
+            glob,
+            suffixes,
+        }) => Matcher::RefsExist(RefsSpec::new(
+            id,
+            pattern,
+            within.as_deref(),
+            json_keys.as_deref(),
+            template.as_deref(),
+            *glob,
+            suffixes,
+        )?),
+        Some(Check::Require { pattern }) if is_path_template(pattern) => {
+            regex(id, &expand(pattern, None, "a/b/c.d", true))?;
+            Matcher::Require(RequireSpec::PerFile(pattern.clone()))
+        }
+        Some(Check::Require { pattern }) => {
+            Matcher::Require(RequireSpec::Fixed(regex(id, pattern)?))
+        }
+        Some(Check::MaxLines { max }) => Matcher::MaxLines { max: *max },
+        Some(Check::Block {
+            open,
+            end,
+            when,
+            require,
+            forbid,
+        }) => Matcher::Block(BlockSpec::new(
+            id,
+            open,
+            end.as_deref(),
+            when.as_deref(),
+            require.as_deref(),
+            forbid.as_deref(),
+        )?),
+        Some(Check::UnusedSymbols {
+            declare,
+            within,
+            corpus,
+            uses,
+        }) => Matcher::Symbols(SymbolsSpec::new(
+            id,
+            declare,
+            within.as_deref(),
+            corpus,
+            uses,
+        )?),
+        Some(Check::SetCovered {
+            pattern,
+            in_files,
+            in_pattern,
+            ignore,
+        }) => Matcher::Covered(CoveredSpec::new(id, pattern, in_files, in_pattern, ignore)?),
+        Some(Check::Element(element)) => Matcher::Element(Box::new(ElementSpec::new(id, element)?)),
+        Some(Check::Contrast(contrast)) => {
+            Matcher::Contrast(Box::new(ContrastSpec::new(id, contrast)?))
+        }
+        Some(css) => match CssSpec::new(id, css)? {
+            Some(spec) => Matcher::Css(spec),
+            None => Matcher::None,
+        },
+        None => Matcher::None,
     })
-}
-
-/// 1-based line and column of a byte offset, given the byte offset of every line start.
-fn locate(line_starts: &[usize], offset: usize) -> (usize, usize) {
-    let line = line_starts.partition_point(|&start| start <= offset).max(1);
-    (line, offset - line_starts[line - 1] + 1)
-}
-
-fn line_starts(text: &str) -> Vec<usize> {
-    std::iter::once(0)
-        .chain(text.match_indices('\n').map(|(i, _)| i + 1))
-        .collect()
-}
-
-fn path_exists(root: &Path, reference: &str, suffixes: &[String]) -> bool {
-    std::iter::once(String::new())
-        .chain(suffixes.iter().cloned())
-        .any(|suffix| root.join(format!("{reference}{suffix}")).exists())
-}
-
-fn optional_regex(rule: &str, pattern: Option<&str>) -> RulesResult<Option<Regex>> {
-    pattern.map(|p| regex(rule, p)).transpose()
-}
-
-fn is_suppressed(lines: &[&str], index: usize, rule: &str) -> bool {
-    let marker = |line: &str| {
-        line.split("sai-ignore:")
-            .nth(1)
-            .is_some_and(|rest| rest.split([',', ' ']).any(|id| id.trim() == rule))
-    };
-    lines.get(index).is_some_and(|line| marker(line))
-        || (index > 0 && lines.get(index - 1).is_some_and(|line| marker(line)))
-}
-
-fn snippet(line: &str) -> String {
-    line.trim().chars().take(SNIPPET_CHARS).collect()
 }
 
 impl Engine {
@@ -318,41 +347,13 @@ impl Engine {
             .iter()
             .map(|def| {
                 def.validate()?;
-                let matcher = match &def.check {
-                    Some(Check::Forbid {
-                        pattern,
-                        stop_at,
-                        multiline,
-                        unless_line,
-                        except,
-                        within,
-                        unless_span,
-                    }) => Matcher::Forbid(ForbidSpec {
-                        pattern: regex(&def.id, pattern)?,
-                        stop_at: optional_regex(&def.id, stop_at.as_deref())?,
-                        multiline: *multiline,
-                        unless_line: optional_regex(&def.id, unless_line.as_deref())?,
-                        except: optional_regex(&def.id, except.as_deref())?,
-                        within: optional_regex(&def.id, within.as_deref())?,
-                        unless_span: optional_regex(&def.id, unless_span.as_deref())?,
-                    }),
-                    Some(Check::RefsExist { pattern, suffixes }) => Matcher::RefsExist {
-                        pattern: regex(&def.id, pattern)?,
-                        suffixes: suffixes.clone(),
-                    },
-                    Some(Check::Require { pattern }) => Matcher::Require {
-                        pattern: regex(&def.id, pattern)?,
-                    },
-                    Some(Check::MaxLines { max }) => Matcher::MaxLines { max: *max },
-                    None => Matcher::None,
-                };
                 Ok(Compiled {
                     include: glob_set(&def.id, &def.files)?,
                     exclude: glob_set(&def.id, &def.exclude)?,
                     only_if: optional_regex(&def.id, def.only_if.as_deref())?,
                     unless: optional_regex(&def.id, def.unless.as_deref())?,
                     def: def.clone(),
-                    matcher,
+                    matcher: compile_matcher(def)?,
                 })
             })
             .collect::<RulesResult<Vec<_>>>()?;
@@ -369,26 +370,28 @@ impl Engine {
     }
 
     /// Checks one file's text. Rules that need the repository on disk
-    /// (`refs_exist`) are skipped; use [`Engine::check_text_at`] for those.
+    /// (`refs_exist`, `unused_symbols`, `contrast`..) are skipped; use
+    /// [`Engine::check_text_at`] for those.
     #[must_use]
     pub fn check_text(&self, rel: &str, text: &str) -> Vec<Finding> {
-        self.check_text_at(None, rel, text)
+        self.check_file(None, rel, text)
     }
 
-    /// Like [`Engine::check_text`], resolving `refs_exist` paths against `root`.
+    /// Like [`Engine::check_text`], resolving cross-file rules against `root`.
     #[must_use]
     pub fn check_text_at(&self, root: Option<&Path>, rel: &str, text: &str) -> Vec<Finding> {
-        let ctx = FileCtx {
-            root,
-            text,
-            lines: text.lines().collect(),
-            starts: line_starts(text),
-        };
+        let repo = root.map(|r| Repo::new(r, self.rules.len(), None));
+        self.check_file(repo.as_ref(), rel, text)
+    }
+
+    fn check_file(&self, repo: Option<&Repo<'_>>, rel: &str, text: &str) -> Vec<Finding> {
+        let ctx = FileCtx::new(repo, rel, text);
         self.rules
             .iter()
-            .filter(|r| r.applies(rel) && r.passes_file_guards(text))
-            .flat_map(|rule| {
-                rule.hits(&ctx).into_iter().map(|hit| Finding {
+            .enumerate()
+            .filter(|(_, r)| r.applies(rel) && r.passes_file_guards(text))
+            .flat_map(|(index, rule)| {
+                rule.hits(&ctx, index).into_iter().map(|hit| Finding {
                     rule: rule.def.id.clone(),
                     severity: rule.def.severity,
                     path: rel.to_string(),
@@ -402,22 +405,16 @@ impl Engine {
             .collect()
     }
 
+    #[must_use]
     pub fn check_tree(&self, root: &Path, only: &[PathBuf]) -> Report {
-        let files: Vec<(PathBuf, String)> = ignore::WalkBuilder::new(root)
-            .hidden(false)
-            .filter_entry(|e| e.file_name() != ".git")
-            .build()
-            .filter_map(Result::ok)
-            .filter(|e| e.file_type().is_some_and(|t| t.is_file()))
-            .filter_map(|e| {
-                let path = e.into_path();
-                let rel = path
-                    .strip_prefix(root)
-                    .ok()?
-                    .to_string_lossy()
-                    .replace('\\', "/");
-                Some((path, rel))
-            })
+        let everything = walk(root);
+        let repo = Repo::new(
+            root,
+            self.rules.len(),
+            Some(everything.iter().map(|(_, rel)| rel.clone()).collect()),
+        );
+        let files: Vec<&(PathBuf, String)> = everything
+            .iter()
             .filter(|(path, _)| only.is_empty() || only.iter().any(|o| path.starts_with(o)))
             .filter(|(_, rel)| self.rules.iter().any(|r| r.applies(rel)))
             .collect();
@@ -427,7 +424,7 @@ impl Engine {
             .filter(|(path, _)| fs::metadata(path).is_ok_and(|m| m.len() <= MAX_FILE_BYTES))
             .filter_map(|(path, rel)| {
                 let text = fs::read_to_string(path).ok()?;
-                Some(self.check_text_at(Some(root), rel, &text))
+                Some(self.check_file(Some(&repo), rel, &text))
             })
             .flatten()
             .collect();
