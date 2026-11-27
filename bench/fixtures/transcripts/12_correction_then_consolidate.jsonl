@@ -1,0 +1,2 @@
+{"type":"user","message":{"content":"Otra vez lo mismo con las memorias repetidas"}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__saispace__consolidate_memories","input":{"ids":["11111111","22222222"],"title":"Auth","content":"Unificada"}}]}}

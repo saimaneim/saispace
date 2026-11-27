@@ -15,24 +15,17 @@ import { ContextTab } from "./components/ContextTab";
 import { DirectoryPickerModal } from "./components/DirectoryPickerModal";
 import { GlobalView } from "./components/GlobalView";
 import { MemoryTab } from "./components/MemoryTab";
+import { PlanTab } from "./components/PlanTab";
 import { ProjectHeader } from "./components/ProjectHeader";
 import { SearchDialog } from "./components/SearchDialog";
 import { Sidebar } from "./components/Sidebar";
-import { TasksTab } from "./components/TasksTab";
 import { TechnologiesTab } from "./components/TechnologiesTab";
 import { WindowControls } from "./components/WindowControls";
 import { api, formatError } from "./lib/api";
-import type {
-  ActivityEvent,
-  Project,
-  ProjectStatus,
-  SearchHit,
-  Task,
-  TaskStatus,
-} from "./lib/types";
+import type { ActivityEvent, Project, ProjectStatus, SearchHit, Task } from "./lib/types";
 import { cn } from "./lib/utils";
 
-type TabId = "tasks" | "context" | "tech" | "memory";
+type TabId = "plan" | "context" | "tech" | "memory";
 
 const isOpenTask = (task: Task) => task.status !== "done" && task.status !== "cancelled";
 
@@ -53,7 +46,7 @@ export function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [tasksByProject, setTasksByProject] = useState<Record<string, Task[]>>({});
   const [activities, setActivities] = useState<ActivityEvent[]>([]);
-  const [activeTab, setActiveTab] = useState<TabId>("tasks");
+  const [activeTab, setActiveTab] = useState<TabId>("plan");
   const [isFeedOpen, setIsFeedOpen] = useState(() => readFlag(FEED_STORAGE_KEY, false));
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => readFlag(SIDEBAR_STORAGE_KEY, true));
   const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -194,7 +187,7 @@ export function App() {
     if (hit.project_id) selectProject(hit.project_id);
     setFocusMemoryId(hit.kind === "memory" ? hit.id : null);
     const target: Record<SearchHit["kind"], TabId> = {
-      task: "tasks",
+      task: "plan",
       tech_rule: "tech",
       memory: "memory",
       project: "context",
@@ -243,14 +236,6 @@ export function App() {
     await run(() => api.updateProject(activeProject.id, { status }));
   };
 
-  const handleUpdateTask = async (id: string, status?: TaskStatus, priority?: Task["priority"]) => {
-    await run(() => api.updateTask(id, { status, priority }));
-  };
-
-  const handleDeleteTask = async (id: string) => {
-    await run(() => api.deleteTask(id));
-  };
-
   const taskCounts = useMemo(
     () =>
       Object.fromEntries(
@@ -262,8 +247,8 @@ export function App() {
   const openTasksCount = tasks.filter(isOpenTask).length;
 
   const tabs: { id: TabId; label: string; icon: typeof ListTodo; count?: number }[] = [
-    { id: "tasks", label: "Tareas", icon: ListTodo, count: openTasksCount },
     { id: "context", label: "Contexto", icon: FileText },
+    { id: "plan", label: "Plan", icon: ListTodo, count: openTasksCount },
     { id: "tech", label: "Tecnologías", icon: Boxes },
     { id: "memory", label: "Memoria", icon: Brain },
   ];
@@ -392,11 +377,13 @@ export function App() {
                 </div>
 
                 <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-                  {activeTab === "tasks" && (
-                    <TasksTab
-                      tasks={tasks}
-                      onUpdateTask={handleUpdateTask}
-                      onDeleteTask={handleDeleteTask}
+                  {activeTab === "plan" && (
+                    <PlanTab
+                      key={activeProject.id}
+                      project={activeProject}
+                      refreshKey={activities[0]?.id ?? null}
+                      onError={reportError}
+                      onChanged={refreshAll}
                     />
                   )}
                   {activeTab === "memory" && (

@@ -1,0 +1,30 @@
+{"query":"pgbouncer pool","expected":["dec-pgbouncer-pool","dupe-pgbouncer-settings"]}
+{"query":"stripe webhook hmac","expected":["dec-stripe-hmac","dupe-stripe-verify"]}
+{"query":"jwt rs256 rotation","expected":["dec-jwt-rotation"]}
+{"query":"idempot","expected":["dec-idempotency-charges","dupe-idempotency-key"]}
+{"query":"autovac","expected":["cfg-postgres-vacuum"]}
+{"query":"presign","expected":["arch-s3-receipts"]}
+{"query":"correlat","expected":["pat-correlation-id"]}
+{"query":"redondeo centavos invoice","expected":["fix-invoice-rounding"]}
+{"query":"reintentos webhook backoff","expected":["arch-webhook-worker","pat-exp-backoff"]}
+{"query":"aislamiento tenant postgres","expected":["arch-rls-tenants"]}
+{"query":"regla unwrap produccion","expected":["pref-no-unwrap"]}
+{"query":"formato codigo biome","expected":["pref-biome-format"]}
+{"query":"caducidad sesion redis","expected":["fix-redis-session-ttl","dupe-redis-ttl"]}
+{"query":"postrgres pool","expected":["dec-pgbouncer-pool","dupe-pgbouncer-settings"]}
+{"query":"idempotnecy charge","expected":["dec-idempotency-charges","dupe-idempotency-key"]}
+{"query":"webhok signature","expected":["dec-stripe-hmac","dupe-stripe-verify"]}
+{"query":"cors alowed origins","expected":["fix-cors-preflight","dupe-cors-headers"]}
+{"query":"deadlock balance update","expected":["fix-balance-deadlock","dupe-balance-deadlock-es"]}
+{"query":"outbox billing events","expected":["dec-outbox-billing"]}
+{"query":"pdf ledger timeout","expected":["fix-pdf-timeout"]}
+{"query":"vat report timezone","expected":["fix-vat-timezone"]}
+{"query":"double entry ledger","expected":["arch-double-entry"]}
+{"query":"cursor pagination invoice","expected":["dec-cursor-pagination"]}
+{"query":"circuit breaker tax","expected":["pat-circuit-breaker"]}
+{"query":"oauth pkce","expected":["arch-oauth2-pkce"]}
+{"query":"sse memory leak","expected":["fix-sse-leak"]}
+{"query":"cargo chef docker cache","expected":["cfg-docker-cache"]}
+{"query":"fts5 hyphen quote","expected":["disc-fts5-hyphens"]}
+{"query":"sqlx offline prepare","expected":["disc-sqlx-offline"]}
+{"query":"mock db test","expected":["pref-sqlite-tests"]}

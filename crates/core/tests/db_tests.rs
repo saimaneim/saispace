@@ -119,6 +119,7 @@ async fn test_task_lifecycle_and_cascade() {
             project_id: project.id,
             title: "First Task".to_string(),
             priority: Some(TaskPriority::Urgent),
+            goal_id: None,
         })
         .await
         .expect("create_task failed");
@@ -140,8 +141,8 @@ async fn test_task_lifecycle_and_cascade() {
         )
         .await
         .expect("update_task to Done failed");
-    assert_eq!(updated_done.status, TaskStatus::Done);
-    assert!(updated_done.completed_at.is_some());
+    assert_eq!(updated_done.task.status, TaskStatus::Done);
+    assert!(updated_done.task.completed_at.is_some());
 
     let updated_reopened = db
         .update_task(
@@ -154,8 +155,8 @@ async fn test_task_lifecycle_and_cascade() {
         )
         .await
         .expect("update_task to InProgress failed");
-    assert_eq!(updated_reopened.status, TaskStatus::InProgress);
-    assert!(updated_reopened.completed_at.is_none());
+    assert_eq!(updated_reopened.task.status, TaskStatus::InProgress);
+    assert!(updated_reopened.task.completed_at.is_none());
 
     let tasks = db
         .list_tasks_by_project(project.id)
@@ -181,6 +182,7 @@ async fn test_foreign_key_violation() {
             project_id: non_existent_project_id,
             title: "Orphan Task".to_string(),
             priority: None,
+            goal_id: None,
         })
         .await;
 
@@ -392,6 +394,7 @@ async fn test_create_and_update_task_validate_title() {
             project_id: project.id,
             title: "   ".to_string(),
             priority: None,
+            goal_id: None,
         })
         .await;
     assert!(matches!(blank, Err(CoreError::Validation(_))));
@@ -401,6 +404,7 @@ async fn test_create_and_update_task_validate_title() {
             project_id: project.id,
             title: "t".repeat(201),
             priority: None,
+            goal_id: None,
         })
         .await;
     assert!(matches!(too_long, Err(CoreError::Validation(_))));
@@ -410,6 +414,7 @@ async fn test_create_and_update_task_validate_title() {
             project_id: project.id,
             title: "  Ship it  ".to_string(),
             priority: None,
+            goal_id: None,
         })
         .await
         .expect("create_task failed");
@@ -436,5 +441,5 @@ async fn test_create_and_update_task_validate_title() {
         )
         .await
         .expect("valid update should succeed");
-    assert_eq!(renamed.title, "Renamed task");
+    assert_eq!(renamed.task.title, "Renamed task");
 }

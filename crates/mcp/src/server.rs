@@ -35,6 +35,7 @@ impl SaiSpaceServer {
     pub fn new(db: Db, agent_name: String) -> Self {
         let mut tool_router = Self::project_tool_router();
         tool_router.merge(Self::task_tool_router());
+        tool_router.merge(Self::plan_tool_router());
         tool_router.merge(Self::technology_tool_router());
         tool_router.merge(Self::memory_tool_router());
         tool_router.merge(Self::secret_tool_router());

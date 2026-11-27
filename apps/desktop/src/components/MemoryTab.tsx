@@ -5,6 +5,7 @@ import type { DuplicatePair, Memory, MemoryKind, Project, StaleReport } from "..
 import { cn, formatTimeAgo } from "../lib/utils";
 import { AgentContextDialog } from "./AgentContextDialog";
 import { DuplicatesPanel } from "./DuplicatesPanel";
+import { KpiPanel } from "./KpiPanel";
 import { Markdown } from "./Markdown";
 import { MemoryEditor } from "./MemoryEditor";
 import { MemoryLinks } from "./MemoryLinks";
@@ -176,276 +177,291 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
     }
   };
 
+  const kpiSection = project ? (
+    <div className="pt-1 flex-shrink-0">
+      <KpiPanel scope={project.id} refreshKey={refreshKey} defaultCollapsed />
+    </div>
+  ) : null;
+
   if (memories.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-6">
-        <Brain className="w-8 h-8 text-ash" />
-        <p className="text-sm text-paper">Sin memorias todavía</p>
-        <p className="text-sm text-fog max-w-sm">
-          Los agentes guardan aquí decisiones y hallazgos con la tool save_memory o con sai memory
-          save.
-        </p>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => setAgentDialogOpen(true)}
-          className="mt-2 flex items-center gap-2 text-xs"
+      <div className="flex-1 flex flex-col min-h-0">
+        {kpiSection}
+        <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-6">
+          <Brain className="w-8 h-8 text-ash" />
+          <p className="text-sm text-paper">Sin memorias todavía</p>
+          <p className="text-sm text-fog max-w-sm">
+            Los agentes guardan aquí decisiones y hallazgos con la tool save_memory o con sai memory
+            save.
+          </p>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setAgentDialogOpen(true)}
+            className="mt-2 flex items-center gap-2 text-xs"
+          >
+            <Eye className="w-4 h-4" />
+            Vista del agente
+          </Button>
+          {error && <p className="text-sm text-coral-red">{error}</p>}
+          <AgentContextDialog
+            open={agentDialogOpen}
+            onOpenChange={setAgentDialogOpen}
+            projectId={project?.id ?? null}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0">
+      {kpiSection}
+      <div className="flex-1 flex min-h-0">
+        <aside className="w-80 flex-shrink-0 bg-carbon flex flex-col min-h-0 p-3 gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setAgentDialogOpen(true)}
+            className="w-full flex items-center justify-center gap-2 text-xs"
+          >
+            <Eye className="w-4 h-4" />
+            Vista del agente
+          </Button>
+
+          {scopeFilter !== "orphans" && (
+            <input
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="Filtrar memorias…"
+              aria-label="Filtrar memorias"
+              className="h-9 px-3 text-sm bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+            />
+          )}
+
+          {!project && (
+            <div className="flex items-center gap-1 bg-obsidian p-1 rounded-md flex-shrink-0 select-none">
+              <button
+                type="button"
+                onClick={() => setScopeFilter("all")}
+                className={cn(
+                  "flex-1 h-7 text-xs rounded transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+                  scopeFilter === "all"
+                    ? "bg-elevated text-paper font-medium"
+                    : "text-fog hover:text-mist",
+                )}
+              >
+                Todas
+              </button>
+              <button
+                type="button"
+                onClick={() => setScopeFilter("global")}
+                className={cn(
+                  "flex-1 h-7 text-xs rounded transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+                  scopeFilter === "global"
+                    ? "bg-elevated text-paper font-medium"
+                    : "text-fog hover:text-mist",
+                )}
+              >
+                Globales
+              </button>
+              <button
+                type="button"
+                onClick={() => setScopeFilter("orphans")}
+                className={cn(
+                  "flex-1 h-7 text-xs rounded transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+                  scopeFilter === "orphans"
+                    ? "bg-elevated text-paper font-medium"
+                    : "text-fog hover:text-mist",
+                )}
+              >
+                Sin proyecto
+              </button>
+            </div>
+          )}
+
+          {scopeFilter !== "orphans" && activeDuplicates.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowDuplicates(true);
+                setShowStale(false);
+              }}
+              className="flex items-center justify-between px-3 py-2 text-xs font-medium rounded-md bg-status-amber/10 text-status-amber hover:bg-status-amber/20 transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+            >
+              <span>
+                {activeDuplicates.length === 1
+                  ? "1 posible duplicado"
+                  : `${activeDuplicates.length} posibles duplicados`}
+              </span>
+            </button>
+          )}
+
+          {scopeFilter !== "orphans" && staleCount > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowStale(true);
+                setShowDuplicates(false);
+              }}
+              className="flex items-center justify-between px-3 py-2 text-xs font-medium rounded-md bg-status-amber/10 text-status-amber hover:bg-status-amber/20 transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+            >
+              <span>{staleCount === 1 ? "1 para revisar" : `${staleCount} para revisar`}</span>
+            </button>
+          )}
+
+          {scopeFilter !== "orphans" && (
+            <ul className="flex-1 overflow-y-auto space-y-0.5">
+              {visible.map((m) => (
+                <li key={m.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedId(m.id);
+                      setShowDuplicates(false);
+                      setShowStale(false);
+                    }}
+                    className={cn(
+                      "w-full text-left px-3 py-2 rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+                      selected?.id === m.id ? "bg-elevated" : "hover:bg-obsidian",
+                    )}
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {m.pinned && <Pin className="w-3.5 h-3.5 text-acid-lime flex-shrink-0" />}
+                      <span className="block text-sm text-paper truncate font-medium">
+                        {m.title}
+                      </span>
+                    </div>
+                    <span className="block text-xs text-fog">
+                      {KIND_LABELS[m.kind]}
+                      {!project && ` · ${m.project_name || "Global"}`} ·{" "}
+                      {formatTimeAgo(m.updated_at)}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </aside>
+
+        {scopeFilter === "orphans" ? (
+          <OrphanMemories onLinked={load} />
+        ) : showStale ? (
+          <StalePanel
+            report={staleReport}
+            onOpenMemory={(id) => {
+              setSelectedId(id);
+              setShowStale(false);
+            }}
+            onDeleteMemory={async (id) => {
+              await api.deleteMemory(id);
+              await load();
+            }}
+            onClose={() => setShowStale(false)}
+          />
+        ) : showDuplicates ? (
+          <DuplicatesPanel
+            pairs={activeDuplicates}
+            onDeleteMemory={async (id) => {
+              await api.deleteMemory(id);
+              await load();
+            }}
+            onDismissPair={(pair) => {
+              setDismissedPairKeys((prev) => {
+                const next = new Set(prev);
+                next.add(`${pair.a.id}:${pair.b.id}`);
+                return next;
+              });
+            }}
+            onClose={() => setShowDuplicates(false)}
+          />
+        ) : selected ? (
+          <section className="flex-1 min-w-0 flex flex-col px-6 pb-6">
+            <div className="h-14 flex items-center gap-3 flex-shrink-0">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-base font-semibold text-paper truncate">{selected.title}</h2>
+                <p className="text-xs text-fog truncate">
+                  {KIND_LABELS[selected.kind]}
+                  {selected.topic_key ? ` · ${selected.topic_key}` : ""}
+                  {!project && selected.project_name ? ` · ${selected.project_name}` : ""}
+                  {` · ${formatTimeAgo(selected.updated_at)}`}
+                </p>
+              </div>
+              <Button variant="secondary" onClick={() => setEditingMemory(selected)}>
+                <Pencil className="w-4 h-4 mr-2" />
+                Editar
+              </Button>
+              <Button variant="secondary" onClick={() => togglePin(selected)}>
+                {selected.pinned ? (
+                  <>
+                    <PinOff className="w-4 h-4 mr-2" />
+                    Desfijar
+                  </>
+                ) : (
+                  <>
+                    <Pin className="w-4 h-4 mr-2" />
+                    Fijar
+                  </>
+                )}
+              </Button>
+              <Button variant="secondary" onClick={() => setPendingDelete(selected)}>
+                <Trash2 className="w-4 h-4 mr-2" />
+                Eliminar
+              </Button>
+            </div>
+            {error && (
+              <div
+                className="mb-2 px-3 py-2 rounded-md bg-coral-red/10 text-coral-red text-sm"
+                role="alert"
+              >
+                {error}
+              </div>
+            )}
+            <div className="flex-1 overflow-y-auto">
+              <div className="bg-carbon rounded-lg p-6">
+                <Markdown content={selected.content} className="max-w-[70ch]" />
+              </div>
+              <MemoryLinks memory={selected} onOpen={openMemory} />
+            </div>
+          </section>
+        ) : null}
+
+        <Dialog
+          open={Boolean(pendingDelete)}
+          onOpenChange={(open) => !open && setPendingDelete(null)}
         >
-          <Eye className="w-4 h-4" />
-          Vista del agente
-        </Button>
-        {error && <p className="text-sm text-coral-red">{error}</p>}
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Eliminar memoria</DialogTitle>
+              <DialogDescription>
+                Los agentes dejarán de recibir «{pendingDelete?.title}». No se puede deshacer.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="secondary" onClick={() => setPendingDelete(null)}>
+                Cancelar
+              </Button>
+              <Button variant="destructive" onClick={confirmDelete}>
+                Eliminar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <MemoryEditor
+          memory={editingMemory}
+          open={Boolean(editingMemory)}
+          onOpenChange={(open) => !open && setEditingMemory(null)}
+          onSaved={async () => {
+            await load();
+          }}
+        />
         <AgentContextDialog
           open={agentDialogOpen}
           onOpenChange={setAgentDialogOpen}
           projectId={project?.id ?? null}
         />
       </div>
-    );
-  }
-
-  return (
-    <div className="flex-1 flex min-h-0">
-      <aside className="w-80 flex-shrink-0 bg-carbon flex flex-col min-h-0 p-3 gap-2">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => setAgentDialogOpen(true)}
-          className="w-full flex items-center justify-center gap-2 text-xs"
-        >
-          <Eye className="w-4 h-4" />
-          Vista del agente
-        </Button>
-
-        {scopeFilter !== "orphans" && (
-          <input
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filtrar memorias…"
-            aria-label="Filtrar memorias"
-            className="h-9 px-3 text-sm bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
-          />
-        )}
-
-        {!project && (
-          <div className="flex items-center gap-1 bg-obsidian p-1 rounded-md flex-shrink-0 select-none">
-            <button
-              type="button"
-              onClick={() => setScopeFilter("all")}
-              className={cn(
-                "flex-1 h-7 text-xs rounded transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
-                scopeFilter === "all"
-                  ? "bg-elevated text-paper font-medium"
-                  : "text-fog hover:text-mist",
-              )}
-            >
-              Todas
-            </button>
-            <button
-              type="button"
-              onClick={() => setScopeFilter("global")}
-              className={cn(
-                "flex-1 h-7 text-xs rounded transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
-                scopeFilter === "global"
-                  ? "bg-elevated text-paper font-medium"
-                  : "text-fog hover:text-mist",
-              )}
-            >
-              Globales
-            </button>
-            <button
-              type="button"
-              onClick={() => setScopeFilter("orphans")}
-              className={cn(
-                "flex-1 h-7 text-xs rounded transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
-                scopeFilter === "orphans"
-                  ? "bg-elevated text-paper font-medium"
-                  : "text-fog hover:text-mist",
-              )}
-            >
-              Sin proyecto
-            </button>
-          </div>
-        )}
-
-        {scopeFilter !== "orphans" && activeDuplicates.length > 0 && (
-          <button
-            type="button"
-            onClick={() => {
-              setShowDuplicates(true);
-              setShowStale(false);
-            }}
-            className="flex items-center justify-between px-3 py-2 text-xs font-medium rounded-md bg-status-amber/10 text-status-amber hover:bg-status-amber/20 transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
-          >
-            <span>
-              {activeDuplicates.length === 1
-                ? "1 posible duplicado"
-                : `${activeDuplicates.length} posibles duplicados`}
-            </span>
-          </button>
-        )}
-
-        {scopeFilter !== "orphans" && staleCount > 0 && (
-          <button
-            type="button"
-            onClick={() => {
-              setShowStale(true);
-              setShowDuplicates(false);
-            }}
-            className="flex items-center justify-between px-3 py-2 text-xs font-medium rounded-md bg-status-amber/10 text-status-amber hover:bg-status-amber/20 transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
-          >
-            <span>{staleCount === 1 ? "1 para revisar" : `${staleCount} para revisar`}</span>
-          </button>
-        )}
-
-        {scopeFilter !== "orphans" && (
-          <ul className="flex-1 overflow-y-auto space-y-0.5">
-            {visible.map((m) => (
-              <li key={m.id}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedId(m.id);
-                    setShowDuplicates(false);
-                    setShowStale(false);
-                  }}
-                  className={cn(
-                    "w-full text-left px-3 py-2 rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
-                    selected?.id === m.id ? "bg-elevated" : "hover:bg-obsidian",
-                  )}
-                >
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    {m.pinned && <Pin className="w-3.5 h-3.5 text-acid-lime flex-shrink-0" />}
-                    <span className="block text-sm text-paper truncate font-medium">{m.title}</span>
-                  </div>
-                  <span className="block text-xs text-fog">
-                    {KIND_LABELS[m.kind]}
-                    {!project && ` · ${m.project_name || "Global"}`} · {formatTimeAgo(m.updated_at)}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </aside>
-
-      {scopeFilter === "orphans" ? (
-        <OrphanMemories onLinked={load} />
-      ) : showStale ? (
-        <StalePanel
-          report={staleReport}
-          onOpenMemory={(id) => {
-            setSelectedId(id);
-            setShowStale(false);
-          }}
-          onDeleteMemory={async (id) => {
-            await api.deleteMemory(id);
-            await load();
-          }}
-          onClose={() => setShowStale(false)}
-        />
-      ) : showDuplicates ? (
-        <DuplicatesPanel
-          pairs={activeDuplicates}
-          onDeleteMemory={async (id) => {
-            await api.deleteMemory(id);
-            await load();
-          }}
-          onDismissPair={(pair) => {
-            setDismissedPairKeys((prev) => {
-              const next = new Set(prev);
-              next.add(`${pair.a.id}:${pair.b.id}`);
-              return next;
-            });
-          }}
-          onClose={() => setShowDuplicates(false)}
-        />
-      ) : selected ? (
-        <section className="flex-1 min-w-0 flex flex-col px-6 pb-6">
-          <div className="h-14 flex items-center gap-3 flex-shrink-0">
-            <div className="flex-1 min-w-0">
-              <h2 className="text-base font-semibold text-paper truncate">{selected.title}</h2>
-              <p className="text-xs text-fog truncate">
-                {KIND_LABELS[selected.kind]}
-                {selected.topic_key ? ` · ${selected.topic_key}` : ""}
-                {!project && selected.project_name ? ` · ${selected.project_name}` : ""}
-                {` · ${formatTimeAgo(selected.updated_at)}`}
-              </p>
-            </div>
-            <Button variant="secondary" onClick={() => setEditingMemory(selected)}>
-              <Pencil className="w-4 h-4 mr-2" />
-              Editar
-            </Button>
-            <Button variant="secondary" onClick={() => togglePin(selected)}>
-              {selected.pinned ? (
-                <>
-                  <PinOff className="w-4 h-4 mr-2" />
-                  Desfijar
-                </>
-              ) : (
-                <>
-                  <Pin className="w-4 h-4 mr-2" />
-                  Fijar
-                </>
-              )}
-            </Button>
-            <Button variant="secondary" onClick={() => setPendingDelete(selected)}>
-              <Trash2 className="w-4 h-4 mr-2" />
-              Eliminar
-            </Button>
-          </div>
-          {error && (
-            <div
-              className="mb-2 px-3 py-2 rounded-md bg-coral-red/10 text-coral-red text-sm"
-              role="alert"
-            >
-              {error}
-            </div>
-          )}
-          <div className="flex-1 overflow-y-auto">
-            <div className="bg-carbon rounded-lg p-6">
-              <Markdown content={selected.content} className="max-w-[70ch]" />
-            </div>
-            <MemoryLinks memory={selected} onOpen={openMemory} />
-          </div>
-        </section>
-      ) : null}
-
-      <Dialog
-        open={Boolean(pendingDelete)}
-        onOpenChange={(open) => !open && setPendingDelete(null)}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Eliminar memoria</DialogTitle>
-            <DialogDescription>
-              Los agentes dejarán de recibir «{pendingDelete?.title}». No se puede deshacer.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="secondary" onClick={() => setPendingDelete(null)}>
-              Cancelar
-            </Button>
-            <Button variant="destructive" onClick={confirmDelete}>
-              Eliminar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <MemoryEditor
-        memory={editingMemory}
-        open={Boolean(editingMemory)}
-        onOpenChange={(open) => !open && setEditingMemory(null)}
-        onSaved={async () => {
-          await load();
-        }}
-      />
-      <AgentContextDialog
-        open={agentDialogOpen}
-        onOpenChange={setAgentDialogOpen}
-        projectId={project?.id ?? null}
-      />
     </div>
   );
 }

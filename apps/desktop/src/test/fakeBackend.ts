@@ -3,12 +3,20 @@ import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import type {
   ActivityEvent,
   CreateProjectInput,
+  CreateTaskInput,
   DirectoryListing,
+  Goal,
+  KpiHistory,
   Memory,
   MemoryKind,
+  Plan,
+  PlanFilter,
   Project,
+  Task,
+  UpdateGoalInput,
   UpdateMemoryInput,
   UpdateProjectInput,
+  UpdateTaskInput,
 } from "../lib/types";
 
 /**
@@ -22,9 +30,12 @@ import type {
 export interface FakeBackendOptions {
   projects?: Project[];
   memories?: Memory[];
+  tasks?: Task[];
+  goals?: Goal[];
   /** Directory tree for the picker: absolute path -> child folder names. */
   directories?: Record<string, string[]>;
   home?: string;
+  kpiHistory?: KpiHistory | ((args: { days?: number; scope?: string }) => KpiHistory);
 }
 
 export interface InvokeCall {
@@ -60,6 +71,38 @@ export function makeProject(overrides: Partial<Project> = {}): Project {
   };
 }
 
+export function makeTask(overrides: Partial<Task> = {}): Task {
+  const timestamp = now();
+  return {
+    id: nextId("task"),
+    project_id: "proj-1",
+    title: "Tarea",
+    status: "todo",
+    priority: "medium",
+    goal_id: null,
+    created_at: timestamp,
+    updated_at: timestamp,
+    completed_at: null,
+    ...overrides,
+  };
+}
+
+export function makeGoal(overrides: Partial<Goal> = {}): Goal {
+  const timestamp = now();
+  return {
+    id: nextId("goal"),
+    project_id: "proj-1",
+    title: "Meta",
+    criteria: null,
+    status: "active",
+    position: 0,
+    created_at: timestamp,
+    updated_at: timestamp,
+    completed_at: null,
+    ...overrides,
+  };
+}
+
 export function makeMemory(overrides: Partial<Memory> = {}): Memory {
   return {
     id: nextId("mem"),
@@ -83,6 +126,8 @@ export function installFakeBackend(options: FakeBackendOptions = {}) {
   const home = options.home ?? "/home/test";
   const projects: Project[] = [...(options.projects ?? [])];
   const memories: Memory[] = [...(options.memories ?? [])];
+  const tasks: Task[] = [...(options.tasks ?? [])];
+  const goals: Goal[] = [...(options.goals ?? [])];
   const activity: ActivityEvent[] = [];
   const directories: Record<string, string[]> = options.directories ?? { [home]: [] };
   const calls: InvokeCall[] = [];
@@ -102,6 +147,51 @@ export function installFakeBackend(options: FakeBackendOptions = {}) {
     const memory = memories.find((m) => m.id === id);
     if (!memory) throw new CommandError(`Memoria no encontrada: ${id}`, "not_found");
     return memory;
+  };
+
+  const findGoal = (id: unknown) => {
+    const goal = goals.find((item) => item.id === id);
+    if (!goal) throw new CommandError(`Meta no encontrada: ${id}`, "not_found");
+    return goal;
+  };
+
+  const findTask = (id: unknown) => {
+    const task = tasks.find((item) => item.id === id);
+    if (!task) throw new CommandError(`Tarea no encontrada: ${id}`, "not_found");
+    return task;
+  };
+
+  const buildPlan = (projectId: unknown, filter: PlanFilter): Plan => {
+    findProject(projectId);
+    const projectGoals = goals
+      .filter((goal) => goal.project_id === projectId)
+      .sort((a, b) => a.position - b.position);
+    const visibleGoals = projectGoals.filter((goal) => {
+      if (filter === "all") return true;
+      return goal.status === filter;
+    });
+
+    return {
+      goals: visibleGoals.map((goal) => {
+        const goalTasks = tasks
+          .filter((task) => task.goal_id === goal.id)
+          .map((task) => ({ ...task }));
+        return {
+          goal: { ...goal },
+          done: goalTasks.filter((task) => task.status === "done").length,
+          total: goalTasks.length,
+          tasks: goalTasks,
+        };
+      }),
+      loose_tasks: tasks
+        .filter((task) => task.project_id === projectId && task.goal_id === null)
+        .map((task) => ({ ...task })),
+      counts: {
+        active: projectGoals.filter((goal) => goal.status === "active").length,
+        completed: projectGoals.filter((goal) => goal.status === "completed").length,
+        all: projectGoals.length,
+      },
+    };
   };
 
   const handlers: Record<string, Handler> = {
@@ -154,6 +244,113 @@ export function installFakeBackend(options: FakeBackendOptions = {}) {
       });
     },
     project_favicon: () => null,
+
+    // Plan and tasks
+    plan_get: ({ projectId, filter }) =>
+      buildPlan(projectId, (filter as PlanFilter | undefined) ?? "active"),
+    goal_create: ({ projectId, title: titleValue, criteria: criteriaValue, tasks: taskValues }) => {
+      findProject(projectId);
+      const title = String(titleValue).trim();
+      if (!title) throw new CommandError("El título no puede estar vacío");
+      const criteria =
+        typeof criteriaValue === "string" && criteriaValue.trim() ? criteriaValue.trim() : null;
+      const siblings = goals.filter((goal) => goal.project_id === projectId);
+      const goal = makeGoal({
+        project_id: String(projectId),
+        title,
+        criteria,
+        position: siblings.length ? Math.max(...siblings.map((item) => item.position)) + 1 : 0,
+      });
+      goals.push(goal);
+      const createdTasks = (taskValues as string[]).map((taskTitle) =>
+        makeTask({
+          project_id: String(projectId),
+          goal_id: goal.id,
+          title: taskTitle,
+        }),
+      );
+      tasks.push(...createdTasks);
+      return {
+        goal: { ...goal },
+        done: 0,
+        total: createdTasks.length,
+        tasks: createdTasks.map((task) => ({ ...task })),
+      };
+    },
+    goal_update: ({ id, input }) => {
+      const goal = findGoal(id);
+      const patch = input as UpdateGoalInput;
+      if (patch.title !== undefined) {
+        if (!patch.title.trim()) throw new CommandError("El título no puede estar vacío");
+        goal.title = patch.title.trim();
+      }
+      if (patch.criteria !== undefined) goal.criteria = patch.criteria?.trim() || null;
+      if (patch.position !== undefined) goal.position = patch.position;
+      if (patch.status !== undefined) {
+        goal.status = patch.status;
+        if (patch.status === "completed") goal.completed_at = now();
+        if (patch.status === "active") goal.completed_at = null;
+      }
+      goal.updated_at = now();
+      return { ...goal };
+    },
+    goal_delete: ({ id }) => {
+      findGoal(id);
+      for (const task of tasks) {
+        if (task.goal_id === id) {
+          task.goal_id = null;
+          task.updated_at = now();
+        }
+      }
+      goals.splice(
+        goals.findIndex((goal) => goal.id === id),
+        1,
+      );
+    },
+    list_tasks: ({ projectId }) => {
+      findProject(projectId);
+      return tasks.filter((task) => task.project_id === projectId).map((task) => ({ ...task }));
+    },
+    create_task: ({ input }) => {
+      const create = input as CreateTaskInput;
+      findProject(create.project_id);
+      const title = create.title.trim();
+      if (!title) throw new CommandError("El título no puede estar vacío");
+      const goalId = create.goal_id ?? null;
+      if (goalId && findGoal(goalId).project_id !== create.project_id) {
+        throw new CommandError("La meta pertenece a otro proyecto", "invalid_input");
+      }
+      const task = makeTask({
+        project_id: create.project_id,
+        title,
+        priority: create.priority ?? "medium",
+        goal_id: goalId,
+      });
+      tasks.push(task);
+      return { ...task };
+    },
+    update_task: ({ id, input }) => {
+      const task = findTask(id);
+      const patch = input as UpdateTaskInput;
+      if (patch.title !== undefined) {
+        if (!patch.title.trim()) throw new CommandError("El título no puede estar vacío");
+        task.title = patch.title.trim();
+      }
+      if (patch.priority !== undefined) task.priority = patch.priority;
+      if (patch.status !== undefined) {
+        task.status = patch.status;
+        task.completed_at = patch.status === "done" ? now() : null;
+      }
+      task.updated_at = now();
+      return { ...task };
+    },
+    delete_task: ({ id }) => {
+      findTask(id);
+      tasks.splice(
+        tasks.findIndex((task) => task.id === id),
+        1,
+      );
+    },
 
     // Directory picker
     list_directory: ({ path }) => {
@@ -208,9 +405,71 @@ export function installFakeBackend(options: FakeBackendOptions = {}) {
     },
     memory_duplicates: () => [],
     memory_stale: () => ({ stale: [], surplus_sessions: [] }),
+    kpi_history: ({ days, scope }) => {
+      if (options.kpiHistory) {
+        return typeof options.kpiHistory === "function"
+          ? options.kpiHistory({
+              days: days as number | undefined,
+              scope: scope as string | undefined,
+            })
+          : options.kpiHistory;
+      }
+      const count = Math.max(1, Math.min(30, Number(days ?? 7)));
+      const isGlobal = !scope || scope === "global";
+      const makeDays = (values: number[]) =>
+        values.slice(-count).map((value, idx, arr) => {
+          const d = new Date();
+          d.setUTCDate(d.getUTCDate() - (arr.length - 1 - idx));
+          return { day: d.toISOString().slice(0, 10), value };
+        });
+      const history: KpiHistory = {
+        metrics: [
+          {
+            name: "memories_active",
+            label: "Memorias activas",
+            unit: "count",
+            higher_is_better: null,
+            points: makeDays([18, 20, 21, 22, 24, 25, 27]),
+          },
+          {
+            name: "duplicate_pairs",
+            label: "Pares duplicados",
+            unit: "count",
+            higher_is_better: false,
+            points: makeDays([4, 4, 3, 3, 2, 1, 1]),
+          },
+          {
+            name: "reuse_rate_30d",
+            label: "Tasa de reuso (30d)",
+            unit: "ratio",
+            higher_is_better: true,
+            points: makeDays([0.4, 0.45, 0.5, 0.52, 0.58, 0.6, 0.64]),
+          },
+          ...(isGlobal
+            ? [
+                {
+                  name: "lesson_conversion_7d",
+                  label: "Conversión a lección (7d)",
+                  unit: "ratio",
+                  higher_is_better: true,
+                  points: makeDays([0.5, 0.5, 0.6, 0.67, 0.75, 0.75, 0.8]),
+                },
+              ]
+            : [
+                {
+                  name: "index_bytes",
+                  label: "Tamaño del índice",
+                  unit: "bytes",
+                  higher_is_better: false,
+                  points: makeDays([2400, 2450, 2510, 2380, 2320, 2290, 2260]),
+                },
+              ]),
+        ],
+      };
+      return history;
+    },
 
     // Everything else the shell polls on mount.
-    list_tasks: () => [],
     list_activity: ({ limit }) => activity.slice(0, (limit as number | undefined) ?? 60),
     list_activity_by_project: ({ projectId }) => activity.filter((a) => a.project_id === projectId),
     list_secret_grants: () => [],
@@ -219,6 +478,21 @@ export function installFakeBackend(options: FakeBackendOptions = {}) {
     list_project_tech_rules: () => [],
     search_memory: () => [],
     tech_icon: () => null,
+    memory_usage_stats: () => ({
+      saves_by_agent: [],
+      most_used: [],
+      never_used: 0,
+      total: memories.length,
+      by_project: [],
+    }),
+    global_ai_inventory: () => ({
+      instructions: [],
+      skills: [],
+      mcp_servers: [],
+      plugins: [],
+      hooks: [],
+      warnings: [],
+    }),
 
     // Window plugin (WindowControls).
     "plugin:window|is_maximized": () => false,
@@ -247,6 +521,8 @@ export function installFakeBackend(options: FakeBackendOptions = {}) {
   return {
     projects,
     memories,
+    tasks,
+    goals,
     calls,
     /** Calls to one command, in order. */
     callsTo: (cmd: string) => calls.filter((c) => c.cmd === cmd),

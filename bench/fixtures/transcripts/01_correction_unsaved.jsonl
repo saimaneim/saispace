@@ -1,0 +1,3 @@
+{"type":"user","message":{"content":"No hagas eso, te dije que uses bun"}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"package.json"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","is_error":false,"content":"ok"}]}}

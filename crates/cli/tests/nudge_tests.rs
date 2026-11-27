@@ -182,6 +182,149 @@ fn nudge_stop_blocks_once_per_session_and_respects_saves_and_stop_hook_active() 
     assert!(!sb.root.join("escape").exists());
 }
 
+#[allow(clippy::too_many_lines)] // one end-to-end scenario reads best in one piece
+#[test]
+fn nudge_logs_kpi_events_and_rotates_over_5mb() {
+    let sb = NudgeSandbox::new("kpi-log");
+    let log_path = sb.root.join("data/kpi-events.jsonl");
+    let rotated_path = sb.root.join("data/kpi-events.jsonl.1");
+
+    let correction = sb.run_sai(
+        &["memory", "nudge"],
+        Some(r#"{"hook_event_name":"UserPromptSubmit","session_id":"s-kpi","prompt":"No hagas eso"}"#),
+        &[],
+    );
+    assert!(correction.status.success());
+
+    let neutral = sb.run_sai(
+        &["memory", "nudge"],
+        Some(r#"{"hook_event_name":"UserPromptSubmit","session_id":"s-kpi","prompt":"ok sigue"}"#),
+        &[],
+    );
+    assert!(neutral.status.success());
+
+    let transcript = sb.root.join("s-kpi.jsonl");
+    fs::write(
+        &transcript,
+        r#"{"type":"user","message":{"content":"No hagas eso"}}"#,
+    )
+    .expect("write transcript");
+    let stop_payload = serde_json::json!({
+        "hook_event_name": "Stop",
+        "session_id": "s-kpi",
+        "transcript_path": transcript,
+        "stop_hook_active": false,
+    })
+    .to_string();
+    assert!(
+        sb.run_sai(&["memory", "nudge"], Some(&stop_payload), &[])
+            .status
+            .success()
+    );
+
+    // Second stop with stop_hook_active=true still logs an event with blocked=false.
+    let second_payload = serde_json::json!({
+        "hook_event_name": "Stop",
+        "session_id": "s-kpi",
+        "transcript_path": transcript,
+        "stop_hook_active": true,
+    })
+    .to_string();
+    assert!(
+        sb.run_sai(&["memory", "nudge"], Some(&second_payload), &[])
+            .status
+            .success()
+    );
+
+    let raw = fs::read_to_string(&log_path).expect("read kpi log");
+    let lines: Vec<serde_json::Value> = raw
+        .lines()
+        .map(|l| serde_json::from_str(l).expect("valid json line"))
+        .collect();
+    assert_eq!(lines.len(), 3);
+    assert_eq!(lines[0]["event"], "correction");
+    assert_eq!(lines[0]["session_id"], "s-kpi");
+    assert_eq!(lines[1]["event"], "stop");
+    assert_eq!(lines[1]["corrections"], 1);
+    assert_eq!(lines[1]["saved"], false);
+    assert_eq!(lines[1]["blocked"], true);
+    assert_eq!(lines[2]["event"], "stop");
+    assert_eq!(lines[2]["blocked"], false);
+    assert!(!sb.db_path().exists(), "nudge must never create DB");
+
+    // Exceed 5 MB and trigger rotation.
+    fs::write(&log_path, vec![b'x'; 5 * 1024 * 1024 + 10]).expect("write big log");
+    let rotate_trigger = sb.run_sai(
+        &["memory", "nudge"],
+        Some(r#"{"hook_event_name":"UserPromptSubmit","prompt":"No uses eso"}"#),
+        &[],
+    );
+    assert!(rotate_trigger.status.success());
+    assert!(!rotated_path.exists(), "must never use legacy .jsonl.1");
+
+    let list_rotated = || -> Vec<PathBuf> {
+        let mut files: Vec<PathBuf> = fs::read_dir(sb.root.join("data"))
+            .expect("read data dir")
+            .filter_map(Result::ok)
+            .map(|e| e.path())
+            .filter(|p| {
+                let is_jsonl = p
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| e.eq_ignore_ascii_case("jsonl"));
+                is_jsonl
+                    && p.file_name()
+                        .and_then(|n| n.to_str())
+                        .is_some_and(|n| n != "kpi-events.jsonl" && n.starts_with("kpi-events."))
+            })
+            .collect();
+        files.sort();
+        files
+    };
+
+    let first_rotated = list_rotated();
+    assert_eq!(first_rotated.len(), 1);
+    let new_raw = fs::read_to_string(&log_path).expect("read rotated fresh log");
+    assert_eq!(new_raw.lines().count(), 1);
+
+    // Second rotation creates a second unique rotated file without overwriting the first.
+    fs::write(&log_path, vec![b'y'; 5 * 1024 * 1024 + 10]).expect("write second big log");
+    let rotate_trigger_2 = sb.run_sai(
+        &["memory", "nudge"],
+        Some(r#"{"hook_event_name":"UserPromptSubmit","prompt":"Para de usar eso"}"#),
+        &[],
+    );
+    assert!(rotate_trigger_2.status.success());
+    let second_rotated = list_rotated();
+    assert_eq!(second_rotated.len(), 2);
+
+    // Rotated files older than 35 days are pruned; recent ones and kpi-events.jsonl stay.
+    let expired_by_name = sb.root.join("data/kpi-events.1000.99.jsonl");
+    fs::write(&expired_by_name, "{\"event\":\"correction\"}\n").expect("write expired");
+    let recent_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("epoch")
+        .as_millis()
+        .saturating_sub(5 * 86_400 * 1_000);
+    let recent_rotated = sb
+        .root
+        .join(format!("data/kpi-events.{recent_ms}.77.jsonl"));
+    fs::write(&recent_rotated, "{\"event\":\"correction\"}\n").expect("write recent");
+
+    let prune_trigger = sb.run_sai(
+        &["memory", "nudge"],
+        Some(r#"{"hook_event_name":"UserPromptSubmit","prompt":"No hagas eso tampoco"}"#),
+        &[],
+    );
+    assert!(prune_trigger.status.success());
+    assert!(
+        !expired_by_name.exists(),
+        "expired rotated log must be pruned"
+    );
+    assert!(recent_rotated.is_file(), "recent rotated log must stay");
+    assert!(log_path.is_file(), "active kpi-events.jsonl must stay");
+}
+
 #[test]
 fn setup_claude_respects_claude_config_dir_and_uninstalls() {
     let sb = NudgeSandbox::new("setup-claude");

@@ -9,8 +9,8 @@ use saispace_core::models::{
     UpdateMemoryInput,
 };
 use saispace_core::{Db, default_db_path, short_id};
-use std::io::{IsTerminal, Read};
-use std::path::PathBuf;
+use std::io::{IsTerminal, Read, Write};
+use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 #[derive(Subcommand)]
@@ -98,7 +98,7 @@ pub enum MemoryCommand {
     Pin { id: String },
     #[command(about = "Desfija una memoria")]
     Unpin { id: String },
-    #[command(about = "Elimina una memoria")]
+    #[command(about = "Elimina una memoria", visible_alias = "delete")]
     Rm {
         #[arg(help = "Id de la memoria a eliminar")]
         id: String,
@@ -191,7 +191,7 @@ fn actor() -> Actor {
 
 /// Project for the current directory. `register` creates it on first save;
 /// reads only pick up folders that imported memories already name.
-async fn current_project(db: &Db, register: bool) -> CliResult<Option<Project>> {
+pub(crate) async fn current_project(db: &Db, register: bool) -> CliResult<Option<Project>> {
     current_project_at(db, register, std::env::current_dir()?).await
 }
 
@@ -687,7 +687,65 @@ async fn set_pinned(db: &Db, id: Uuid, pinned: bool) -> CliResult<()> {
     Ok(())
 }
 
-async fn context(db: &Db, limit: i64, json: bool, source: Option<String>) -> CliResult<()> {
+fn spawn_kpi_snapshot(db_path: &Path) {
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
+    let mut cmd = std::process::Command::new(exe);
+    cmd.args(["kpi", "snapshot", "--existing-only"])
+        .env("SAISPACE_DB_PATH", db_path)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
+    }
+    let _ = cmd.spawn();
+}
+
+/// Lets one process per day start the snapshot: sessions that start together
+/// (startup + compact, or two projects) would otherwise each run a full
+/// computation. Claims from earlier days are removed on the way.
+fn claim_snapshot_day(db_path: &Path, day: &str) -> bool {
+    let Some(dir) = db_path.parent() else {
+        return false;
+    };
+    let claim = dir.join(format!("kpi-snapshot.{day}.claim"));
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.filter_map(Result::ok) {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with("kpi-snapshot.")
+                && name.ends_with(".claim")
+                && entry.path() != claim
+            {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+    }
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&claim)
+        .is_ok()
+}
+
+async fn context(
+    db: &Db,
+    db_path: &Path,
+    limit: i64,
+    json: bool,
+    source: Option<String>,
+) -> CliResult<()> {
     // An explicit --source flag wins; otherwise sniff the hook payload that
     // Claude Code pipes on stdin.
     let hook = if source.is_some() {
@@ -720,6 +778,18 @@ async fn context(db: &Db, limit: i64, json: bool, source: Option<String>) -> Cli
         );
     } else {
         crate::out!("{}", render_context(project.as_ref(), &context).trim_end());
+    }
+    let _ = std::io::stdout().flush();
+
+    let now = chrono::Utc::now();
+    let day = now.format("%Y-%m-%d").to_string();
+    let scope_id = project
+        .as_ref()
+        .map_or_else(|| "global".to_string(), |p| p.id.to_string());
+    if matches!(db.has_snapshot_for_day(&day, &scope_id).await, Ok(false))
+        && claim_snapshot_day(db_path, &day)
+    {
+        spawn_kpi_snapshot(db_path);
     }
     Ok(())
 }
@@ -782,7 +852,8 @@ async fn dupes(db: &Db, all: bool) -> CliResult<()> {
 }
 
 async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
-    let db = Db::open(&default_db_path()?).await?;
+    let db_path = default_db_path()?;
+    let db = Db::open(&db_path).await?;
     match cmd {
         MemoryCommand::Save {
             title,
@@ -817,7 +888,7 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
             limit,
             json,
             source,
-        } => context(&db, limit, json, source).await?,
+        } => context(&db, &db_path, limit, json, source).await?,
         MemoryCommand::Get { id, json } => get(&db, &id, json).await?,
         MemoryCommand::Rm { id } => rm(&db, db.resolve_memory_id(&id).await?).await?,
         MemoryCommand::Pin { id } => {

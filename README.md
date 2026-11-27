@@ -54,6 +54,17 @@ bun run check   # tsc --noEmit
 bun run lint    # biome
 ```
 
+## Benchmark
+
+`sai bench` evaluates correction detection, Stop hook accuracy, FTS5 search quality, duplicate detection, session index size, and 1,000-memory latencies against deterministic fixtures in `bench/fixtures/` (never touching the user database).
+
+```sh
+sai bench              # summary table
+sai bench --json       # machine-readable report
+sai bench --compare    # compare against bench/history.jsonl (fails on regressions)
+sai bench --record     # append a baseline entry to bench/history.jsonl
+```
+
 ## Usage
 
 ### CLI
@@ -100,7 +111,7 @@ Or in a JSON client config:
 }
 ```
 
-Tools include `save_memory`, `search_memory`, `memory_context`, `get_memory`, `link_memories`, `consolidate_memories`, `delete_memory`, `list_projects`, `get_project_context`, `list_tasks`, `create_task`, `list_secrets` and `request_secret_access`. Example `save_memory` call:
+Tools include `save_memory`, `search_memory`, `memory_context`, `get_memory`, `link_memories`, `consolidate_memories`, `delete_memory`, `list_projects`, `get_project_context`, `list_tasks`, `create_task`, `update_task`, `get_active_plan`, `create_goal`, `update_goal`, `complete_task`, `list_secrets` and `request_secret_access`. Example `save_memory` call:
 
 ```json
 {

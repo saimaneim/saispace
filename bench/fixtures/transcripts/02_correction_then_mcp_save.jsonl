@@ -1,0 +1,4 @@
+{"type":"user","message":{"content":"Never mock the db in integration tests"}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"tests/db.rs"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","is_error":false,"content":"updated"}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__saispace__save_memory","input":{"kind":"preference","title":"No DB mocks in tests"}}]}}

@@ -1,0 +1,4 @@
+{"type":"user","isMeta":true,"message":{"content":"System bootstrap"}}
+{"type":"user","message":{"content":"Delegated task node:1 completed: ok"}}
+{"type":"user","message":{"content":"Why did you delete it?"}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"src/main.rs"}}]}}

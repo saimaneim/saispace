@@ -30,6 +30,7 @@ pub struct Task {
     pub title: String,
     pub status: TaskStatus,
     pub priority: TaskPriority,
+    pub goal_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,
@@ -41,6 +42,16 @@ pub struct CreateTaskInput {
     pub title: String,
     #[serde(default)]
     pub priority: Option<TaskPriority>,
+    #[serde(default)]
+    pub goal_id: Option<Uuid>,
+}
+
+/// Result of updating a task, with the progress of its goal when it has one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TaskUpdate {
+    pub task: Task,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal_progress: Option<super::goal::GoalProgress>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

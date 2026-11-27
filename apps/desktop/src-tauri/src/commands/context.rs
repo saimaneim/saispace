@@ -58,6 +58,68 @@ pub struct ContextFile {
     pub kind: ContextFileKind,
     pub size: u64,
     pub modified_at: Option<String>,
+    /// Set when the file only points at another one (a symlink, or a stub
+    /// like `CLAUDE.md` containing just `@AGENTS.md`), so the UI can tell
+    /// copies of the same content apart from real files.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link: Option<ContextLink>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContextLinkVia {
+    Symlink,
+    Import,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContextLink {
+    /// Target relative to the project root (or absolute when outside it).
+    pub target: String,
+    pub via: ContextLinkVia,
+}
+
+/// Stubs larger than this are real documents, not pointers.
+const MAX_IMPORT_STUB_BYTES: u64 = 512;
+
+fn link_of(root: &Path, relative: &str, metadata: &Metadata) -> Option<ContextLink> {
+    let path = root.join(relative);
+    if fs::symlink_metadata(&path).is_ok_and(|m| m.file_type().is_symlink()) {
+        let target = fs::canonicalize(&path).ok()?;
+        let root = fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+        let shown = target.strip_prefix(&root).map_or_else(
+            |_| target.display().to_string(),
+            |p| p.display().to_string(),
+        );
+        return Some(ContextLink {
+            target: shown,
+            via: ContextLinkVia::Symlink,
+        });
+    }
+    if metadata.len() > MAX_IMPORT_STUB_BYTES {
+        return None;
+    }
+    let text = fs::read_to_string(&path).ok()?;
+    let imports: Vec<&str> = text
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
+    if imports.is_empty()
+        || !imports
+            .iter()
+            .all(|line| line.starts_with('@') && line.len() > 1)
+    {
+        return None;
+    }
+    Some(ContextLink {
+        target: imports
+            .iter()
+            .map(|line| line.trim_start_matches('@'))
+            .collect::<Vec<_>>()
+            .join(", "),
+        via: ContextLinkVia::Import,
+    })
 }
 
 fn invalid(message: impl Into<String>) -> CommandError {
@@ -145,8 +207,14 @@ fn resolve_within(root: &Path, relative: &str) -> CommandResult<PathBuf> {
     Ok(resolved)
 }
 
-fn describe(relative: &str, kind: ContextFileKind, metadata: &Metadata) -> ContextFile {
+fn describe(
+    root: &Path,
+    relative: &str,
+    kind: ContextFileKind,
+    metadata: &Metadata,
+) -> ContextFile {
     ContextFile {
+        link: link_of(root, relative, metadata),
         path: relative.to_string(),
         name: relative.rsplit('/').next().unwrap_or(relative).to_string(),
         kind,
@@ -164,7 +232,7 @@ fn root_entry(root: &Path, relative: &str, kind: ContextFileKind) -> Option<Cont
     if !metadata.is_file() || metadata.len() > MAX_FILE_BYTES {
         return None;
     }
-    Some(describe(relative, kind, &metadata))
+    Some(describe(root, relative, kind, &metadata))
 }
 
 fn collect_dir(
@@ -211,7 +279,7 @@ fn collect_dir(
         if canonical_inside(root, &path).is_err() {
             continue;
         }
-        out.push(describe(&relative, kind, &metadata));
+        out.push(describe(root, &relative, kind, &metadata));
     }
 }
 
@@ -230,6 +298,10 @@ fn scan_project(root: &Path) -> Vec<ContextFile> {
     if !root.is_dir() {
         return Vec::new();
     }
+    // Files are checked against the canonical root: a root reached through a
+    // symlink (macOS /var -> /private/var) would otherwise list nothing.
+    let canonical_root = fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    let root = canonical_root.as_path();
 
     let mut primary: Vec<ContextFile> = ROOT_FILES
         .iter()
@@ -311,7 +383,7 @@ fn write_context(root: &Path, relative: &str, content: &str) -> CommandResult<Co
     }
 
     let metadata = fs::metadata(&target)?;
-    Ok(describe(relative, kind, &metadata))
+    Ok(describe(root, relative, kind, &metadata))
 }
 
 async fn load_project(db: &Db, project_id: &str) -> CommandResult<Project> {
@@ -629,5 +701,63 @@ mod tests {
     fn scan_of_missing_root_is_empty() {
         let missing = std::env::temp_dir().join(format!("saispace-missing-{}", Uuid::now_v7()));
         assert_eq!(scan_project(&missing), Vec::<ContextFile>::new());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn root_reached_through_a_symlink_still_lists_files() {
+        // macOS temp dirs live under /var, a symlink to /private/var.
+        let base = tempfile::tempdir().expect("tempdir");
+        let real = base.path().join("real");
+        fs::create_dir(&real).expect("real dir");
+        fs::write(real.join("CLAUDE.md"), "@AGENTS.md\n").expect("claude");
+        let via = base.path().join("via");
+        std::os::unix::fs::symlink(&real, &via).expect("symlink root");
+
+        let files = scan_project(&via);
+        let claude = files
+            .iter()
+            .find(|f| f.path == "CLAUDE.md")
+            .expect("listed");
+        assert_eq!(
+            claude.link,
+            Some(ContextLink {
+                target: "AGENTS.md".into(),
+                via: ContextLinkVia::Import
+            })
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinks_and_import_stubs_are_marked_as_links() {
+        let project = tempfile::tempdir().expect("tempdir");
+        let root = project.path();
+        fs::write(root.join("AGENTS.md"), "# Reglas\nUsa bun.\n").expect("agents");
+        fs::write(root.join("CLAUDE.md"), "@AGENTS.md\n").expect("claude");
+        std::os::unix::fs::symlink("AGENTS.md", root.join("GEMINI.md")).expect("symlink");
+
+        let files = scan_project(root);
+        let link = |name: &str| {
+            files
+                .iter()
+                .find(|f| f.path == name)
+                .and_then(|f| f.link.clone())
+        };
+        assert_eq!(link("AGENTS.md"), None);
+        assert_eq!(
+            link("CLAUDE.md"),
+            Some(ContextLink {
+                target: "AGENTS.md".into(),
+                via: ContextLinkVia::Import
+            })
+        );
+        assert_eq!(
+            link("GEMINI.md"),
+            Some(ContextLink {
+                target: "AGENTS.md".into(),
+                via: ContextLinkVia::Symlink
+            })
+        );
     }
 }

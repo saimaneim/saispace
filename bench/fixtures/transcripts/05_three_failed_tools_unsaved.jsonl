@@ -1,0 +1,7 @@
+{"type":"user","message":{"content":"Ejecuta la suite de pruebas"}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"cargo test"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"compile failed"}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"cargo test"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"Error: linker exited with 1"}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"missing.rs"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":[{"type":"text","text":"<tool_use_error>File does not exist</tool_use_error>"}]}]}}

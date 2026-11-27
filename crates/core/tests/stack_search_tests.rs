@@ -320,6 +320,7 @@ async fn fts_tracks_project_names_tasks_and_rules() {
             project_id: id,
             title: "Rediseñar el buscador".to_string(),
             priority: None,
+            goal_id: None,
         })
         .await
         .expect("task");
@@ -363,6 +364,7 @@ async fn fts_survives_hostile_queries_and_limits_results() {
             project_id: id,
             title: format!("alpha tarea {n}"),
             priority: None,
+            goal_id: None,
         })
         .await
         .expect("task");

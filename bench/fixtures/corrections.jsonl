@@ -1,0 +1,140 @@
+{"prompt":"no hagas eso","correction":true}
+{"prompt":"te dije que en español","correction":true}
+{"prompt":"te dije que uses bun en vez de npm","correction":true}
+{"prompt":"otra vez lo mismo con los imports relativos","correction":true}
+{"prompt":"eso está mal, el identificador va en la cabecera","correction":true}
+{"prompt":"no es así como se configura vite en este repo","correction":true}
+{"prompt":"así no, deja el handler original sin tocar","correction":true}
+{"prompt":"deja de tocar ese archivo de configuración","correction":true}
+{"prompt":"no vuelvas a ejecutar git push sin mi permiso","correction":true}
+{"prompt":"Nunca uses unwrap en código de producción","correction":true}
+{"prompt":"Siempre responde en español sin mezclar idiomas","correction":true}
+{"prompt":"¿Por qué borraste la migración anterior?","correction":true}
+{"prompt":"por que cambiaste el puerto del servidor","correction":true}
+{"prompt":"no te pedí que refactorizaras todo el módulo","correction":true}
+{"prompt":"te equivocaste de rama, estábamos en main","correction":true}
+{"prompt":"eso no es lo que quería, revierte ese cambio","correction":true}
+{"prompt":"a partir de ahora usa biome para formatear","correction":true}
+{"prompt":"de ahora en adelante valida el token primero","correction":true}
+{"prompt":"no uses any en typescript","correction":true}
+{"prompt":"no borres los comentarios que explican el porqué","correction":true}
+{"prompt":"no modifiques el archivo Cargo.lock manualmente","correction":true}
+{"prompt":"no ejecutes comandos destructivos sobre la base","correction":true}
+{"prompt":"cometiste un error al redondear los céntimos","correction":true}
+{"prompt":"quedó mal alineado el botón del modal","correction":true}
+{"prompt":"jamás guardes secretos en texto plano","correction":true}
+{"prompt":"siempre que cambies el schema actualiza los tipos","correction":true}
+{"prompt":"No, era la tabla invoices, no orders","correction":true}
+{"prompt":"Para, ese endpoint administrativo no debe ser público","correction":true}
+{"prompt":"Mejor usa streams en lugar de cargar todo en memoria","correction":true}
+{"prompt":"Oye, esto rompe compatibilidad con Safari","correction":true}
+{"prompt":"Te pedí una tabla compacta y pusiste tarjetas enormes","correction":true}
+{"prompt":"Cámbialo a snake_case, todo el proyecto usa snake_case","correction":true}
+{"prompt":"No hace falta mockear la base, usa sqlite en memoria","correction":true}
+{"prompt":"Falta respetar la regla del proyecto, ya lo habíamos acordado","correction":true}
+{"prompt":"Es al revés: el descuento se aplica antes de impuestos","correction":true}
+{"prompt":"corre otra vez los tests","correction":false}
+{"prompt":"explica por qué nunca pasa este caso","correction":false}
+{"prompt":"Haz que la función nunca devuelva null","correction":false}
+{"prompt":"Añade un test para cuando la contraseña está mal","correction":false}
+{"prompt":"Revisa por qué falla cuando el usuario escribe un dato equivocado","correction":false}
+{"prompt":"¿Qué pasa si la configuración no es así en producción?","correction":false}
+{"prompt":"Muestra un aviso si el token no existe","correction":false}
+{"prompt":"Si el archivo está mal formado, devuelve 400","correction":false}
+{"prompt":"Documenta por qué siempre usamos UUIDv7","correction":false}
+{"prompt":"Comprueba la variable esta_mal en el parser","correction":false}
+{"prompt":"<system-reminder>Nunca uses println en mcp</system-reminder>Lista los endpoints","correction":false}
+{"prompt":"<pasted_content>Esto está mal: error 500</pasted_content>Resume el stacktrace","correction":false}
+{"prompt":"Ejecuta cargo test --workspace","correction":false}
+{"prompt":"Implementa paginación por cursor en el listado de facturas","correction":false}
+{"prompt":"Lee el fichero README.md y resume la arquitectura","correction":false}
+{"prompt":"¿Cómo funciona FTS5 en SQLite?","correction":false}
+{"prompt":"Crea una migración para añadir la columna archived_at","correction":false}
+{"prompt":"Intenta de nuevo la compilación en release","correction":false}
+{"prompt":"Prueba otra vez el webhook con un payload vacío","correction":false}
+{"prompt":"Agrega soporte para exportar los movimientos en CSV","correction":false}
+{"prompt":"Busca dónde se valida el correo electrónico","correction":false}
+{"prompt":"Optimiza la consulta del dashboard mensual","correction":false}
+{"prompt":"¿Puedes explicar la diferencia entre RwLock y Mutex?","correction":false}
+{"prompt":"Actualiza las dependencias de desarrollo","correction":false}
+{"prompt":"Revisa los logs del contenedor de staging","correction":false}
+{"prompt":"Genera los tipos TypeScript desde el schema","correction":false}
+{"prompt":"Valida que el parámetro limit esté entre 1 y 100","correction":false}
+{"prompt":"Cambia el color del badge de pendiente a ámbar","correction":false}
+{"prompt":"Pon un timeout de 5 segundos en la petición HTTP","correction":false}
+{"prompt":"Ordena los resultados por fecha descendente","correction":false}
+{"prompt":"Separa el cliente Stripe en su propio módulo","correction":false}
+{"prompt":"Añade logging estructurado cuando falle la cola","correction":false}
+{"prompt":"Verifica si el índice compuesto cubre esa query","correction":false}
+{"prompt":"Mueve los helpers de fecha a utils.ts","correction":false}
+{"prompt":"Prepara el resumen de la sesión actual","correction":false}
+{"prompt":"never mock the db","correction":true}
+{"prompt":"why did you delete it","correction":true}
+{"prompt":"don't edit that config file","correction":true}
+{"prompt":"do not commit directly to main","correction":true}
+{"prompt":"I told you to use pnpm instead of npm","correction":true}
+{"prompt":"already told you before, keep the public signature","correction":true}
+{"prompt":"that's wrong, the timeout is in milliseconds","correction":true}
+{"prompt":"you're wrong about the migration order","correction":true}
+{"prompt":"stop doing inline styles everywhere","correction":true}
+{"prompt":"stop using unwrap in production code","correction":true}
+{"prompt":"stop modifying Cargo.lock without asking","correction":true}
+{"prompt":"Always run clippy before finishing","correction":true}
+{"prompt":"Never swallow database errors silently","correction":true}
+{"prompt":"why would you rename the public struct?","correction":true}
+{"prompt":"why didn't you run the integration tests?","correction":true}
+{"prompt":"not what I asked for, I wanted a CLI flag","correction":true}
+{"prompt":"that wasn't what I wanted at all","correction":true}
+{"prompt":"I didn't ask you to rewrite the whole file","correction":true}
+{"prompt":"you broke the existing pagination tests","correction":true}
+{"prompt":"you messed up the environment variable name","correction":true}
+{"prompt":"from now on put fixtures under bench/","correction":true}
+{"prompt":"again the same mistake with trailing slashes","correction":true}
+{"prompt":"this is wrong, timestamps must stay in UTC","correction":true}
+{"prompt":"I've told you twice to keep comments minimal","correction":true}
+{"prompt":"stop deleting user-provided labels","correction":true}
+{"prompt":"Wait, I meant staging, not production","correction":true}
+{"prompt":"No, keep the original return type so callers don't break","correction":true}
+{"prompt":"Actually, revert that change and use a transaction instead","correction":true}
+{"prompt":"Hold on, that breaks backwards compatibility with v1 clients","correction":true}
+{"prompt":"Please don't invent new flags I didn't mention","correction":true}
+{"prompt":"Wrong column name: it's created_at, not timestamp","correction":true}
+{"prompt":"Nope, we agreed on PostgreSQL advisory locks here","correction":true}
+{"prompt":"That approach causes a deadlock under load, switch to channels","correction":true}
+{"prompt":"Use Bun instead of Node here like we decided","correction":true}
+{"prompt":"That's backwards — higher bytes means worse efficiency","correction":true}
+{"prompt":"Handle wrong passwords","correction":false}
+{"prompt":"explain why this never happens","correction":false}
+{"prompt":"Use an always-on toggle","correction":false}
+{"prompt":"Delegated task node:x completed","correction":false}
+{"prompt":"Delegated task node:42 completed: never use mocks","correction":false}
+{"prompt":"Used MCP tool: save_memory with that's wrong","correction":false}
+{"prompt":"[T3 Code: user requested stop doing X] Summarize the diff","correction":false}
+{"prompt":"This session is being continued from a previous conversation. Never skip tests.","correction":false}
+{"prompt":"Caveat: The messages below were generated by the user. Do not assume.","correction":false}
+{"prompt":"Base directory for this skill: /tmp/skill. Always follow rules.","correction":false}
+{"prompt":"<system-reminder>Always use strict mode and never ignore errors</system-reminder>Read main.rs","correction":false}
+{"prompt":"<pasted_content>why did you crash at line 42</pasted_content>Inspect this error","correction":false}
+{"prompt":"Check the is_wrong flag and always_retry setting","correction":false}
+{"prompt":"Ensure the parser never panics on malformed UTF-8","correction":false}
+{"prompt":"Add a test case for wrong API key format","correction":false}
+{"prompt":"Run the benchmark suite again","correction":false}
+{"prompt":"Implement rate limiting middleware for login","correction":false}
+{"prompt":"Explain how SQLite WAL mode works","correction":false}
+{"prompt":"Refactor the retry helper to accept a backoff duration","correction":false}
+{"prompt":"What happens if the webhook signature is wrong?","correction":false}
+{"prompt":"Make sure duplicate events are always deduplicated","correction":false}
+{"prompt":"Can you check why the CI job timed out?","correction":false}
+{"prompt":"Write unit tests for the CSV exporter","correction":false}
+{"prompt":"Update the OpenAPI spec with the new query parameter","correction":false}
+{"prompt":"Show me all callers of resolve_memory_id","correction":false}
+{"prompt":"Add an index on project_id and updated_at","correction":false}
+{"prompt":"List the failing assertions in cli_tests.rs","correction":false}
+{"prompt":"Format the code with cargo fmt","correction":false}
+{"prompt":"Compare FTS5 BM25 weights between title and content","correction":false}
+{"prompt":"Return 422 when the payload schema doesn't match","correction":false}
+{"prompt":"Document the retry policy in README.md","correction":false}
+{"prompt":"Set default timeout to 30 seconds","correction":false}
+{"prompt":"Log a warning whenever cache eviction runs","correction":false}
+{"prompt":"Support both JSON and table output modes","correction":false}
+{"prompt":"Verify that empty queries return a validation error","correction":false}

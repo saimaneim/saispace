@@ -260,7 +260,7 @@ fn memory_save_upsert_search_context_and_validation() {
     );
     assert_eq!(bad_kind.status.code(), Some(2));
 
-    let rm = sb.sai(&repo, &["memory", "rm", id]);
+    let rm = sb.sai(&repo, &["memory", "delete", id]);
     assert!(rm.status.success());
     assert!(stdout(&rm).contains(&format!("eliminada {}  Decisión de auth", short(id))));
     assert_eq!(sb.sai(&repo, &["memory", "get", id]).status.code(), Some(2));

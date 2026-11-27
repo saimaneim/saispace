@@ -31,6 +31,7 @@ export interface Task {
   title: string;
   status: TaskStatus;
   priority: TaskPriority;
+  goal_id: string | null;
   created_at: string;
   updated_at: string;
   completed_at?: string | null;
@@ -40,12 +41,48 @@ export interface CreateTaskInput {
   project_id: string;
   title: string;
   priority?: TaskPriority;
+  goal_id?: string | null;
 }
 
 export interface UpdateTaskInput {
   title?: string;
   status?: TaskStatus;
   priority?: TaskPriority;
+}
+
+export type GoalStatus = "active" | "completed" | "archived";
+export type PlanFilter = "active" | "completed" | "all";
+
+export interface Goal {
+  id: string;
+  project_id: string;
+  title: string;
+  criteria: string | null;
+  status: GoalStatus;
+  position: number;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+}
+
+export interface UpdateGoalInput {
+  title?: string;
+  criteria?: string | null;
+  status?: GoalStatus;
+  position?: number;
+}
+
+export interface GoalWithTasks {
+  goal: Goal;
+  done: number;
+  total: number;
+  tasks: Task[];
+}
+
+export interface Plan {
+  goals: GoalWithTasks[];
+  loose_tasks: Task[];
+  counts: { active: number; completed: number; all: number };
 }
 
 export type Actor = { type: "user" } | { type: "agent"; name: string };
@@ -92,6 +129,8 @@ export interface ContextFile {
   kind: ContextFileKind;
   size: number;
   modified_at: string | null;
+  /** Present when the file only points at another one: a symlink, or a stub like `@AGENTS.md`. */
+  link?: { target: string; via: "symlink" | "import" } | null;
 }
 
 export interface Technology {
@@ -290,4 +329,22 @@ export interface SecretGrant {
   reason: string;
   created_at: string;
   decided_at: string | null;
+}
+
+export interface KpiPoint {
+  day: string;
+  value: number;
+}
+
+export interface KpiSeries {
+  name: string;
+  label: string;
+  unit: string;
+  /** null: a volume, neither better nor worse when it moves. */
+  higher_is_better: boolean | null;
+  points: KpiPoint[];
+}
+
+export interface KpiHistory {
+  metrics: KpiSeries[];
 }

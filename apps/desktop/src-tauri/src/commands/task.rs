@@ -2,7 +2,8 @@ use crate::error::CommandResult;
 use crate::error_log::record_activity_or_log;
 use saispace_core::Db;
 use saispace_core::models::{
-    ActionKind, Actor, CreateTaskInput, EntityKind, RecordActivityInput, Task, UpdateTaskInput,
+    ActionKind, Actor, CreateTaskInput, EntityKind, RecordActivityInput, Task, TaskStatus,
+    UpdateTaskInput,
 };
 use tauri::State;
 use uuid::Uuid;
@@ -48,7 +49,8 @@ pub async fn update_task(
     input: UpdateTaskInput,
     db: State<'_, Db>,
 ) -> CommandResult<Task> {
-    let task = db.update_task(id, input).await?;
+    let updated = db.update_task(id, input).await?;
+    let task = updated.task;
     record_activity_or_log(
         &db,
         "update_task activity",
@@ -58,7 +60,8 @@ pub async fn update_task(
             action: ActionKind::Update,
             entity: EntityKind::Task,
             entity_id: Some(task.id),
-            details: None,
+            details: (task.status == TaskStatus::Done)
+                .then(|| serde_json::json!({ "status": "done" })),
         },
     )
     .await;
