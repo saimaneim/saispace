@@ -31,6 +31,11 @@ pub enum MemoryCommand {
         topic: Option<String>,
         #[arg(help = "Memoria global, no ligada al proyecto", long)]
         global: bool,
+        #[arg(
+            help = "Disparador que la recuerda sola: texto del error (\"exit code 144\"), fragmento de comando, o env:t3code / env:opencode. Repetible",
+            long = "trigger"
+        )]
+        triggers: Vec<String>,
     },
     #[command(about = "Lista memorias recientes del proyecto y globales")]
     List {
@@ -62,6 +67,17 @@ pub enum MemoryCommand {
         kind: Option<String>,
         #[arg(long)]
         topic: Option<String>,
+        #[arg(
+            help = "Reemplaza los disparadores (texto de error, comando o env:<host>). Repetible",
+            long = "trigger"
+        )]
+        triggers: Vec<String>,
+        #[arg(
+            help = "Quita todos los disparadores",
+            long,
+            conflicts_with = "triggers"
+        )]
+        no_triggers: bool,
     },
     #[command(about = "Búsqueda FTS5 en memorias, notas, tareas y reglas")]
     Search {
@@ -197,7 +213,11 @@ pub(crate) async fn current_project(db: &Db, register: bool) -> CliResult<Option
 
 /// Project for an explicit directory, used when Claude Code's hook passes a
 /// `cwd` that overrides the process working directory.
-async fn current_project_at(db: &Db, register: bool, cwd: PathBuf) -> CliResult<Option<Project>> {
+pub(crate) async fn current_project_at(
+    db: &Db,
+    register: bool,
+    cwd: PathBuf,
+) -> CliResult<Option<Project>> {
     let cwd = cwd.canonicalize().unwrap_or(cwd);
     Ok(db.project_for_path(&cwd, register).await?)
 }
@@ -256,14 +276,19 @@ fn print_memory_line(m: &Memory) {
 }
 
 pub fn run(cmd: MemoryCommand) -> CliResult<()> {
+    let runtime = || {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+    };
     if matches!(cmd, MemoryCommand::Nudge) {
-        crate::nudge::run();
+        // Tool events need the database; the other hooks answer from stdin.
+        if let Some(event) = crate::nudge::run() {
+            runtime()?.block_on(crate::recall::run(event));
+        }
         return Ok(());
     }
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?;
-    runtime.block_on(run_async(cmd))
+    runtime()?.block_on(run_async(cmd))
 }
 
 async fn save(
@@ -273,7 +298,10 @@ async fn save(
     kind: &str,
     topic: Option<String>,
     global: bool,
+    triggers: &[String],
 ) -> CliResult<()> {
+    // Validate before saving, so a bad trigger never leaves a half-saved memory.
+    saispace_core::recall::normalize_triggers(triggers).map_err(CliError::Usage)?;
     let kind = MemoryKind::parse(kind)
         .ok_or_else(|| CliError::Usage(format!("unknown memory kind '{kind}'")))?;
     let content = if content == "-" {
@@ -317,6 +345,10 @@ async fn save(
     })
     .await?;
     print_memory_line(&saved);
+    if !triggers.is_empty() {
+        let set = db.set_memory_triggers(saved.id, triggers).await?;
+        crate::out!("disparadores: {}", set.join(" · "));
+    }
     let linked: Vec<String> = db
         .memory_links(saved.id)
         .await?
@@ -579,12 +611,33 @@ async fn edit(
     content: Option<String>,
     kind: Option<&str>,
     topic: Option<String>,
+    triggers: Option<&[String]>,
 ) -> CliResult<()> {
-    if title.is_none() && content.is_none() && kind.is_none() && topic.is_none() {
+    let fields_changed = title.is_some() || content.is_some() || kind.is_some() || topic.is_some();
+    if !fields_changed && triggers.is_none() {
         return Err(CliError::Usage(
-            "indica al menos un campo a modificar (--title, --content, --kind, --topic)"
+            "indica al menos un campo a modificar (--title, --content, --kind, --topic, --trigger, --no-triggers)"
                 .to_string(),
         ));
+    }
+    if let Some(list) = triggers {
+        saispace_core::recall::normalize_triggers(list).map_err(CliError::Usage)?;
+    }
+    if !fields_changed {
+        let memory = db.get_memory(id).await?;
+        if let Some(list) = triggers {
+            let set = db.set_memory_triggers(id, list).await?;
+            print_memory_line(&memory);
+            crate::out!(
+                "disparadores: {}",
+                if set.is_empty() {
+                    "ninguno".to_string()
+                } else {
+                    set.join(" · ")
+                }
+            );
+        }
+        return Ok(());
     }
     let parsed_kind = match kind {
         Some(k) => Some(
@@ -619,6 +672,17 @@ async fn edit(
     })
     .await?;
     print_memory_line(&updated);
+    if let Some(list) = triggers {
+        let set = db.set_memory_triggers(id, list).await?;
+        crate::out!(
+            "disparadores: {}",
+            if set.is_empty() {
+                "ninguno".to_string()
+            } else {
+                set.join(" · ")
+            }
+        );
+    }
     Ok(())
 }
 
@@ -760,7 +824,9 @@ async fn context(
         None => current_project(db, false).await?,
     };
     let scope = MemoryScope::for_project(project.as_ref().map(|p| p.id));
-    let context = db.memory_context(scope, limit).await?;
+    let mut context = db.memory_context(scope, limit).await?;
+    let hosts = saispace_core::recall::detect_hosts(|key| std::env::var(key).ok());
+    db.attach_environment(&mut context, scope, &hosts).await?;
     if json {
         let mut value = serde_json::to_value(&context)?;
         if is_compact && let Some(obj) = value.as_object_mut() {
@@ -797,12 +863,16 @@ async fn context(
 async fn get(db: &Db, id: &str, json: bool) -> CliResult<()> {
     let memory = db.get_memory(db.resolve_memory_id(id).await?).await?;
     let links = db.memory_links(memory.id).await?;
+    let triggers = db.memory_triggers(memory.id).await?;
     touch_memories_or_warn(db, &[memory.id]).await;
     if json {
-        let value = serde_json::json!({ "memory": memory, "links": links });
+        let value = serde_json::json!({ "memory": memory, "links": links, "triggers": triggers });
         crate::out!("{}", serde_json::to_string_pretty(&value)?);
     } else {
-        crate::out!("{}", render_memory(&memory, &links));
+        crate::out!("{}", render_memory(&memory, &links).trim_end());
+        if !triggers.is_empty() {
+            crate::out!("\nDisparadores: {}", triggers.join(" · "));
+        }
     }
     Ok(())
 }
@@ -851,6 +921,18 @@ async fn dupes(db: &Db, all: bool) -> CliResult<()> {
     Ok(())
 }
 
+async fn import_engram(db: &Db, source: Option<PathBuf>) -> CliResult<()> {
+    let source = match source {
+        Some(path) => path,
+        None => std::env::var_os("HOME")
+            .map(|h| PathBuf::from(h).join(".engram").join("engram.db"))
+            .ok_or_else(|| CliError::Usage("HOME is not set".to_string()))?,
+    };
+    let report = db.import_engram(&source).await?;
+    crate::out!("{}", serde_json::to_string_pretty(&report)?);
+    Ok(())
+}
+
 async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
     let db_path = default_db_path()?;
     let db = Db::open(&db_path).await?;
@@ -861,7 +943,8 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
             kind,
             topic,
             global,
-        } => save(&db, title, content, &kind, topic, global).await?,
+            triggers,
+        } => save(&db, title, content, &kind, topic, global, &triggers).await?,
         MemoryCommand::List {
             kind,
             all,
@@ -874,9 +957,22 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
             content,
             kind,
             topic,
+            triggers,
+            no_triggers,
         } => {
             let id = db.resolve_memory_id(&id).await?;
-            edit(&db, id, title, content, kind.as_deref(), topic).await?;
+            // --no-triggers conflicts with --trigger, so it means an empty list.
+            let triggers = (no_triggers || !triggers.is_empty()).then_some(triggers);
+            edit(
+                &db,
+                id,
+                title,
+                content,
+                kind.as_deref(),
+                topic,
+                triggers.as_deref(),
+            )
+            .await?;
         }
         MemoryCommand::Search {
             query,
@@ -921,16 +1017,7 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
             json,
             prune_sessions,
         } => stale(&db, days, keep_sessions, all, json, prune_sessions).await?,
-        MemoryCommand::ImportEngram { db: source } => {
-            let source = match source {
-                Some(path) => path,
-                None => std::env::var_os("HOME")
-                    .map(|h| PathBuf::from(h).join(".engram").join("engram.db"))
-                    .ok_or_else(|| CliError::Usage("HOME is not set".to_string()))?,
-            };
-            let report = db.import_engram(&source).await?;
-            crate::out!("{}", serde_json::to_string_pretty(&report)?);
-        }
+        MemoryCommand::ImportEngram { db: source } => import_engram(&db, source).await?,
         MemoryCommand::Orphans => list_orphans(&db).await?,
         MemoryCommand::Link { project_name, path } => {
             link_orphans(&db, &project_name, path).await?;
@@ -943,7 +1030,7 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
             let changed = db.normalize_existing_topic_keys().await?;
             crate::out!("{changed} claves de tema normalizadas");
         }
-        MemoryCommand::Nudge => crate::nudge::run(),
+        MemoryCommand::Nudge => {}
     }
     Ok(())
 }

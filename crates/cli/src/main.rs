@@ -15,6 +15,7 @@ mod kpi;
 mod memory;
 mod nudge;
 mod plan;
+mod recall;
 mod rules;
 mod secret;
 mod setup;

@@ -39,10 +39,12 @@ Never store secrets, raw logs, routine progress, or anything the code or git his
 Save the lesson when it happens, not at the end:
 
 - The user corrects you or states a rule: `kind: preference` once resolved (same `topic_key` if that preference exists).
-- Your own mistake with a non-obvious cause: `kind: bugfix` with the root cause.
+- Your own mistake with a non-obvious cause: `kind: bugfix` with the root cause, plus `triggers`: the exact, stable error line (`"exit code 144"`, `"permission denied (publickey)"`), never a generic word like `error`. When that text shows up in a later tool call, the hook hands the lesson back before you retry.
+- A quirk of the host you run in (T3 Code, OpenCode: no TTY, `!` does not run commands…): add the trigger `env:t3code` / `env:opencode`. Those lessons open the session index under "Entorno".
+- Before handing a step to the user (a password, a command for their terminal), check whether a saved lesson already solves it.
 - `memory_context` lists pairs under `consolidate` (the CLI index calls it "Para consolidar"): merge them with `consolidate_memories` before finishing.
 
-Hooks remind you. `sai setup claude` installs `sai memory context` on SessionStart and `sai memory nudge` on UserPromptSubmit (a reminder when the prompt looks like a correction) and Stop (blocks once per session if there was a correction or 3+ failed tools and nothing was saved). The OpenCode plugin (`sai setup opencode`) adds the same reminder on each user message.
+Hooks remind you. `sai setup claude` installs `sai memory context` on SessionStart and `sai memory nudge` on UserPromptSubmit (a reminder when the prompt looks like a correction) and Stop (blocks once per session if there was a correction or 3+ failed tools and nothing was saved). PostToolUse and PostToolUseFailure run the same command to recall lessons whose triggers match the call (once per session each); Stop also names errors that repeated in the session so you save their fix with a trigger. The OpenCode plugin (`sai setup opencode`) adds the reminder on each user message and the recall after each tool call.
 
 ## Plan and stack
 

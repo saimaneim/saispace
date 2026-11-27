@@ -1,0 +1,13 @@
+{"key":"pkill-self","triggers":["exit code 144"]}
+{"key":"ssh-passphrase","triggers":["permission denied (publickey)","could not open a connection to your authentication agent","enter passphrase for key"]}
+{"key":"sleep-blocked","triggers":["blocked: sleep"]}
+{"key":"zsh-glob","triggers":["no matches found: --include"]}
+{"key":"zip-missing","triggers":["command not found: zip"]}
+{"key":"auto-classifier","triggers":["denied by the claude code auto mode classifier"]}
+{"key":"plan-scope","triggers":["items also needs \"scope\""]}
+{"key":"browser-limits","triggers":["invalid arguments for tool computer"]}
+{"key":"ssh-vpn","triggers":["connection timed out during banner exchange"]}
+{"key":"sudo-tty","triggers":["sudo: a terminal is required","sudo: a password is required"]}
+{"key":"stale-read","triggers":["file has been modified since read"]}
+{"key":"tool-case","triggers":["no such tool available: bash"]}
+{"key":"host-key","triggers":["host key verification failed"]}

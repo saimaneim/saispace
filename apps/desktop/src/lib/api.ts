@@ -174,6 +174,7 @@ export const api = {
 
   getMemory: (id: string) => invokeOrFallback<Memory>("get_memory", { id }),
   memoryLinks: (id: string) => invokeOrFallback<MemoryLink[]>("memory_links", { id }, []),
+  memoryTriggers: (id: string) => invokeOrFallback<string[]>("memory_triggers", { id }, []),
 
   globalAiInventory: () =>
     invokeOrFallback<AiInventory>("global_ai_inventory", undefined, {

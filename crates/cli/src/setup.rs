@@ -19,6 +19,9 @@ const CLAUDE_HOOKS: &[(&str, &str)] = &[
     ("SessionStart", "sai memory context 2>/dev/null || true"),
     ("UserPromptSubmit", "sai memory nudge 2>/dev/null || true"),
     ("Stop", "sai memory nudge 2>/dev/null || true"),
+    // A lesson whose trigger matches a tool's error comes back right away.
+    ("PostToolUse", "sai memory nudge 2>/dev/null || true"),
+    ("PostToolUseFailure", "sai memory nudge 2>/dev/null || true"),
 ];
 
 #[derive(Subcommand)]

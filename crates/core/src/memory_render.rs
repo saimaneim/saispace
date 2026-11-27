@@ -62,6 +62,31 @@ pub fn kind_label(kind: MemoryKind) -> &'static str {
     }
 }
 
+/// Host lessons (`env:` triggers), shown in full: they apply right away.
+fn render_environment(out: &mut String, context: &MemoryContext) {
+    if !context.environment.is_empty() {
+        let hosts: Vec<&str> = context
+            .hosts
+            .iter()
+            .map(|h| crate::recall::host_label(h))
+            .collect();
+        let _ = writeln!(
+            out,
+            "\n## Entorno: {}\nLecciones de este entorno: aplícalas sin esperar a que el usuario lo recuerde.",
+            hosts.join(" + ")
+        );
+        for m in &context.environment {
+            let _ = writeln!(
+                out,
+                "- {}: {} [{}]",
+                excerpt(&m.title, 90),
+                crate::recall::lesson_text(&m.content, 300),
+                short_id(m.id)
+            );
+        }
+    }
+}
+
 #[must_use]
 pub fn render_context(project: Option<&Project>, context: &MemoryContext) -> String {
     let mut out = String::new();
@@ -87,6 +112,7 @@ pub fn render_context(project: Option<&Project>, context: &MemoryContext) -> Str
             );
         }
     }
+    render_environment(&mut out, context);
     if !context.pinned.is_empty() {
         out.push_str("\n## Fijadas\n");
         for m in &context.pinned {
@@ -142,6 +168,7 @@ pub fn render_context(project: Option<&Project>, context: &MemoryContext) -> Str
         }
     }
     if context.preferences.is_empty()
+        && context.environment.is_empty()
         && context.pinned.is_empty()
         && context.last_session.is_none()
         && context.memories.is_empty()

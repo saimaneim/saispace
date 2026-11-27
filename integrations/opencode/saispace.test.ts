@@ -6,6 +6,8 @@ import {
   ENTRY_KEY,
   NUDGE_ENTRY_KEY,
   type OpenCodeEvent,
+  RECALL_ENTRY_KEY,
+  toolHookPayload,
   type PluginContext,
   runNudge,
   truncateUtf8,
@@ -276,5 +278,80 @@ describe("spawnRunner", () => {
     } else {
       expect(res.exitCode).not.toBe(0);
     }
+  });
+});
+
+describe("tool recall", () => {
+  const lesson = "saispace: esto ya pasó antes. Usa pkill -f \"[p]atrón\".";
+  const hookOutput = JSON.stringify({
+    hookSpecificOutput: { hookEventName: "PostToolUseFailure", additionalContext: lesson },
+  });
+
+  it("builds a Claude-shaped payload from OpenCode tool events", () => {
+    const payload = toolHookPayload(
+      { type: "session.tool.failed", data: { sessionID: "s1", id: "c1", error: { message: "Exit code 144" }, content: [] } },
+      { name: "bash", input: { command: "pkill -f server" } },
+      "/repo/project",
+    );
+    expect(JSON.parse(payload ?? "{}")).toEqual({
+      hook_event_name: "PostToolUseFailure",
+      session_id: "s1",
+      cwd: "/repo/project",
+      tool_name: "bash",
+      tool_input: { command: "pkill -f server" },
+      tool_response: { output: JSON.stringify({ content: [], metadata: {} }) },
+      error: "Exit code 144",
+    });
+    expect(toolHookPayload({ type: "session.idle", data: { sessionID: "s1" } }, undefined, "/r")).toBeUndefined();
+    // Successful content tools never reach `sai`; failed ones do.
+    expect(
+      toolHookPayload({ type: "session.tool.success", data: { sessionID: "s1", id: "c2" } }, { name: "read" }, "/r"),
+    ).toBeUndefined();
+    expect(
+      toolHookPayload({ type: "session.tool.failed", data: { sessionID: "s1", id: "c2", error: "x" } }, { name: "read" }, "/r"),
+    ).toBeDefined();
+    const big = JSON.parse(
+      toolHookPayload(
+        { type: "session.tool.success", data: { sessionID: "s1", id: "c3", content: ["x".repeat(50_000)] } },
+        { name: "shell" },
+        "/r",
+      ) ?? "{}",
+    );
+    expect(big.tool_response.output.length).toBeLessThan(17_000);
+  });
+
+  it("stores the recalled lesson until the execution ends", async () => {
+    const { runner, calls } = makeRunner((args, stdin) => {
+      if (args[1] === "nudge" && stdin?.includes("PostToolUseFailure")) {
+        return { exitCode: 0, stdout: hookOutput };
+      }
+      return { exitCode: 0, stdout: "" };
+    });
+    const { ctx, puts, removals, drained } = makeContext([
+      { type: "session.tool.input.started", data: { sessionID: "s1", id: "c1", name: "bash" } },
+      { type: "session.tool.called", data: { sessionID: "s1", id: "c1", input: { command: "pkill -f x" } } },
+      { type: "session.tool.failed", data: { sessionID: "s1", id: "c1", error: { message: "Exit code 144" } } },
+      { type: "session.tool.success", data: { sessionID: "s1", id: "c2", content: [] } },
+      event("session.execution.succeeded", "s1"),
+    ]);
+    await createSaispacePlugin(runner).setup(ctx);
+    await drained();
+
+    const sent = calls.filter((c) => c.stdin?.includes("PostToolUse"));
+    expect(sent).toHaveLength(2);
+    expect(JSON.parse(sent[0].stdin ?? "{}").tool_input).toEqual({ command: "pkill -f x" });
+    expect(JSON.parse(sent[1].stdin ?? "{}").tool_name).toBe("tool");
+    expect(puts).toContainEqual({ sessionID: "s1", key: RECALL_ENTRY_KEY, value: lesson });
+    expect(removals).toContainEqual({ sessionID: "s1", key: RECALL_ENTRY_KEY });
+  });
+
+  it("ignores malformed recall output", async () => {
+    const { runner } = makeRunner(() => ({ exitCode: 0, stdout: "not json" }));
+    const { ctx, puts, drained } = makeContext([
+      { type: "session.tool.failed", data: { sessionID: "s1", id: "c1", error: "boom" } },
+    ]);
+    await createSaispacePlugin(runner).setup(ctx);
+    await drained();
+    expect(puts.filter((p) => p.key === RECALL_ENTRY_KEY)).toHaveLength(0);
   });
 });

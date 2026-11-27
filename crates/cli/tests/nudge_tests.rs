@@ -350,3 +350,26 @@ fn setup_claude_respects_claude_config_dir_and_uninstalls() {
     .expect("json");
     assert!(settings.get("hooks").is_none());
 }
+
+#[test]
+fn stop_names_repeated_errors_and_suggests_a_trigger() {
+    let sb = NudgeSandbox::new("repeat");
+    let fail = r#"{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"Exit code 144"}]}}"#;
+    let transcript = sb.root.join("t.jsonl");
+    fs::write(&transcript, format!("{fail}\n{fail}\n")).expect("write transcript");
+    let payload = serde_json::json!({
+        "hook_event_name": "Stop",
+        "session_id": "repeat-1",
+        "transcript_path": transcript.display().to_string(),
+    })
+    .to_string();
+    let out = sb.run_sai(&["memory", "nudge"], Some(&payload), &[]);
+    assert!(out.status.success());
+    let value: serde_json::Value =
+        serde_json::from_str(stdout_str(&out).trim()).expect("block json");
+    assert_eq!(value["decision"], "block");
+    let reason = value["reason"].as_str().expect("reason");
+    assert!(reason.starts_with(STOP_REMINDER), "{reason}");
+    assert!(reason.contains("`exit code 144` (2 veces)"), "{reason}");
+    assert!(reason.contains("--trigger"), "{reason}");
+}

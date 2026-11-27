@@ -5,6 +5,7 @@ pub mod learning;
 pub mod memory_render;
 pub mod models;
 pub mod paths;
+pub mod recall;
 pub mod tech;
 pub mod topic_key;
 pub mod vault;

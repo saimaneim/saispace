@@ -12,6 +12,12 @@
 // reminder (<= 300 chars) that is stored as a second instruction entry and
 // removed when that execution ends, so it lasts one turn. v2 ignores what
 // `setup` returns, so everything goes through events and instruction entries.
+//
+// Each finished tool call (`session.tool.success` / `session.tool.failed`) is
+// sent to `sai memory nudge` as a PostToolUse(Failure) payload: when its error
+// matches a saved lesson's trigger, the lesson is stored as a third entry until
+// the execution ends. `sai` runs with SAISPACE_HOST=opencode so `env:opencode`
+// lessons reach the session-start index.
 
 // Minimal ambient types: the plugin runs on Bun inside OpenCode and has no
 // dependencies, so it does not pull in @types/bun or @types/node.
@@ -23,6 +29,7 @@ declare const Bun: {
       stdin: "ignore" | "pipe";
       stdout: "pipe";
       stderr: "ignore";
+      env?: Record<string, string | undefined>;
     },
   ): {
     stdout: ReadableStream;
@@ -32,7 +39,7 @@ declare const Bun: {
     kill(): void;
   };
 };
-declare const process: { cwd(): string };
+declare const process: { cwd(): string; env: Record<string, string | undefined> };
 
 export type CommandResult = { exitCode: number; stdout: string; timedOut?: boolean };
 export type CommandRunner = (
@@ -48,6 +55,15 @@ export type OpenCodeEvent = {
   data?: {
     sessionID?: string;
     item?: { type?: string; payload?: { text?: string } };
+    /** Tool call id (`session.tool.*`). */
+    id?: string;
+    /** Tool name (`session.tool.input.started`). */
+    name?: string;
+    /** Tool input (`session.tool.called`). */
+    input?: unknown;
+    content?: unknown;
+    metadata?: unknown;
+    error?: { message?: string } | string;
   };
 };
 
@@ -70,6 +86,19 @@ export type SaispacePluginOptions = { timeoutMs?: number; maxBytes?: number; nud
 
 export const ENTRY_KEY = "saispace-memory";
 export const NUDGE_ENTRY_KEY = "saispace-nudge";
+export const RECALL_ENTRY_KEY = "saispace-recall";
+/** Open tool calls tracked between their start and end events. */
+const MAX_TRACKED_CALLS = 256;
+/** Tool output sent to `sai` (head and tail are where errors show up). */
+const MAX_TOOL_OUTPUT_CHARS = 16_000;
+/**
+ * Tools whose successful output is file or search content: `sai` would ignore
+ * it, so the plugin does not spawn it at all.
+ */
+const CONTENT_TOOLS = new Set([
+  "read", "edit", "write", "grep", "glob", "list", "todowrite", "todoread",
+  "webfetch", "websearch", "task", "patch", "apply_patch", "multiedit",
+]);
 const DEFAULT_TIMEOUT_MS = 3000;
 const DEFAULT_NUDGE_TIMEOUT_MS = 1500;
 const MAX_CONTEXT_BYTES = 8192;
@@ -91,6 +120,7 @@ export const spawnRunner: CommandRunner = async (args, cwd, timeoutMs, stdinData
       stdin: stdinData !== undefined ? "pipe" : "ignore",
       stdout: "pipe",
       stderr: "ignore",
+      env: { ...process.env, SAISPACE_HOST: "opencode" },
     });
     const child = proc;
     let timedOut = false;
@@ -151,6 +181,57 @@ export async function runNudge(
   }
 }
 
+type ToolCall = { name?: string; input?: unknown };
+
+/** PostToolUse(Failure) payload for a finished tool call, as Claude Code sends it. */
+export function toolHookPayload(
+  event: OpenCodeEvent,
+  call: ToolCall | undefined,
+  dir: string,
+): string | undefined {
+  const data = event.data;
+  if (!data?.sessionID) return undefined;
+  const failed = event.type === "session.tool.failed";
+  if (!failed && event.type !== "session.tool.success") return undefined;
+  const name = call?.name ?? data.name ?? "tool";
+  if (!failed && CONTENT_TOOLS.has(name.toLowerCase())) return undefined;
+  const error = typeof data.error === "string" ? data.error : data.error?.message;
+  const output = JSON.stringify({ content: data.content ?? [], metadata: data.metadata ?? {} });
+  const clipped =
+    output.length <= MAX_TOOL_OUTPUT_CHARS
+      ? output
+      : `${output.slice(0, MAX_TOOL_OUTPUT_CHARS / 2)}\n${output.slice(-MAX_TOOL_OUTPUT_CHARS / 2)}`;
+  return JSON.stringify({
+    hook_event_name: failed ? "PostToolUseFailure" : "PostToolUse",
+    session_id: data.sessionID,
+    cwd: dir,
+    tool_name: name,
+    tool_input: call?.input ?? data.input ?? {},
+    tool_response: { output: clipped },
+    ...(error ? { error } : {}),
+  });
+}
+
+/** The lesson `sai memory nudge` returned for a tool call, if any. */
+export async function runRecall(
+  payload: string,
+  runner: CommandRunner,
+  dir: string,
+  timeoutMs: number,
+): Promise<string> {
+  try {
+    const res = await runner(["memory", "nudge"], dir, timeoutMs, payload);
+    if (res.exitCode !== 0 || !res.stdout.trim()) return "";
+    const parsed = JSON.parse(res.stdout) as {
+      hookSpecificOutput?: { additionalContext?: unknown };
+    };
+    const text = parsed.hookSpecificOutput?.additionalContext;
+    return typeof text === "string" ? text.trim() : "";
+  } catch {
+    return "";
+  }
+}
+
 export function createSaispacePlugin(
   runner: CommandRunner = spawnRunner,
   options: SaispacePluginOptions = {},
@@ -200,7 +281,50 @@ export function createSaispacePlugin(
         const compacted = new Set<string>();
         const children = new Set<string>();
         const nudged = new Set<string>();
+        const calls = new Map<string, ToolCall>();
+        const recalled = new Map<string, string>();
         const entry = () => ctx.session?.instructions?.entry;
+
+        const track = (id: string, update: ToolCall): void => {
+          if (!calls.has(id) && calls.size >= MAX_TRACKED_CALLS) {
+            const oldest = calls.keys().next().value;
+            if (oldest !== undefined) calls.delete(oldest);
+          }
+          calls.set(id, { ...calls.get(id), ...update });
+        };
+
+        const recall = async (event: OpenCodeEvent, sessionID: string): Promise<void> => {
+          const id = event.data?.id;
+          const call = id ? calls.get(id) : undefined;
+          if (id) calls.delete(id);
+          // Subagents report back to their parent, which gets its own lessons.
+          if (children.has(sessionID)) return;
+          const payload = toolHookPayload(event, call, dir);
+          if (!payload) return;
+          const lesson = await runRecall(payload, runner, dir, nudgeTimeoutMs);
+          if (!lesson) return;
+          const value = truncateUtf8(
+            [recalled.get(sessionID), lesson].filter(Boolean).join("\n\n"),
+            maxBytes,
+          );
+          try {
+            await put.call(entry(), { sessionID, key: RECALL_ENTRY_KEY, value });
+            recalled.set(sessionID, value);
+          } catch {
+            // A missed lesson never breaks the session.
+          }
+        };
+
+        const clearRecall = async (sessionID: string): Promise<void> => {
+          if (!recalled.delete(sessionID)) return;
+          try {
+            const remove = entry()?.remove;
+            if (remove) await remove.call(entry(), { sessionID, key: RECALL_ENTRY_KEY });
+            else await put.call(entry(), { sessionID, key: RECALL_ENTRY_KEY, value: "" });
+          } catch {
+            // Best effort.
+          }
+        };
 
         const clearNudge = async (sessionID: string): Promise<void> => {
           if (!nudged.delete(sessionID)) return;
@@ -237,7 +361,14 @@ export function createSaispacePlugin(
           const sessionID = event.data?.sessionID;
           if (!sessionID) return;
           const prompt = userPromptText(event);
-          if (prompt) {
+          const callID = event.data?.id;
+          if (event.type === "session.tool.input.started" && callID) {
+            track(callID, { name: event.data?.name });
+          } else if (event.type === "session.tool.called" && callID) {
+            track(callID, { input: event.data?.input });
+          } else if (event.type === "session.tool.success" || event.type === "session.tool.failed") {
+            await recall(event, sessionID);
+          } else if (prompt) {
             await nudge(sessionID, prompt);
           } else if (event.type === "session.execution.started" && !injected.has(sessionID)) {
             if (await isChild(sessionID)) {
@@ -258,6 +389,7 @@ export function createSaispacePlugin(
             event.type === "session.execution.interrupted"
           ) {
             await clearNudge(sessionID);
+            await clearRecall(sessionID);
           }
         };
 

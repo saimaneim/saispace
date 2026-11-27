@@ -86,8 +86,31 @@ struct DupeFixture {
     duplicate: bool,
 }
 
+#[derive(Debug, Deserialize)]
+struct RecallLesson {
+    key: String,
+    triggers: Vec<String>,
+}
+
+/// A tool call as a hook sees it, and the lessons it must recall.
+#[derive(Debug, Deserialize)]
+struct RecallCase {
+    name: String,
+    event: String,
+    tool: String,
+    #[serde(default)]
+    command: String,
+    #[serde(default)]
+    output: String,
+    #[serde(default)]
+    error: String,
+    expect: Vec<String>,
+}
+
 struct Fixtures {
     corrections: Vec<CorrectionFixture>,
+    recall_lessons: Vec<RecallLesson>,
+    recall_cases: Vec<RecallCase>,
     transcripts: Vec<(String, String, bool)>,
     memories: Vec<MemoryFixture>,
     queries: Vec<QueryFixture>,
@@ -126,6 +149,8 @@ const METRIC_LABELS: &[(&str, &str)] = &[
     ),
     ("holdout_correction_f1", "F1 correcciones (ciego)"),
     ("stop_accuracy", "Exactitud hook Stop"),
+    ("recall_precision", "Precisión recuerdo por error"),
+    ("recall_recall", "Cobertura recuerdo por error"),
     ("search_recall_at_5", "Recall@5 búsqueda"),
     ("search_mrr", "MRR búsqueda"),
     ("dupes_precision", "Precisión duplicados"),
@@ -298,6 +323,7 @@ fn load_fixtures(dir: &Path) -> CliResult<Fixtures> {
     }
 
     validate_fixtures(&corrections, &transcripts, &memories, &queries, &dupes)?;
+    let (recall_lessons, recall_cases) = load_recall_fixtures(dir)?;
     // Every `corrections*.jsonl` in the holdout dir: the blind set plus
     // realistic developer prompts that must not fire.
     let mut holdout_corrections = Vec::new();
@@ -321,6 +347,8 @@ fn load_fixtures(dir: &Path) -> CliResult<Fixtures> {
     }
     Ok(Fixtures {
         corrections,
+        recall_lessons,
+        recall_cases,
         transcripts,
         memories,
         queries,
@@ -386,6 +414,80 @@ fn validate_fixtures(
         }
     }
     Ok(())
+}
+
+/// Optional: older checkouts have no recall fixtures.
+fn load_recall_fixtures(dir: &Path) -> CliResult<(Vec<RecallLesson>, Vec<RecallCase>)> {
+    let lessons_path = dir.join("recall_lessons.jsonl");
+    let cases_path = dir.join("recall_cases.jsonl");
+    if !lessons_path.exists() || !cases_path.exists() {
+        return Ok((Vec::new(), Vec::new()));
+    }
+    let lessons: Vec<RecallLesson> = parse_jsonl(&lessons_path)?;
+    let cases: Vec<RecallCase> = parse_jsonl(&cases_path)?;
+    for lesson in &lessons {
+        saispace_core::recall::normalize_triggers(&lesson.triggers).map_err(|msg| {
+            CliError::Usage(format!("recall_lessons.jsonl ({}): {msg}", lesson.key))
+        })?;
+    }
+    for case in &cases {
+        if let Some(missing) = case
+            .expect
+            .iter()
+            .find(|key| !lessons.iter().any(|l| &l.key == *key))
+        {
+            return Err(CliError::Usage(format!(
+                "recall_cases.jsonl ({}): lección desconocida '{missing}'",
+                case.name
+            )));
+        }
+    }
+    Ok((lessons, cases))
+}
+
+/// Precision and recall of lessons recalled from tool calls, through the
+/// same haystack the hook builds (content tools and saispace's own calls
+/// never recall).
+fn score_recall(lessons: &[RecallLesson], cases: &[RecallCase]) -> (f64, f64) {
+    let (mut tp, mut fp, mut fn_count) = (0, 0, 0);
+    for case in cases {
+        let payload = serde_json::json!({
+            "hook_event_name": case.event,
+            "tool_name": case.tool,
+            "tool_input": { "command": case.command },
+            "tool_response": { "stdout": case.output },
+            "error": case.error,
+        });
+        let fired: Vec<&str> = serde_json::from_value::<crate::nudge::HookPayload>(payload)
+            .ok()
+            .and_then(|p| crate::recall::haystack(&p))
+            .map_or_else(Vec::new, |hay| {
+                lessons
+                    .iter()
+                    .filter(|l| {
+                        saispace_core::recall::normalize_triggers(&l.triggers)
+                            .unwrap_or_default()
+                            .iter()
+                            .any(|t| saispace_core::recall::trigger_fires(t, &hay, &[]))
+                    })
+                    .map(|l| l.key.as_str())
+                    .collect()
+            });
+        for key in &fired {
+            if case.expect.iter().any(|e| e == key) {
+                tp += 1;
+            } else {
+                fp += 1;
+            }
+        }
+        fn_count += case
+            .expect
+            .iter()
+            .filter(|e| !fired.contains(&e.as_str()))
+            .count();
+    }
+    let (p, r, _) = precision_recall_f1(tp, fp, fn_count);
+    (p, r)
 }
 
 fn score_corrections(items: &[CorrectionFixture]) -> (f64, f64, f64) {
@@ -641,6 +743,11 @@ async fn evaluate_all(fixtures: &Fixtures, root: &Path) -> CliResult<BenchReport
         metrics.insert("holdout_correction_f1".to_string(), ratio_metric(f1));
     }
     metrics.insert("stop_accuracy".to_string(), ratio_metric(stop_acc));
+    if !fixtures.recall_cases.is_empty() {
+        let (p, r) = score_recall(&fixtures.recall_lessons, &fixtures.recall_cases);
+        metrics.insert("recall_precision".to_string(), ratio_metric(p));
+        metrics.insert("recall_recall".to_string(), ratio_metric(r));
+    }
     metrics.insert("search_recall_at_5".to_string(), ratio_metric(search_r5));
     metrics.insert("search_mrr".to_string(), ratio_metric(search_mrr));
     metrics.insert("dupes_precision".to_string(), ratio_metric(dupes_p));

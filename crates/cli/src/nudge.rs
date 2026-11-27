@@ -1,6 +1,6 @@
 use chrono::{SecondsFormat, Utc};
 use saispace_core::learning::{
-    CORRECTION_REMINDER, STOP_REMINDER, analyze_transcript, is_correction,
+    CORRECTION_REMINDER, STOP_REMINDER, analyze_transcript, is_correction, repeated_errors,
 };
 use saispace_core::{default_db_path, kpi_events_path_for};
 use serde::Deserialize;
@@ -18,7 +18,7 @@ const KPI_EVENTS_RETENTION_SECS: u64 = 35 * 86_400;
 static ROTATE_SEQ: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Deserialize)]
-struct HookPayload {
+pub struct HookPayload {
     #[serde(default)]
     hook_event_name: Option<String>,
     #[serde(default)]
@@ -29,6 +29,31 @@ struct HookPayload {
     session_id: Option<String>,
     #[serde(default)]
     stop_hook_active: Option<bool>,
+    #[serde(default)]
+    pub cwd: Option<String>,
+    #[serde(default)]
+    pub tool_name: Option<String>,
+    #[serde(default)]
+    pub tool_input: Option<serde_json::Value>,
+    #[serde(default)]
+    pub tool_response: Option<serde_json::Value>,
+    #[serde(default)]
+    pub error: Option<serde_json::Value>,
+}
+
+impl HookPayload {
+    #[must_use]
+    pub fn event(&self) -> &str {
+        self.hook_event_name.as_deref().unwrap_or_default()
+    }
+
+    #[must_use]
+    pub fn session(&self) -> Option<&str> {
+        self.session_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|id| is_single_normal_component(id))
+    }
 }
 
 fn read_payload() -> Option<HookPayload> {
@@ -54,6 +79,14 @@ fn is_single_normal_component(id: &str) -> bool {
     }
     let mut components = Path::new(id).components();
     matches!(components.next(), Some(Component::Normal(_))) && components.next().is_none()
+}
+
+pub(crate) fn session_marker_path_in(dir: &str, session_id: &str) -> Option<PathBuf> {
+    if !is_single_normal_component(session_id) {
+        return None;
+    }
+    let db_path = default_db_path().ok()?;
+    Some(db_path.with_file_name(dir).join(session_id))
 }
 
 fn session_marker_path(session_id: Option<&str>) -> Option<PathBuf> {
@@ -82,7 +115,7 @@ fn read_tail(path: &Path, max: u64) -> Option<String> {
     )
 }
 
-fn now_rfc3339() -> String {
+pub(crate) fn now_rfc3339() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
 }
 
@@ -154,7 +187,7 @@ fn cleanup_old_rotated_logs(dir: &Path, now_sys: SystemTime, now_ms: u128) {
     }
 }
 
-fn append_kpi_event(event: &serde_json::Value) {
+pub(crate) fn append_kpi_event(event: &serde_json::Value) {
     let Ok(db_path) = default_db_path() else {
         return;
     };
@@ -236,9 +269,12 @@ fn handle_stop(payload: &HookPayload) {
         return;
     };
     let signals = analyze_transcript(&jsonl);
+    let errors = repeated_errors(&jsonl);
+    let unsaved_repeats = &errors.unsaved[..];
     let can_block = !payload.stop_hook_active.unwrap_or(false) && !marker_path.exists();
-    let needs_block = !signals.saved_after_last_correction
-        && (signals.corrections > 0 || signals.failed_tools >= 3);
+    let needs_block = (!signals.saved_after_last_correction
+        && (signals.corrections > 0 || signals.failed_tools >= 3))
+        || !unsaved_repeats.is_empty();
 
     let mut blocked = false;
     if can_block
@@ -254,7 +290,7 @@ fn handle_stop(payload: &HookPayload) {
     {
         let output = serde_json::json!({
             "decision": "block",
-            "reason": STOP_REMINDER,
+            "reason": stop_reason(unsaved_repeats),
         });
         if let Ok(line) = serde_json::to_string(&output) {
             crate::out!("{line}");
@@ -269,20 +305,40 @@ fn handle_stop(payload: &HookPayload) {
         "corrections": signals.corrections,
         "failed_tools": signals.failed_tools,
         "saved": signals.saved_after_last_correction,
+        "repeated_errors": errors.repeated.len(),
         "blocked": blocked,
     });
     append_kpi_event(&event);
 }
 
-pub fn run() {
-    let Some(payload) = read_payload() else {
-        return;
-    };
-    match payload.hook_event_name.as_deref() {
-        Some("UserPromptSubmit") => handle_user_prompt(&payload),
-        Some("Stop") => handle_stop(&payload),
+/// The Stop reminder, naming errors that repeated so the agent can save their
+/// fix with a trigger (it comes back on its own the next time).
+fn stop_reason(repeated: &[(String, usize)]) -> String {
+    if repeated.is_empty() {
+        return STOP_REMINDER.to_string();
+    }
+    let list: Vec<String> = repeated
+        .iter()
+        .take(3)
+        .map(|(sig, n)| format!("`{sig}` ({n} veces)"))
+        .collect();
+    format!(
+        "{STOP_REMINDER} Errores repetidos: {}. Si encontraste la solución, guárdala como `bugfix` con `--trigger \"<firma>\"` (o `triggers` en save_memory) para que vuelva sola la próxima vez.",
+        list.join(", ")
+    )
+}
+
+/// Handles hooks that need no database. Tool events are returned to the
+/// caller, which opens the database to recall lessons.
+pub fn run() -> Option<HookPayload> {
+    let payload = read_payload()?;
+    match payload.event() {
+        "UserPromptSubmit" => handle_user_prompt(&payload),
+        "Stop" => handle_stop(&payload),
+        "PostToolUse" | "PostToolUseFailure" => return Some(payload),
         _ => {}
     }
+    None
 }
 
 #[cfg(test)]
