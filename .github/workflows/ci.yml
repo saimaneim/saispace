@@ -62,16 +62,24 @@ jobs:
       - name: Build
         run: bun run build
 
-  opencode-plugin:
-    name: OpenCode plugin
+  plugins:
+    # One entry per host integration under integrations/ (Claude needs none:
+    # `sai setup claude` writes plain hooks).
+    name: Plugin (${{ matrix.plugin }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: [opencode]
     defaults:
       run:
-        working-directory: integrations/opencode
+        working-directory: integrations/${{ matrix.plugin }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+      - name: Type check
+        run: bunx tsc --noEmit -p .
       - name: Test
         run: bun test

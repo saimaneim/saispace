@@ -250,12 +250,6 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
                       : "text-mist hover:bg-obsidian hover:text-paper",
                   )}
                 >
-                  {isSelected && (
-                    <span
-                      className="absolute left-1 top-2.5 bottom-2.5 w-0.5 rounded-full bg-accent"
-                      aria-hidden="true"
-                    />
-                  )}
                   <div className="flex items-center gap-2.5 min-w-0 flex-1">
                     <Folder className="w-4 h-4 text-fog group-hover:text-mist flex-shrink-0" />
                     <span className="truncate tracking-tight font-sans text-sm">{entry.name}</span>

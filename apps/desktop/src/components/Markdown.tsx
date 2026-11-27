@@ -320,7 +320,7 @@ export function Markdown({ content, className }: MarkdownProps) {
   const flushSection = (suffix: string) => {
     if (!activeSection) return;
     const roleKey = activeSection.label.toLowerCase();
-    const role = ROLE_META[roleKey];
+    const role = Object.hasOwn(ROLE_META, roleKey) ? ROLE_META[roleKey] : undefined;
     const body = renderFlowBlocks(activeSection.lines, `sec-${suffix}`);
 
     if (role) {
@@ -328,7 +328,7 @@ export function Markdown({ content, className }: MarkdownProps) {
       blocks.push(
         <div
           key={`section-${suffix}`}
-          className="my-2 first:mt-0 last:mb-0 rounded-lg bg-obsidian/55 px-3.5 py-2.5 flex items-start gap-3 min-w-0"
+          className="py-2 first:pt-0 last:pb-0 flex items-start gap-3 min-w-0"
         >
           <span title={role.title} className="mt-1 flex-shrink-0">
             <Icon

@@ -80,7 +80,7 @@ export function MemoryLinks({ memory, onOpen }: MemoryLinksProps) {
       )}
 
       {triggers.length > 0 && (
-        <div className="bg-carbon rounded-xl p-4 min-w-0 space-y-2.5">
+        <div className="border-t border-obsidian pt-4 min-w-0 space-y-2.5">
           <p
             className="flex items-center gap-1.5 text-xs font-semibold text-fog tabular-nums"
             title="El agente recibe esta memoria sola cuando un comando muestra este texto, o al empezar en ese entorno"
@@ -102,7 +102,7 @@ export function MemoryLinks({ memory, onOpen }: MemoryLinksProps) {
       )}
 
       {links.length > 0 && (
-        <div className="bg-carbon rounded-xl p-4 min-w-0 space-y-2">
+        <div className="border-t border-obsidian pt-4 min-w-0 space-y-2">
           <p className="flex items-center gap-1.5 text-xs font-semibold text-fog tabular-nums">
             <Link2 className="w-3.5 h-3.5 flex-shrink-0" />
             <span>Enlaces · {links.length}</span>

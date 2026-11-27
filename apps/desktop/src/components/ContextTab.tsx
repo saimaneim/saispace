@@ -471,12 +471,6 @@ export function ContextTab({ project }: ContextTabProps) {
             : "text-mist hover:text-paper hover:bg-obsidian",
         )}
       >
-        {selected && (
-          <span
-            className="absolute left-1 top-2 bottom-2 w-0.5 rounded-full bg-accent"
-            aria-hidden="true"
-          />
-        )}
         {label ? null : <FileIcon file={file} icon={icon} />}
         <FileLabel file={file} label={label} />
       </button>

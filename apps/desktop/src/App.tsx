@@ -85,18 +85,6 @@ export function App() {
   const projectsRef = useRef(projects);
   projectsRef.current = projects;
 
-  const toggleProjectPin = useCallback(
-    async (id: string, pinned: boolean) => {
-      try {
-        await api.setProjectPinned(id, pinned);
-        setProjects(await api.listProjects());
-      } catch (err) {
-        reportError(err);
-      }
-    },
-    [reportError],
-  );
-
   // Drag and drop: moves a project to a new slot, pinning or unpinning it
   // when it crosses groups. The list updates first so the drop feels instant.
   const moveProject = useCallback(
@@ -235,11 +223,6 @@ export function App() {
 
   const handleDeleteProject = (id: string) => run(() => api.deleteProject(id));
 
-  const handleUpdateProjectStatus = async (status: ProjectStatus) => {
-    if (!activeProject) return;
-    await run(() => api.updateProject(activeProject.id, { status }));
-  };
-
   const openTasksCount = tasks.filter(isOpenTask).length;
 
   const tabs: { id: TabId; label: string; icon: typeof ListTodo; count?: number }[] = [
@@ -259,7 +242,6 @@ export function App() {
         onSelectGlobal={() => setIsGlobal(true)}
         pendingRequests={pendingRequests}
         onOpenDirectoryPicker={() => setIsPickerOpen(true)}
-        onTogglePin={toggleProjectPin}
         onMove={moveProject}
         isOpen={isSidebarOpen}
       />
@@ -281,14 +263,10 @@ export function App() {
           {isGlobal ? (
             <div className="flex items-baseline gap-3 min-w-0 flex-1 pointer-events-none">
               <h1 className="text-sm font-semibold text-paper">Global</h1>
-              <span className="text-xs text-fog truncate">
-                Memoria y configuración de IA de este equipo
-              </span>
             </div>
           ) : activeProject ? (
             <ProjectHeader
               project={activeProject}
-              onUpdateStatus={handleUpdateProjectStatus}
               onDeleteProject={() => handleDeleteProject(activeProject.id)}
               isFeedOpen={isFeedOpen}
               onToggleFeed={() => setIsFeedOpen((open) => !open)}

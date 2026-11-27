@@ -23,6 +23,7 @@ describe("flujo: guardar y leer memoria", () => {
           topic_key: "arch/db",
         }),
         makeMemory({ project_id: "otro", title: "De otro proyecto" }),
+        makeMemory({ project_id: null, title: "Global, vive en la vista Global" }),
       ],
     });
 
@@ -30,9 +31,9 @@ describe("flujo: guardar y leer memoria", () => {
 
     expect(await screen.findByRole("heading", { name: "Usar SQLite en WAL" })).toBeInTheDocument();
     expect(screen.getByText("Varios procesos leen a la vez.")).toBeInTheDocument();
-    expect(screen.getByTitle("arch/db")).toBeInTheDocument();
     expect(screen.getAllByText("Decisión").length).toBeGreaterThan(0);
     expect(screen.queryByText("De otro proyecto")).not.toBeInTheDocument();
+    expect(screen.queryByText("Global, vive en la vista Global")).not.toBeInTheDocument();
     expect(backend.callsTo("list_memories").at(-1)?.args).toMatchObject({
       projectId: project.id,
     });

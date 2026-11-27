@@ -5,7 +5,6 @@ import {
   Copy,
   Eye,
   Folder,
-  Hash,
   History,
   Pencil,
   Pin,
@@ -81,7 +80,8 @@ export function MemoryTab({ project, refreshKey, focusId, focusSeq }: MemoryTabP
         api.memoryDuplicates(project?.id ?? null),
         api.memoryStale(project?.id ?? null),
       ]);
-      setMemories(mems);
+      // A project shows its own memories; global ones live in the Global view.
+      setMemories(project ? mems.filter((m) => m.project_id === project.id) : mems);
       setDuplicates(dupes);
       setStaleReport(stale);
     } catch (err) {
@@ -417,12 +417,6 @@ export function MemoryTab({ project, refreshKey, focusId, focusSeq }: MemoryTabP
                         isSelected ? "bg-elevated" : "hover:bg-obsidian",
                       )}
                     >
-                      {isSelected && (
-                        <span
-                          className="absolute left-1 top-2.5 bottom-2.5 w-0.5 rounded-full bg-accent"
-                          aria-hidden="true"
-                        />
-                      )}
                       <div className="flex items-center gap-1.5 min-w-0">
                         {m.pinned && <Pin className="w-3.5 h-3.5 text-accent flex-shrink-0" />}
                         <span
@@ -565,15 +559,6 @@ export function MemoryTab({ project, refreshKey, focusId, focusSeq }: MemoryTabP
 
                 <div className="flex flex-wrap items-center gap-2 text-xs text-fog min-w-0">
                   <MemoryKindBadge kind={selected.kind} />
-                  {selected.topic_key && (
-                    <span
-                      className="inline-flex items-center gap-1 font-mono text-[11.5px] text-mist bg-obsidian px-2 py-0.5 rounded-md truncate max-w-[240px]"
-                      title={selected.topic_key}
-                    >
-                      <Hash className="w-3 h-3 text-ash flex-shrink-0" />
-                      <span className="truncate">{selected.topic_key}</span>
-                    </span>
-                  )}
                   {!project && selected.project_name && (
                     <span className="inline-flex items-center gap-1 text-mist bg-obsidian px-2 py-0.5 rounded-md truncate max-w-[180px]">
                       <Folder className="w-3 h-3 text-ash flex-shrink-0" />
@@ -600,8 +585,8 @@ export function MemoryTab({ project, refreshKey, focusId, focusSeq }: MemoryTabP
               </header>
 
               <div className="flex-1 min-h-0 overflow-y-auto px-7 pb-7">
-                <div className="max-w-[76ch] space-y-3">
-                  <div className="bg-carbon rounded-xl px-6 py-5 min-w-0">
+                <div className="space-y-5 min-w-0">
+                  <div className="min-w-0">
                     {selected.content.trim() ? (
                       <Markdown content={selected.content} />
                     ) : (

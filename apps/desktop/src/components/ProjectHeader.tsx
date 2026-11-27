@@ -1,6 +1,6 @@
 import { Activity, Check, Copy, MoreHorizontal, Trash2 } from "lucide-react";
 import { useState } from "react";
-import type { Project, ProjectStatus } from "../lib/types";
+import type { Project } from "../lib/types";
 import { cn } from "../lib/utils";
 import { Button } from "./ui/button";
 import {
@@ -12,26 +12,16 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { Menu } from "./ui/menu";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 interface ProjectHeaderProps {
   project: Project;
-  onUpdateStatus: (status: ProjectStatus) => Promise<void>;
   onDeleteProject: () => Promise<void>;
   isFeedOpen: boolean;
   onToggleFeed: () => void;
 }
 
-const STATUS_OPTIONS: { value: ProjectStatus; label: string; dot: string }[] = [
-  { value: "active", label: "Activo", dot: "bg-pulse-green" },
-  { value: "on_hold", label: "En pausa", dot: "bg-status-amber" },
-  { value: "completed", label: "Completado", dot: "bg-fog" },
-  { value: "archived", label: "Archivado", dot: "bg-ash" },
-];
-
 export function ProjectHeader({
   project,
-  onUpdateStatus,
   onDeleteProject,
   isFeedOpen,
   onToggleFeed,
@@ -63,47 +53,14 @@ export function ProjectHeader({
   return (
     <>
       <div className="flex items-baseline gap-3 min-w-0 pointer-events-none">
-        <h1 className="text-sm font-semibold text-paper truncate">{project.name}</h1>
-        <button
-          type="button"
-          onClick={copyPath}
-          title={hasCopiedPath ? "Ruta copiada" : "Copiar ruta"}
-          className="group pointer-events-auto flex items-center gap-1.5 min-w-0 px-1.5 py-0.5 -mx-1.5 rounded-md text-xs text-fog hover:text-mist hover:bg-obsidian/70 transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-        >
-          <span className="truncate font-mono">{project.path}</span>
-          {hasCopiedPath ? (
-            <Check className="w-3.5 h-3.5 text-pulse-green flex-shrink-0" />
-          ) : (
-            <Copy className="w-3 h-3 text-ash opacity-0 group-hover:opacity-100 transition-opacity duration-[120ms] flex-shrink-0" />
-          )}
-        </button>
+        <h1 className="text-sm font-semibold text-paper truncate" title={project.path}>
+          {project.name}
+        </h1>
       </div>
 
       <div className="flex-1 pointer-events-none" />
 
       <div className="flex items-center gap-1 flex-shrink-0 pointer-events-auto">
-        <Select
-          value={project.status}
-          onValueChange={(val) => onUpdateStatus(val as ProjectStatus)}
-        >
-          <SelectTrigger
-            aria-label="Estado del proyecto"
-            className="w-auto gap-2 h-8 px-2.5 bg-obsidian/70 rounded-md text-xs font-medium text-mist hover:text-paper hover:bg-obsidian focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUS_OPTIONS.map(({ value, label, dot }) => (
-              <SelectItem key={value} value={value}>
-                <div className="flex items-center gap-2">
-                  <span className={cn("w-2 h-2 rounded-full flex-shrink-0", dot)} />
-                  <span>{label}</span>
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
         <button
           type="button"
           onClick={onToggleFeed}
@@ -131,6 +88,11 @@ export function ProjectHeader({
             </button>
           )}
           items={[
+            {
+              label: hasCopiedPath ? "Ruta copiada" : "Copiar ruta",
+              icon: hasCopiedPath ? Check : Copy,
+              onSelect: () => void copyPath(),
+            },
             {
               label: "Eliminar proyecto…",
               icon: Trash2,

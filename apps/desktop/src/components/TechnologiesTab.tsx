@@ -58,6 +58,7 @@ const FAMILY_LABELS: Record<string, string> = {
   tanstack: "TanStack",
   postgres: "PostgreSQL",
   "@types": "Tipos",
+  typescript: "TypeScript",
   fonts: "Fuentes",
 };
 
@@ -73,11 +74,14 @@ interface Family {
 function groupFamilies(list: Technology[]): Family[] {
   const names = new Set(list.map((t) => t.name));
   const familyOf = (name: string): string => {
-    if (name in FAMILY_OF) return FAMILY_OF[name];
+    // Type packages join their library; orphan ones (@types/node, @types/bun)
+    // join TypeScript, which is what they exist for.
     if (name.startsWith("@types/")) {
       const base = name.slice("@types/".length).replace(/^(.+)__(.+)$/, "@$1/$2");
-      return names.has(base) || base.startsWith("@") ? familyOf(base) : "@types";
+      if (names.has(base) || base.startsWith("@")) return familyOf(base);
+      return "typescript";
     }
+    if (name in FAMILY_OF) return FAMILY_OF[name];
     const scope = name.match(/^(@[^/]+)\//)?.[1];
     if (scope) return SCOPE_FAMILY[scope] ?? scope;
     const prefix = name.split(/[-_]/)[0];

@@ -126,4 +126,13 @@ The memory is scoped to the project of the server's working directory, or to `pa
 
 ## Learning from mistakes
 
-Agents save lessons when they happen: a user correction becomes a `preference`, an own mistake with a non-obvious cause a `bugfix` with that cause. Duplicate pairs listed under `consolidate` (CLI index: "Para consolidar") get merged with `consolidate_memories`. `sai setup claude` installs the Claude Code hooks: `sai memory context` on SessionStart and `sai memory nudge` on UserPromptSubmit and Stop (Stop blocks once per session when there was a correction or 3+ failed tools and nothing was saved). It also runs on PostToolUse and PostToolUseFailure: a memory saved with triggers (`sai memory save --trigger "exit code 144"`, or `triggers` in `save_memory`) comes back by itself when a tool call shows that text, once per session. A trigger like `env:t3code` or `env:opencode` puts the lesson in the session index whenever the agent runs inside that host. Stop names errors that repeated in the session and asks for their fix with a trigger. The OpenCode plugin adds the same reminder per user message and the same recall per tool call.
+Agents save a lesson when it happens: a user correction becomes a `preference`; an own mistake with a non-obvious cause becomes a `bugfix` with that cause.
+
+| When | What saispace does |
+|---|---|
+| Session starts | Injects the memory index, plus lessons tied to the host the agent runs in. |
+| The user corrects the agent | Reminds it to save the rule. |
+| A tool fails with a known error | Hands back the saved fix before the agent retries (once per session). |
+| The session ends | Asks to save what was learned, naming errors that repeated. |
+
+A lesson comes back on its own through triggers: a stable piece of an error message (`--trigger "<error text>"`), or `env:<host>` for lessons about a specific host. `sai setup claude` installs the Claude Code hooks; the OpenCode plugin does the same for OpenCode.

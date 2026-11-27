@@ -1,0 +1,11 @@
+#!/bin/sh
+# The same gate CI runs, before anything leaves this machine.
+# Enable once per clone: git config core.hooksPath .githooks
+set -e
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -q -- -D warnings -W clippy::pedantic
+cargo test --workspace -q
+(cd apps/desktop && bun run check && bun run lint && bun test)
+(cd integrations/opencode && bun test)
+cargo run -q --release -p saispace-cli -- check
+cargo run -q --release -p saispace-cli -- bench --compare

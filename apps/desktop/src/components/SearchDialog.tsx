@@ -174,12 +174,6 @@ export function SearchDialog({
                   isSelected ? "bg-elevated" : "hover:bg-obsidian",
                 )}
               >
-                {isSelected && (
-                  <span
-                    className="absolute left-1 top-2.5 bottom-2.5 w-0.5 rounded-full bg-accent"
-                    aria-hidden="true"
-                  />
-                )}
                 <Icon className="w-4 h-4 mt-0.5 text-fog flex-shrink-0" />
                 <span className="flex-1 min-w-0">
                   <span className="block text-sm font-medium text-paper truncate">{hit.title}</span>

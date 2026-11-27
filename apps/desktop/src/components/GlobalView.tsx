@@ -1,4 +1,4 @@
-import { Brain, FileText, KeyRound, Plug, Search, Sparkles, X } from "lucide-react";
+import { Brain, FileText, KeyRound, Plug, Search, Wand2, X } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, formatError } from "../lib/api";
@@ -6,7 +6,6 @@ import type { AiInventory } from "../lib/types";
 import { cn } from "../lib/utils";
 import { Markdown } from "./Markdown";
 import { MemoryTab } from "./MemoryTab";
-import { MemoryUsagePanel } from "./MemoryUsagePanel";
 import { SecretsPanel } from "./SecretsPanel";
 import { TechIcon } from "./TechIcon";
 
@@ -74,12 +73,6 @@ function InstructionsPanel({ inventory }: { inventory: AiInventory }) {
                 isSelected ? "bg-elevated text-paper" : "text-mist hover:bg-obsidian",
               )}
             >
-              {isSelected && (
-                <span
-                  className="absolute left-1 top-2 bottom-2 w-0.5 rounded-full bg-accent"
-                  aria-hidden="true"
-                />
-              )}
               <TechIcon name={item.tool} className="w-5 h-5" />
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-medium truncate">{item.tool}</span>
@@ -104,6 +97,17 @@ function InstructionsPanel({ inventory }: { inventory: AiInventory }) {
       </div>
     </div>
   );
+}
+
+/** What a hook does, in words: the command itself stays in the tooltip-free detail. */
+function hookPurpose(command: string, event: string): string {
+  if (command.includes("sai memory context")) return "Carga la memoria al empezar";
+  if (command.includes("sai memory nudge")) {
+    if (event === "UserPromptSubmit") return "Detecta cuando corriges al agente";
+    if (event === "Stop") return "Pide guardar lo aprendido al terminar";
+    if (event.startsWith("PostToolUse")) return "Recuerda la solución si un error se repite";
+  }
+  return event;
 }
 
 function SkillsPanel({ inventory }: { inventory: AiInventory }) {
@@ -256,8 +260,8 @@ function ConnectionsPanel({ inventory }: { inventory: AiInventory }) {
             <Row
               key={`${hook.tool}-${hook.event}-${hook.command}`}
               icon={hook.tool}
-              title={hook.event}
-              detail={hook.command}
+              title={hookPurpose(hook.command, hook.event)}
+              detail={hook.event}
               meta={<ToolBadge tool={hook.tool} />}
             />
           ))}
@@ -275,7 +279,6 @@ function ConnectionsPanel({ inventory }: { inventory: AiInventory }) {
 export function GlobalView({ refreshKey, pendingRequests, onSecretsChanged }: GlobalViewProps) {
   const [tab, setTab] = useState<GlobalTab>("memory");
   const [inventory, setInventory] = useState<AiInventory>(EMPTY);
-  const [focusMemoryId, setFocusMemoryId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadInventory = useCallback(async () => {
@@ -293,7 +296,7 @@ export function GlobalView({ refreshKey, pendingRequests, onSecretsChanged }: Gl
   const tabs: { id: GlobalTab; label: string; icon: typeof Brain; count?: number }[] = [
     { id: "memory", label: "Memoria", icon: Brain },
     { id: "instructions", label: "Instrucciones", icon: FileText },
-    { id: "skills", label: "Skills", icon: Sparkles, count: inventory.skills.length },
+    { id: "skills", label: "Skills", icon: Wand2, count: inventory.skills.length },
     {
       id: "connections",
       label: "MCP y plugins",
@@ -337,8 +340,7 @@ export function GlobalView({ refreshKey, pendingRequests, onSecretsChanged }: Gl
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {tab === "memory" && (
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            <MemoryUsagePanel refreshKey={refreshKey} onSelectMemory={setFocusMemoryId} />
-            <MemoryTab project={null} refreshKey={refreshKey} focusId={focusMemoryId} />
+            <MemoryTab project={null} refreshKey={refreshKey} />
           </div>
         )}
         {tab === "instructions" && <InstructionsPanel inventory={inventory} />}

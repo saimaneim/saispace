@@ -1,4 +1,4 @@
-import { FolderOpen, Globe, Pin, PinOff, Plus, Search, Settings, X } from "lucide-react";
+import { FolderOpen, Globe, Plus, Search, Settings, X } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Project, ProjectStatus } from "../lib/types";
 import { cn } from "../lib/utils";
@@ -10,7 +10,6 @@ interface SidebarProps {
   selectedProjectId: string | null;
   onSelectProject: (id: string) => void;
   onOpenDirectoryPicker: () => void;
-  onTogglePin: (id: string, pinned: boolean) => void;
   onMove: (id: string, target: { pinned: boolean; status: ProjectStatus }, ids: string[]) => void;
   isOpen: boolean;
   isGlobalSelected: boolean;
@@ -50,7 +49,6 @@ interface RowProps {
   isSelected: boolean;
   canDrag: boolean;
   onSelect: (id: string) => void;
-  onTogglePin: (id: string, pinned: boolean) => void;
   onPointerDown?: (e: React.PointerEvent<HTMLElement>) => void;
   floating?: boolean;
 }
@@ -60,7 +58,6 @@ function ProjectRow({
   isSelected,
   canDrag,
   onSelect,
-  onTogglePin,
   onPointerDown,
   floating = false,
 }: RowProps) {
@@ -72,7 +69,7 @@ function ProjectRow({
         onPointerDown={onPointerDown}
         aria-current={isSelected ? "page" : undefined}
         className={cn(
-          "relative w-full flex items-center gap-2.5 pl-3 pr-9 h-10 rounded-md text-sm text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
+          "relative w-full flex items-center gap-2.5 px-3 h-10 rounded-md text-sm text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
           isSelected || floating
             ? "bg-elevated text-paper font-medium"
             : "text-mist hover:text-paper hover:bg-obsidian",
@@ -80,26 +77,9 @@ function ProjectRow({
           floating && "cursor-grabbing",
         )}
       >
-        {isSelected && !floating && (
-          <span
-            className="absolute left-1 top-2.5 bottom-2.5 w-0.5 rounded-full bg-accent"
-            aria-hidden="true"
-          />
-        )}
         <ProjectIcon projectId={p.id} name={p.name} />
         <span className="truncate flex-1">{p.name}</span>
       </button>
-      {!floating && (
-        <button
-          type="button"
-          onClick={() => onTogglePin(p.id, !p.pinned)}
-          aria-label={p.pinned ? `Desfijar ${p.name}` : `Fijar ${p.name}`}
-          title={p.pinned ? "Desfijar" : "Fijar arriba"}
-          className="absolute right-1.5 top-1/2 -translate-y-1/2 h-7 w-7 rounded-md flex items-center justify-center text-fog opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-paper hover:bg-graphite transition-opacity duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-        >
-          {p.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
-        </button>
-      )}
     </div>
   );
 }
@@ -135,7 +115,6 @@ export function Sidebar({
   selectedProjectId,
   onSelectProject,
   onOpenDirectoryPicker,
-  onTogglePin,
   onMove,
   isOpen,
   isGlobalSelected,
@@ -333,7 +312,6 @@ export function Sidebar({
               isSelected={id === selectedProjectId}
               canDrag={!isFiltering}
               onSelect={select}
-              onTogglePin={onTogglePin}
               onPointerDown={(e) => startDrag(p, e)}
             />
           </li>
@@ -349,7 +327,7 @@ export function Sidebar({
       aria-hidden={!isOpen}
       inert={!isOpen}
       className={cn(
-        "flex-shrink-0 bg-carbon overflow-hidden transition-[width] duration-[150ms] ease-out select-none",
+        "flex-shrink-0 bg-carbon overflow-hidden transition-[width] duration-[150ms] ease-out select-none border-r border-obsidian",
         isOpen ? "w-64" : "w-0",
       )}
     >
@@ -391,12 +369,6 @@ export function Sidebar({
                 : "text-mist hover:text-paper hover:bg-obsidian",
             )}
           >
-            {isGlobalSelected && (
-              <span
-                className="absolute left-1 top-2.5 bottom-2.5 w-0.5 rounded-full bg-accent"
-                aria-hidden="true"
-              />
-            )}
             <Globe
               className={cn("w-4 h-4 flex-shrink-0", isGlobalSelected ? "text-paper" : "text-fog")}
             />
@@ -505,7 +477,6 @@ export function Sidebar({
             isSelected={false}
             canDrag
             onSelect={() => {}}
-            onTogglePin={() => {}}
             floating
           />
         </div>
