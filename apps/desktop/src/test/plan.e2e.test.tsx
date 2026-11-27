@@ -184,7 +184,7 @@ describe("flujo: Plan", () => {
     expect(screen.queryByRole("region", { name: "Tareas sin meta" })).not.toBeInTheDocument();
   });
 
-  it("ordena las pestañas como Contexto, Plan, Tecnologías y Memoria y conserva la actividad", async () => {
+  it("ordena las pestañas como Contexto, Plan, Historial, Tecnologías y Memoria y conserva la actividad", async () => {
     const { user } = await renderApp({ projects: [project] });
     await screen.findByRole("textbox", { name: "Nueva meta" });
 
@@ -194,6 +194,7 @@ describe("flujo: Plan", () => {
     expect(tabs.map((tab) => tab.querySelector("span")?.textContent)).toEqual([
       "Contexto",
       "Plan",
+      "Historial",
       "Tecnologías",
       "Memoria",
     ]);

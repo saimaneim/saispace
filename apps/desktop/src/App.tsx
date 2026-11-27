@@ -4,6 +4,7 @@ import {
   Brain,
   FileText,
   FolderOpen,
+  History,
   ListTodo,
   PanelLeft,
   Search,
@@ -14,6 +15,7 @@ import { ActivityFeed } from "./components/ActivityFeed";
 import { ContextTab } from "./components/ContextTab";
 import { DirectoryPickerModal } from "./components/DirectoryPickerModal";
 import { GlobalView } from "./components/GlobalView";
+import { HistoryTab } from "./components/HistoryTab";
 import { MemoryTab } from "./components/MemoryTab";
 import { PlanTab } from "./components/PlanTab";
 import { ProjectHeader } from "./components/ProjectHeader";
@@ -22,10 +24,11 @@ import { Sidebar } from "./components/Sidebar";
 import { TechnologiesTab } from "./components/TechnologiesTab";
 import { WindowControls } from "./components/WindowControls";
 import { api, formatError } from "./lib/api";
+import { type DefaultTabId, readDefaultTab } from "./lib/preferences";
 import type { ActivityEvent, Project, ProjectStatus, SearchHit, Task } from "./lib/types";
 import { cn } from "./lib/utils";
 
-type TabId = "plan" | "context" | "tech" | "memory";
+type TabId = DefaultTabId;
 
 const isOpenTask = (task: Task) => task.status !== "done" && task.status !== "cancelled";
 
@@ -46,7 +49,7 @@ export function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [tasksByProject, setTasksByProject] = useState<Record<string, Task[]>>({});
   const [activities, setActivities] = useState<ActivityEvent[]>([]);
-  const [activeTab, setActiveTab] = useState<TabId>("plan");
+  const [activeTab, setActiveTab] = useState<TabId>(readDefaultTab);
   const [isFeedOpen, setIsFeedOpen] = useState(() => readFlag(FEED_STORAGE_KEY, false));
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => readFlag(SIDEBAR_STORAGE_KEY, true));
   const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -228,6 +231,7 @@ export function App() {
   const tabs: { id: TabId; label: string; icon: typeof ListTodo; count?: number }[] = [
     { id: "context", label: "Contexto", icon: FileText },
     { id: "plan", label: "Plan", icon: ListTodo, count: openTasksCount },
+    { id: "history", label: "Historial", icon: History },
     { id: "tech", label: "Tecnologías", icon: Boxes },
     { id: "memory", label: "Memoria", icon: Brain },
   ];
@@ -337,6 +341,8 @@ export function App() {
                           type="button"
                           role="tab"
                           aria-selected={selected}
+                          aria-label={label}
+                          title={label}
                           onClick={() => setActiveTab(id)}
                           className={cn(
                             "h-9 px-3 rounded-md text-sm font-medium flex items-center gap-2 transition-colors duration-[120ms] focus-visible:ring-2 focus-visible:ring-accent/40 focus:outline-none",
@@ -346,7 +352,7 @@ export function App() {
                           )}
                         >
                           <Icon className="w-4 h-4" />
-                          <span>{label}</span>
+                          <span className="hidden lg:inline">{label}</span>
                           {count !== undefined && count > 0 && (
                             <span className="text-xs tabular-nums text-fog">{count}</span>
                           )}
@@ -364,6 +370,14 @@ export function App() {
                       refreshKey={activities[0]?.id ?? null}
                       onError={reportError}
                       onChanged={refreshAll}
+                    />
+                  )}
+                  {activeTab === "history" && (
+                    <HistoryTab
+                      key={activeProject.id}
+                      project={activeProject}
+                      refreshKey={activities[0]?.id ?? null}
+                      onError={reportError}
                     />
                   )}
                   {activeTab === "memory" && (

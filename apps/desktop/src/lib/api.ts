@@ -25,6 +25,7 @@ import type {
   Task,
   Technology,
   TechRule,
+  TimelineDay,
   UpdateGoalInput,
   UpdateMemoryInput,
   UpdateProjectInput,
@@ -117,6 +118,9 @@ export const api = {
 
   listActivityByProject: (projectId: string, limit?: number) =>
     invokeOrFallback<ActivityEvent[]>("list_activity_by_project", { projectId, limit }, []),
+
+  projectTimeline: (projectId: string) =>
+    invokeOrFallback<TimelineDay[]>("project_timeline", { projectId }, []),
 
   listContextFiles: (projectId: string) =>
     invokeOrFallback<ContextFile[]>("list_context_files", { projectId }, []),

@@ -29,6 +29,7 @@ pub mod secret;
 pub mod task;
 pub mod tech_rule;
 pub mod technology;
+pub mod timeline;
 mod validation;
 
 pub use memory_dupes::DuplicatePair;

@@ -1,4 +1,4 @@
-import { Boxes, Brain, Check, FileText, ListTodo, Pipette, RotateCcw } from "lucide-react";
+import { Boxes, Brain, Check, FileText, History, ListTodo, Pipette, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ACCENTS, DEFAULT_ACCENT, readAccent, saveAccent } from "../lib/accent";
 import { type DefaultTabId, readDefaultTab, saveDefaultTab } from "../lib/preferences";
@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 const TAB_OPTIONS: { id: DefaultTabId; label: string; icon: typeof ListTodo }[] = [
   { id: "context", label: "Contexto", icon: FileText },
   { id: "plan", label: "Plan", icon: ListTodo },
+  { id: "history", label: "Historial", icon: History },
   { id: "tech", label: "Tecnologías", icon: Boxes },
   { id: "memory", label: "Memoria", icon: Brain },
 ];
@@ -120,7 +121,7 @@ export function SettingsDialog({
 
         <section aria-label="Pestaña inicial" className="space-y-2.5">
           <span className="text-xs font-semibold text-fog block">Pestaña inicial</span>
-          <div className="grid grid-cols-4 gap-1 bg-obsidian p-1 rounded-lg">
+          <div className="grid grid-cols-5 gap-1 bg-obsidian p-1 rounded-lg">
             {TAB_OPTIONS.map(({ id, label, icon: Icon }) => {
               const selected = defaultTab === id;
               return (
