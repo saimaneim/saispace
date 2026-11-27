@@ -418,6 +418,7 @@ impl Db {
         .await?;
         let other_ids: Vec<Uuid> = others.iter().map(|m| m.id).collect();
         move_links(&mut tx, target.id, &other_ids, now).await?;
+        crate::db::memory_triggers::move_triggers(&mut tx, target.id, &other_ids).await?;
         tx.commit().await?;
         self.get_memory(target.id).await
     }

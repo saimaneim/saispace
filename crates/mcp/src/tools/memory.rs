@@ -25,6 +25,10 @@ pub struct SaveMemoryParams {
     pub path: Option<String>,
     pub global: Option<bool>,
     pub pinned: Option<bool>,
+    /// Text that brings this lesson back on its own: an error line ("exit code
+    /// 144", "permission denied (publickey)"), a command fragment, or
+    /// `env:t3code` / `env:opencode` for a host. Replaces the current list.
+    pub triggers: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -108,6 +112,8 @@ struct MemoryView {
     archived_into: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     links: Vec<LinkView>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    triggers: Vec<String>,
 }
 
 impl MemoryView {
@@ -123,6 +129,7 @@ impl MemoryView {
             pinned: m.pinned,
             archived_into: m.superseded_by.map(short_id),
             links: links.iter().map(LinkView::new).collect(),
+            triggers: Vec::new(),
         }
     }
 }
@@ -196,6 +203,9 @@ struct ContextResponse {
     preferences: Vec<ContextItem>,
     #[serde(skip_serializing_if = "Option::is_none")]
     last_session: Option<ContextItem>,
+    /// Lessons for the host the agent runs in (T3 Code, `OpenCode`…).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    environment: Vec<ContextItem>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pinned: Vec<ContextItem>,
     memories: Vec<ContextItem>,
@@ -212,6 +222,8 @@ struct SaveResponse {
     topic_key: Option<String>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pinned: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    triggers: Vec<String>,
     /// Memories this one now links to (mentioned by id or `topic_key`).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     linked: Vec<BriefMemory>,
@@ -286,7 +298,7 @@ impl SaiSpaceServer {
 impl SaiSpaceServer {
     #[tool(
         name = "save_memory",
-        description = "Save durable knowledge (decision, architecture, bugfix, pattern, config, discovery, preference, session_summary, note). Save lessons right away: user correction -> kind preference; own mistake with non-obvious cause -> kind bugfix with the cause. Reusing topic_key in the same scope updates instead of duplicating. Scope: project_id, path, or the working directory; global=true for cross-project knowledge"
+        description = "Save durable knowledge (decision, architecture, bugfix, pattern, config, discovery, preference, session_summary, note). Save lessons right away: user correction -> kind preference; own mistake with non-obvious cause -> kind bugfix with the cause, plus triggers (the error line) so it comes back when that error repeats. Reusing topic_key in the same scope updates instead of duplicating. Scope: project_id, path, or the working directory; global=true for cross-project knowledge"
     )]
     async fn save_memory(
         &self,
@@ -298,6 +310,11 @@ impl SaiSpaceServer {
                 "unknown memory kind '{kind_raw}'"
             )));
         };
+        if let Some(list) = &params.triggers
+            && let Err(msg) = saispace_core::recall::normalize_triggers(list)
+        {
+            return format_error(&CoreError::Validation(msg));
+        }
         let project_id = if params.global == Some(true) {
             None
         } else {
@@ -335,6 +352,13 @@ impl SaiSpaceServer {
                 Err(err) => return format_error(&err),
             };
         }
+        let triggers = match &params.triggers {
+            Some(list) => match self.db.set_memory_triggers(saved.id, list).await {
+                Ok(set) => set,
+                Err(err) => return format_error(&err),
+            },
+            None => Vec::new(),
+        };
         let action = if saved.created_at == saved.updated_at {
             ActionKind::Create
         } else {
@@ -379,6 +403,7 @@ impl SaiSpaceServer {
             },
             topic_key: saved.topic_key.clone(),
             pinned: saved.pinned,
+            triggers,
             linked,
             similar: similar
                 .iter()
@@ -408,7 +433,7 @@ impl SaiSpaceServer {
             Err(result) => return *result,
         };
         let scope = MemoryScope::for_project(project.as_ref().map(|p| p.id));
-        let context = match self
+        let mut context = match self
             .db
             .memory_context(scope, params.limit.unwrap_or(15))
             .await
@@ -416,6 +441,14 @@ impl SaiSpaceServer {
             Ok(context) => context,
             Err(err) => return format_error(&err),
         };
+        let hosts = saispace_core::recall::detect_hosts(|key| std::env::var(key).ok());
+        if let Err(err) = self
+            .db
+            .attach_environment(&mut context, scope, &hosts)
+            .await
+        {
+            return format_error(&err);
+        }
         format_success(&ContextResponse {
             project: project.map(|p| ProjectBrief {
                 id: p.id,
@@ -431,6 +464,11 @@ impl SaiSpaceServer {
                 .last_session
                 .as_ref()
                 .map(|m| ContextItem::new(m, 800)),
+            environment: context
+                .environment
+                .iter()
+                .map(|m| ContextItem::new(m, 400))
+                .collect(),
             pinned: context
                 .pinned
                 .iter()
@@ -460,7 +498,9 @@ impl SaiSpaceServer {
         };
         let links = self.db.memory_links(memory.id).await.unwrap_or_default();
         self.touch_memories(&[memory.id]).await;
-        format_success(&MemoryView::new(&memory, &links))
+        let mut view = MemoryView::new(&memory, &links);
+        view.triggers = self.db.memory_triggers(memory.id).await.unwrap_or_default();
+        format_success(&view)
     }
 
     #[tool(

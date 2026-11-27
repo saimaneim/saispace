@@ -229,12 +229,75 @@ const CORRECTION_PHRASES: &[&[&str]] = &[
     &["ya", "basta"],
     &["basta", "de"],
     &["cambia", "eso"],
+    // Insults and swearing aimed at the agent: in real chats they open most
+    // corrections that name no rule ("coño que no", "la estás cagando").
+    &["imbecil"],
+    &["idiota"],
+    &["estupido"],
+    &["webon"],
+    &["huevon"],
+    &["pendejo"],
+    &["pnjo"],
+    &["cabron"],
+    // "coño" is tokenized without the tilde.
+    &["cono"],
+    &["wtf"],
+    &["la", "estas", "cagando"],
+    &["la", "cagaste"],
+    &["no", "te", "pongas", "tonto"],
+    &["no", "te", "hagas", "el"],
+    // Too long or unclear answers.
+    &["mas", "corto"],
+    &["mas", "resumido"],
+    &["mas", "entendible"],
+    &["demasiado", "largo"],
+    &["exageradamente", "largo"],
+    &["sobreexplicas"],
+    &["no", "se", "entiende"],
+    &["no", "entiendo", "ni"],
+    &["no", "entendi", "ni"],
+    &["sin", "formato"],
+    &["too", "long"],
+    &["too", "verbose"],
+    // Work outside the request.
+    &["fuera", "de", "scope"],
+    &["va", "del", "scope"],
+    &["fuera", "del", "scope"],
+    &["fuera", "del", "alcance"],
+    &["no", "tiene", "nada", "que", "ver"],
+    &["nadie", "lo", "pidio"],
+    &["no", "lo", "pidio", "nadie"],
+    &["out", "of", "scope"],
+    // Reminders of what was asked.
+    &["te", "lo", "pedi"],
+    &["te", "la", "pedi"],
+    &["si", "te", "lo", "pedi"],
+    &["si", "te", "la", "pedi"],
+    // Blame on the result.
+    &["se", "ve", "horrible"],
+    &["se", "ven", "horribles"],
+    &["se", "ve", "fatal"],
+    &["se", "ven", "super", "mal"],
+    &["se", "ve", "super", "mal"],
+    &["esta", "horrible"],
+    &["parece", "hecho", "por", "ia"],
+    &["totalmente", "equivocado"],
+    &["puedes", "hacerlo", "mejor"],
+    &["empeoraste"],
+    &["enpeoraste"],
 ];
 
 /// State-blame phrases ("está mal", "is wrong"): they signal a correction only
 /// when they are not part of a question or a conditional, which is checked by
 /// looking at the words right before the match.
 const WEAK_CORRECTION_PHRASES: &[&[&str]] = &[
+    // Style and "nothing changed" complaints: corrective unless asked or
+    // conditional ("¿es más fácil así?", "si sigue igual, reinicia").
+    &["mas", "facil"],
+    &["mas", "simple"],
+    &["muy", "largo"],
+    &["sigue", "igual"],
+    &["no", "cambia", "nada"],
     &["esta", "mal"],
     &["esta", "muy", "mal"],
     &["estan", "mal"],
@@ -308,6 +371,7 @@ const NEGATED_SUBJUNCTIVE_VERBS: &[&str] = &[
     "elimines",
     "escribas",
     "hagas",
+    "dupliques",
     "inventes",
     "metas",
     "mezcles",
@@ -316,6 +380,7 @@ const NEGATED_SUBJUNCTIVE_VERBS: &[&str] = &[
     "pongas",
     "quites",
     "renombres",
+    "repitas",
     "rompas",
     "sigas",
     "sobrescribas",
@@ -708,11 +773,20 @@ fn lexical_signal_at(tokens: &[String], i: usize) -> bool {
             .is_some_and(|prev| tokens[prev].as_str() == SENTENCE)
         && tokens.get(i + 1).is_none_or(|t| t != "que");
     sentence_initial_siempre
-        || (word == "no"
-            && tokens
-                .get(i + 1)
-                .is_some_and(|n| negated_subjunctive_es(n.as_str())))
+        || (word == "no" && {
+            // "no borres", or with one object pronoun: "no los dupliques".
+            let next = tokens.get(i + 1).map(String::as_str);
+            let after_clitic = next
+                .filter(|n| CLITICS.contains(n))
+                .and_then(|_| tokens.get(i + 2).map(String::as_str));
+            next.is_some_and(negated_subjunctive_es)
+                || after_clitic.is_some_and(negated_subjunctive_es)
+        })
 }
+
+const CLITICS: &[&str] = &[
+    "me", "te", "lo", "la", "los", "las", "le", "les", "se", "nos",
+];
 
 fn correction_signal_at(tokens: &[String], i: usize) -> bool {
     if CORRECTION_PHRASES.iter().any(|p| phrase_at(tokens, p, i)) {
@@ -878,6 +952,110 @@ pub fn analyze_transcript(jsonl: &str) -> TranscriptSignals {
         }
     }
     signals
+}
+
+/// Failures that happened more than once in a session, by signature (see
+/// [`crate::recall::error_signature`]).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RepeatedErrors {
+    /// `(signature, count)` with `count >= 2`, most frequent first.
+    pub repeated: Vec<(String, usize)>,
+    /// The repeated ones seen again after the last memory save: their fix is
+    /// not saved yet.
+    pub unsaved: Vec<(String, usize)>,
+}
+
+fn failed_result_text(block: &Value, entry: &Value) -> Option<String> {
+    let content = block.get("content");
+    content
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .or_else(|| {
+            content.and_then(Value::as_array).and_then(|parts| {
+                let text = parts
+                    .iter()
+                    .filter_map(|p| p.get("text").and_then(Value::as_str))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                (!text.is_empty()).then_some(text)
+            })
+        })
+        .or_else(|| {
+            entry
+                .get("toolUseResult")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+}
+
+/// Same-session repeats of one failure: the cue to save its fix with a
+/// trigger so the next session gets it before failing again.
+#[must_use]
+pub fn repeated_errors(jsonl: &str) -> RepeatedErrors {
+    // (signature, count, position of its last occurrence)
+    let mut counts: Vec<(String, usize, usize)> = Vec::new();
+    let mut last_save: Option<usize> = None;
+    let mut position = 0_usize;
+    for line in jsonl.lines() {
+        let Ok(entry) = serde_json::from_str::<Value>(line.trim()) else {
+            continue;
+        };
+        let Some(blocks) = entry
+            .get("message")
+            .and_then(|m| m.get("content"))
+            .and_then(Value::as_array)
+        else {
+            continue;
+        };
+        match entry.get("type").and_then(Value::as_str) {
+            Some("user") => {
+                for block in blocks {
+                    if block.get("type").and_then(Value::as_str) != Some("tool_result")
+                        || !is_failed_result(block, &entry)
+                    {
+                        continue;
+                    }
+                    let Some(sig) = failed_result_text(block, &entry)
+                        .as_deref()
+                        .and_then(crate::recall::error_signature)
+                    else {
+                        continue;
+                    };
+                    position += 1;
+                    match counts.iter_mut().find(|(s, _, _)| *s == sig) {
+                        Some((_, n, last)) => {
+                            *n += 1;
+                            *last = position;
+                        }
+                        None => counts.push((sig, 1, position)),
+                    }
+                }
+            }
+            Some("assistant") => {
+                let saved = blocks.iter().any(|b| {
+                    b.get("type").and_then(Value::as_str) == Some("tool_use")
+                        && b.get("name")
+                            .and_then(Value::as_str)
+                            .is_some_and(|name| is_memory_save_tool(name, b.get("input")))
+                });
+                if saved {
+                    position += 1;
+                    last_save = Some(position);
+                }
+            }
+            _ => {}
+        }
+    }
+    counts.retain(|(_, n, _)| *n >= 2);
+    counts.sort_by_key(|entry| std::cmp::Reverse(entry.1));
+    RepeatedErrors {
+        unsaved: counts
+            .iter()
+            .filter(|(_, _, last)| last_save.is_none_or(|saved| *last > saved))
+            .map(|(sig, n, _)| (sig.clone(), *n))
+            .collect(),
+        repeated: counts.into_iter().map(|(sig, n, _)| (sig, n)).collect(),
+    }
 }
 
 #[cfg(test)]
@@ -1425,5 +1603,63 @@ mod tests {
         ] {
             assert!(is_correction(sample), "expected match for: {sample}");
         }
+    }
+
+    #[test]
+    fn repeated_errors_groups_by_signature_and_tracks_saves() {
+        let fail = |text: &str| {
+            format!(
+                r#"{{"type":"user","message":{{"content":[{{"type":"tool_result","is_error":true,"content":"{text}"}}]}}}}"#
+            )
+        };
+        let save = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__saispace__save_memory","input":{}}]}}"#;
+        let jsonl = [
+            fail("Exit code 144"),
+            fail("Exit code 144"),
+            fail("Error: Could not open a connection to your authentication agent."),
+            save.to_string(),
+        ]
+        .join("\n");
+        let out = super::repeated_errors(&jsonl);
+        assert_eq!(out.repeated, vec![("exit code 144".to_string(), 2)]);
+        assert_eq!(out.unsaved, Vec::new());
+        // An unrelated failure after the save does not reopen the saved one.
+        let other = format!("{jsonl}\n{}", fail("Error: something else entirely"));
+        assert_eq!(super::repeated_errors(&other).unsaved, Vec::new());
+        let again = format!("{jsonl}\n{}", fail("Exit code 144"));
+        let out = super::repeated_errors(&again);
+        assert_eq!(out.unsaved, vec![("exit code 144".to_string(), 3)]);
+    }
+
+    #[test]
+    fn detects_frustration_brevity_and_scope_corrections() {
+        for sample in [
+            "coño que no, iniciemos sin eso",
+            "irrelevante coño, el foco era otro",
+            "mas corto, sobreexplicas cosas obvias",
+            "muy largo, responde normal",
+            "no entiendo ni vergas, resume",
+            "oye pero eso se va del scope",
+            "esto no tiene nada que ver con el proyecto",
+            "porque no hiciste la copia si te la pedí?",
+            "dímelo más fácil",
+            "oye no cambia nada... sigue igual",
+            "se ve horrible, límpialo",
+            "la estás cagando",
+            "no los dupliques",
+        ] {
+            assert!(is_correction(sample), "{sample}");
+        }
+        assert!(!is_correction("no tengo la contraseña ahora"));
+        assert!(!is_correction(
+            "si la copia del server tiene cambios nuevos entonces si"
+        ));
+        assert!(!is_correction("el resto del archivo queda como está"));
+        assert!(!is_correction(
+            "agrega el permiso del scope de lectura de OAuth"
+        ));
+        assert!(!is_correction("si sigue igual, reinicia el contenedor"));
+        assert!(!is_correction("¿qué es más fácil, bun o npm?"));
+        assert!(!is_correction("no te olvides de correr los tests"));
     }
 }

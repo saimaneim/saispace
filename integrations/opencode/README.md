@@ -18,6 +18,8 @@ Con cada mensaje del usuario (evento `session.inbox.enqueued`), el plugin envía
 
 Si el CLI detecta que el prompt es una corrección, devuelve un recordatorio corto (≤ 300 caracteres). El plugin lo guarda como entrada de instrucciones `saispace-nudge` y la quita al terminar ese turno. Si no hay corrección, no se inyecta nada. Errores y timeouts (1.5 s) se ignoran silenciosamente.
 
+Cada llamada a herramienta que termina (`session.tool.success` / `session.tool.failed`) se envía a `sai memory nudge` como `PostToolUse` / `PostToolUseFailure` (nombre y entrada de la herramienta, salida y error). Si su texto coincide con los disparadores de una lección guardada (`sai memory save --trigger "…"`), el plugin la guarda como entrada `saispace-recall` hasta que termina la ejecución. `sai` corre con `SAISPACE_HOST=opencode`, así que las lecciones con `env:opencode` salen en el índice al empezar.
+
 ## Instalación
 
 Necesitas `sai` en el `PATH`:

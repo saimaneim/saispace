@@ -46,6 +46,14 @@ pub async fn memory_links(
 
 /// # Errors
 ///
+/// Returns an error if the triggers cannot be loaded.
+#[tauri::command]
+pub async fn memory_triggers(id: Uuid, db: State<'_, Db>) -> CommandResult<Vec<String>> {
+    Ok(db.memory_triggers(id).await?)
+}
+
+/// # Errors
+///
 /// Returns an error if the memory does not exist or cannot be deleted.
 #[tauri::command]
 pub async fn delete_memory(id: Uuid, db: State<'_, Db>) -> CommandResult<()> {

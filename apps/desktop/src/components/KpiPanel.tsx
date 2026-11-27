@@ -10,7 +10,12 @@ export interface KpiPanelProps {
   defaultCollapsed?: boolean;
 }
 
-const LEARNING_METRICS = new Set(["corrections_7d", "stop_blocks_7d", "lesson_conversion_7d"]);
+const LEARNING_METRICS = new Set([
+  "corrections_7d",
+  "stop_blocks_7d",
+  "recalls_7d",
+  "lesson_conversion_7d",
+]);
 
 const DAY_RANGES = [7, 30, 90] as const;
 type DayRange = (typeof DAY_RANGES)[number];

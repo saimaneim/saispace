@@ -1,0 +1,28 @@
+{"name":"pkill kills its own shell","event":"PostToolUseFailure","tool":"Bash","command":"pkill -f \"tsx server/index.ts\"; npm run dev","error":"Exit code 144","expect":["pkill-self"]}
+{"name":"ssh key not loaded","event":"PostToolUseFailure","tool":"Bash","command":"ssh -o BatchMode=yes root@2.57.90.104 'ls'","error":"Exit code 255\nroot@2.57.90.104: Permission denied (publickey).","expect":["ssh-passphrase"]}
+{"name":"no ssh agent","event":"PostToolUseFailure","tool":"Bash","command":"ssh-add ~/.ssh/id_ed25519","error":"Exit code 2\nCould not open a connection to your authentication agent.","expect":["ssh-passphrase"]}
+{"name":"passphrase prompt in git push","event":"PostToolUse","tool":"Bash","command":"git push origin main","output":"Enter passphrase for key '/home/u/.ssh/id_ed25519': \nfatal: Could not read from remote repository.","expect":["ssh-passphrase"]}
+{"name":"sleep chain blocked","event":"PostToolUseFailure","tool":"Bash","command":"sleep 60; tail -n 20 build.log","error":"<tool_use_error>Blocked: sleep 60 followed by: tail -n 20 build.log. To wait for a condition, use Monitor with an until-loop</tool_use_error>","expect":["sleep-blocked"]}
+{"name":"zsh glob in grep flags","event":"PostToolUseFailure","tool":"Bash","command":"grep -rn foo --include=*.ts src","error":"Exit code 1\n(eval):1: no matches found: --include=*.ts","expect":["zsh-glob"]}
+{"name":"zip not installed","event":"PostToolUseFailure","tool":"Bash","command":"zip -r out.zip dist","error":"Exit code 127\nzsh: command not found: zip","expect":["zip-missing"]}
+{"name":"classifier denial","event":"PostToolUseFailure","tool":"Bash","command":"docker compose up -d","error":"Permission for this action was denied by the Claude Code auto mode classifier. Reason: Production Deploy","expect":["auto-classifier"]}
+{"name":"plan scope missing","event":"PostToolUseFailure","tool":"update_plan","command":"","error":"MCP error -32602: items also needs \"scope\": \"first_task\", \"continuation\" or \"new_task\"","expect":["plan-scope"]}
+{"name":"browser arg limit","event":"PostToolUseFailure","tool":"mcp__Claude_Browser__computer","command":"","error":"MCP error -32602: Invalid arguments for tool computer: too_big maximum: 10","expect":["browser-limits"]}
+{"name":"ssh timeout behind vpn","event":"PostToolUseFailure","tool":"Bash","command":"ssh root@vps uptime","error":"Exit code 255\nConnection timed out during banner exchange\nConnection to 2.57.90.104 port 22 timed out","expect":["ssh-vpn"]}
+{"name":"sudo without tty","event":"PostToolUseFailure","tool":"Bash","command":"sudo pacman -Syu","error":"Exit code 1\nsudo: a terminal is required to read the password; either use the -S option to read from standard input or configure an askpass helper","expect":["sudo-tty"]}
+{"name":"edit after external change","event":"PostToolUseFailure","tool":"Edit","command":"","error":"<tool_use_error>File has been modified since read, either by the user or by a linter. Read it again before attempting to write it.</tool_use_error>","expect":["stale-read"]}
+{"name":"tool name casing","event":"PostToolUseFailure","tool":"bash","command":"","error":"<tool_use_error>Error: No such tool available: bash. Tool names are case-sensitive: call Bash instead.</tool_use_error>","expect":["tool-case"]}
+{"name":"unknown host key","event":"PostToolUseFailure","tool":"Bash","command":"ssh new-vps","error":"Exit code 255\nHost key verification failed.","expect":["host-key"]}
+{"name":"opencode bash failure shape","event":"PostToolUseFailure","tool":"bash","command":"pkill -f vite","error":"Exit code 144","expect":["pkill-self"]}
+{"name":"reading notes that mention an error","event":"PostToolUse","tool":"Read","command":"","output":"## Notas\nAyer vimos Exit code 144 y Permission denied (publickey).","expect":[]}
+{"name":"grep through docs","event":"PostToolUse","tool":"Grep","command":"","output":"docs/ssh.md:3: Permission denied (publickey) means the key is missing","expect":[]}
+{"name":"saving the lesson itself","event":"PostToolUse","tool":"Bash","command":"sai memory save --kind bugfix --title pkill --content x --trigger 'Exit code 144'","output":"d28f26ff  2026-11-27  [Bugfix] pkill  (global)","expect":[]}
+{"name":"saispace tool output","event":"PostToolUse","tool":"mcp__saispace__search_memory","command":"","output":"{\"hits\":[{\"title\":\"Exit code 144 al usar pkill -f\"}]}","expect":[]}
+{"name":"missing npm script","event":"PostToolUseFailure","tool":"Bash","command":"npm run dev","error":"Exit code 1\nnpm ERR! Missing script: \"dev\"","expect":[]}
+{"name":"missing file","event":"PostToolUseFailure","tool":"Bash","command":"cat x.txt","error":"Exit code 1\ncat: x.txt: No such file or directory","expect":[]}
+{"name":"plain permission denied","event":"PostToolUseFailure","tool":"Bash","command":"./run.sh","error":"Exit code 126\nzsh: permission denied: ./run.sh","expect":[]}
+{"name":"connection refused is not a vpn timeout","event":"PostToolUseFailure","tool":"Bash","command":"ssh root@vps","error":"Exit code 255\nssh: connect to host 2.57.90.104 port 22: Connection refused","expect":[]}
+{"name":"agent listing keys","event":"PostToolUse","tool":"Bash","command":"ssh-add -l","output":"256 SHA256:yGeomT5idpNVCroIxRQI4Rt4k t (ED25519)","expect":[]}
+{"name":"killed by timeout","event":"PostToolUseFailure","tool":"Bash","command":"npm test","error":"Exit code 143","expect":[]}
+{"name":"other command not found","event":"PostToolUseFailure","tool":"Bash","command":"uv run x","error":"Exit code 127\nzsh: command not found: uv","expect":[]}
+{"name":"successful sudo with -S","event":"PostToolUse","tool":"Bash","command":"sudo -S -p '' true < /tmp/pw","output":"","expect":[]}

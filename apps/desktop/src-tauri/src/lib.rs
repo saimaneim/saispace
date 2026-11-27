@@ -11,7 +11,7 @@ use commands::{
     kpi::kpi_history,
     memory::{
         agent_memory_context, delete_memory, get_memory, link_orphan_memories, list_memories,
-        list_orphan_memory_groups, memory_duplicates, memory_links, memory_stale,
+        list_orphan_memory_groups, memory_duplicates, memory_links, memory_stale, memory_triggers,
         memory_usage_stats, set_memory_pinned, update_memory,
     },
     plan::{goal_create, goal_delete, goal_update, plan_get},
@@ -119,6 +119,7 @@ pub fn run() {
             list_memories,
             get_memory,
             memory_links,
+            memory_triggers,
             delete_memory,
             update_memory,
             set_memory_pinned,

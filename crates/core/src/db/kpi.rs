@@ -119,6 +119,14 @@ pub const KPI_CATALOG: &[KpiMetricDef] = &[
         project_only: false,
     },
     KpiMetricDef {
+        name: "recalls_7d",
+        label: "Lecciones recordadas por error (7d)",
+        unit: "count",
+        higher_is_better: None,
+        global_only: true,
+        project_only: false,
+    },
+    KpiMetricDef {
         name: "lesson_conversion_7d",
         label: "Conversión a lección (7d)",
         unit: "ratio",
@@ -314,6 +322,7 @@ pub fn compute_learning_kpis(log_path: &Path, now: DateTime<Utc>) -> CoreResult<
     let cutoff_7d = now - Duration::days(7);
     let mut corrections_7d: usize = 0;
     let mut stop_blocks_7d: usize = 0;
+    let mut recalls_7d: usize = 0;
     let mut last_stop_by_session: HashMap<String, (DateTime<Utc>, usize, bool)> = HashMap::new();
 
     for path in collect_event_log_paths(log_path)? {
@@ -344,6 +353,7 @@ pub fn compute_learning_kpis(log_path: &Path, now: DateTime<Utc>) -> CoreResult<
             }
             match ev.event.as_str() {
                 "correction" => corrections_7d += 1,
+                "recall" => recalls_7d += 1,
                 "stop" => {
                     if ev.blocked == Some(true) {
                         stop_blocks_7d += 1;
@@ -387,6 +397,7 @@ pub fn compute_learning_kpis(log_path: &Path, now: DateTime<Utc>) -> CoreResult<
         corrections_7d: corrections_7d as f64,
         stop_blocks_7d: stop_blocks_7d as f64,
         lesson_conversion_7d,
+        recalls_7d: recalls_7d as f64,
     })
 }
 
@@ -704,6 +715,10 @@ impl Db {
                 .global
                 .metrics
                 .insert("stop_blocks_7d".to_string(), learning.stop_blocks_7d);
+            computation
+                .global
+                .metrics
+                .insert("recalls_7d".to_string(), learning.recalls_7d);
             if let Some(conversion) = learning.lesson_conversion_7d {
                 computation
                     .global
@@ -1148,8 +1163,10 @@ mod tests {
         std::fs::write(
             &rotated_b,
             format!(
-                "{}\n",
+                "{}\n{}\n{}\n",
                 serde_json::json!({"ts": (now - Duration::days(1)).to_rfc3339(), "event": "correction"}),
+                serde_json::json!({"ts": (now - Duration::days(2)).to_rfc3339(), "event": "recall"}),
+                serde_json::json!({"ts": (now - Duration::days(9)).to_rfc3339(), "event": "recall"}),
             ),
         )
         .expect("write rotated b");
@@ -1173,6 +1190,7 @@ mod tests {
         let stats = compute_learning_kpis(&log_path, now).expect("stats");
         assert_eq!(stats.corrections_7d, 2.0);
         assert_eq!(stats.stop_blocks_7d, 1.0);
+        assert_eq!(stats.recalls_7d, 1.0, "only the recall inside 7 days");
         assert_eq!(stats.lesson_conversion_7d, None);
     }
 

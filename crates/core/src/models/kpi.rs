@@ -32,6 +32,9 @@ pub struct LearningKpis {
     pub corrections_7d: f64,
     pub stop_blocks_7d: f64,
     pub lesson_conversion_7d: Option<f64>,
+    /// Lessons handed back by a trigger after a tool call (7d).
+    #[serde(default)]
+    pub recalls_7d: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

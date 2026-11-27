@@ -105,6 +105,12 @@ pub struct MemoryContext {
     /// Likely duplicates worth merging, so the index stays small over time.
     #[serde(default)]
     pub consolidate: Vec<super::memory_graph::ConsolidateHint>,
+    /// Hosts the agent runs inside (`t3code`, `opencode`…), when detected.
+    #[serde(default)]
+    pub hosts: Vec<String>,
+    /// Lessons tied to those hosts with an `env:<host>` trigger.
+    #[serde(default)]
+    pub environment: Vec<Memory>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

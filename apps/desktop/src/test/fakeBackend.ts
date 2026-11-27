@@ -36,6 +36,8 @@ export interface FakeBackendOptions {
   directories?: Record<string, string[]>;
   home?: string;
   kpiHistory?: KpiHistory | ((args: { days?: number; scope?: string }) => KpiHistory);
+  /** Triggers by memory id (`memory_triggers`). */
+  triggers?: Record<string, string[]>;
 }
 
 export interface InvokeCall {
@@ -379,6 +381,7 @@ export function installFakeBackend(options: FakeBackendOptions = {}) {
         .slice(0, (limit as number | undefined) ?? 200),
     get_memory: ({ id }) => findMemory(id),
     memory_links: () => [],
+    memory_triggers: (args) => options.triggers?.[String(args.id)] ?? [],
     update_memory: ({ id, input }) => {
       const memory = findMemory(id);
       const patch = input as UpdateMemoryInput;

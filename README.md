@@ -56,7 +56,7 @@ bun run lint    # biome
 
 ## Benchmark
 
-`sai bench` evaluates correction detection, Stop hook accuracy, FTS5 search quality, duplicate detection, session index size, and 1,000-memory latencies against deterministic fixtures in `bench/fixtures/` (never touching the user database).
+`sai bench` evaluates correction detection, Stop hook accuracy, recall by tool error (`recall_lessons.jsonl` / `recall_cases.jsonl`), FTS5 search quality, duplicate detection, session index size, and 1,000-memory latencies against deterministic fixtures in `bench/fixtures/` (never touching the user database).
 
 ```sh
 sai bench              # summary table
@@ -126,4 +126,4 @@ The memory is scoped to the project of the server's working directory, or to `pa
 
 ## Learning from mistakes
 
-Agents save lessons when they happen: a user correction becomes a `preference`, an own mistake with a non-obvious cause a `bugfix` with that cause. Duplicate pairs listed under `consolidate` (CLI index: "Para consolidar") get merged with `consolidate_memories`. `sai setup claude` installs the Claude Code hooks: `sai memory context` on SessionStart and `sai memory nudge` on UserPromptSubmit and Stop (Stop blocks once per session when there was a correction or 3+ failed tools and nothing was saved). The OpenCode plugin adds the same reminder per user message.
+Agents save lessons when they happen: a user correction becomes a `preference`, an own mistake with a non-obvious cause a `bugfix` with that cause. Duplicate pairs listed under `consolidate` (CLI index: "Para consolidar") get merged with `consolidate_memories`. `sai setup claude` installs the Claude Code hooks: `sai memory context` on SessionStart and `sai memory nudge` on UserPromptSubmit and Stop (Stop blocks once per session when there was a correction or 3+ failed tools and nothing was saved). It also runs on PostToolUse and PostToolUseFailure: a memory saved with triggers (`sai memory save --trigger "exit code 144"`, or `triggers` in `save_memory`) comes back by itself when a tool call shows that text, once per session. A trigger like `env:t3code` or `env:opencode` puts the lesson in the session index whenever the agent runs inside that host. Stop names errors that repeated in the session and asks for their fix with a trigger. The OpenCode plugin adds the same reminder per user message and the same recall per tool call.

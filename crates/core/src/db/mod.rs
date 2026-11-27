@@ -19,6 +19,7 @@ pub mod memory_pin;
 pub mod memory_stale;
 pub mod memory_stats;
 pub mod memory_topics;
+pub mod memory_triggers;
 pub mod memory_usage;
 pub mod project;
 pub mod project_layout;

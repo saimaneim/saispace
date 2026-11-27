@@ -78,6 +78,7 @@ async fn test_server_instructions_describe_memory_protocol() {
         "consolidate_memories",
         "preference",
         "bugfix",
+        "triggers",
         "session_summary",
     ] {
         assert!(instructions.contains(term), "instructions miss {term}");
