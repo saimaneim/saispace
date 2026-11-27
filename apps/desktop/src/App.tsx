@@ -279,7 +279,7 @@ export function App() {
             onClick={() => setIsSidebarOpen((open) => !open)}
             aria-label={isSidebarOpen ? "Ocultar barra lateral" : "Mostrar barra lateral"}
             title="Barra lateral (Ctrl+B)"
-            className="h-8 w-8 flex-shrink-0 rounded-md flex items-center justify-center text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 pointer-events-auto"
+            className="h-8 w-8 flex-shrink-0 rounded-md flex items-center justify-center text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 pointer-events-auto"
           >
             <PanelLeft className="w-4 h-4" />
           </button>
@@ -306,7 +306,7 @@ export function App() {
             onClick={() => setIsSearchOpen(true)}
             aria-label="Buscar"
             title="Buscar (Ctrl+K)"
-            className="h-8 w-8 flex-shrink-0 rounded-md flex items-center justify-center text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 pointer-events-auto"
+            className="h-8 w-8 flex-shrink-0 rounded-md flex items-center justify-center text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 pointer-events-auto"
           >
             <Search className="w-4 h-4" />
           </button>
@@ -359,7 +359,7 @@ export function App() {
                           aria-selected={selected}
                           onClick={() => setActiveTab(id)}
                           className={cn(
-                            "h-9 px-3 rounded-md text-sm font-medium flex items-center gap-2 transition-colors duration-[120ms] focus-visible:ring-2 focus-visible:ring-acid-lime/40 focus:outline-none",
+                            "h-9 px-3 rounded-md text-sm font-medium flex items-center gap-2 transition-colors duration-[120ms] focus-visible:ring-2 focus-visible:ring-accent/40 focus:outline-none",
                             selected
                               ? "bg-elevated text-paper font-medium"
                               : "text-fog hover:text-mist hover:bg-obsidian",

@@ -22,7 +22,7 @@ La interfaz se estructura sobre capas de luminosidad decreciente en profundidad,
 - `ash` (`#6b6b6b`): Separadores visuales, texto deshabilitado e indicadores vacíos.
 
 ### Acento de marca y semántica
-- `acid-lime` (`#e2f928`): Acento eléctrico único de saispace. Aplica a acción primaria, indicador de selección activa en navegación/listas (`w-0.5 bg-acid-lime`), acento de logotipo y anillos de foco accesible (`ring-2 ring-acid-lime/40`).
+- `accent` (`#e2f928`): Acento eléctrico único de saispace. Aplica a acción primaria, indicador de selección activa en navegación/listas (`w-0.5 bg-accent`), acento de logotipo y anillos de foco accesible (`ring-2 ring-accent/40`).
 - `pulse-green` (`#22c55e`): Estados activos, hallazgos y confirmaciones exitosas.
 - `status-amber` (`#f59e0b`): Tareas en progreso, configuración, estados en pausa y advertencias de cambios sin guardar.
 - `coral-red` (`#ef4444`): Acciones destructivas, correcciones, errores y estados bloqueados.
@@ -30,7 +30,7 @@ La interfaz se estructura sobre capas de luminosidad decreciente en profundidad,
 - `iris` (`#6366f1`): Arquitectura, metadatos de agentes y bloques `Where`.
 
 ### Chips semánticos de memoria
-- `decision`: acento `acid-lime` (`bg-acid-lime/12 text-acid-lime`).
+- `decision`: acento `accent` (`bg-accent/12 text-accent`).
 - `architecture`: acento `iris` (`bg-iris/15 text-iris`).
 - `bugfix`: acento `coral-red` (`bg-coral-red/12 text-coral-red`).
 - `pattern`: acento `signal-teal` (`bg-signal-teal/12 text-signal-teal`).

@@ -9,12 +9,12 @@ export const MEMORY_KIND_LABELS: Record<MemoryKind, string> = {
   config: "Configuración",
   discovery: "Hallazgo",
   preference: "Preferencia",
-  session_summary: "Resumen de sesión",
+  session_summary: "Resumen",
   note: "Nota",
 };
 
 export const MEMORY_KIND_STYLE: Record<MemoryKind, { badge: string; dot: string }> = {
-  decision: { badge: "bg-acid-lime/12 text-acid-lime", dot: "bg-acid-lime" },
+  decision: { badge: "bg-accent/12 text-accent", dot: "bg-accent" },
   architecture: { badge: "bg-iris/15 text-iris", dot: "bg-iris" },
   bugfix: { badge: "bg-coral-red/12 text-coral-red", dot: "bg-coral-red" },
   pattern: { badge: "bg-signal-teal/12 text-signal-teal", dot: "bg-signal-teal" },

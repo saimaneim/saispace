@@ -1,4 +1,6 @@
+import { Info, Lightbulb, MapPin, MessageCircleQuestion } from "lucide-react";
 import type { ReactNode } from "react";
+import { api } from "../lib/api";
 import { cn } from "../lib/utils";
 
 export interface MarkdownProps {
@@ -9,11 +11,11 @@ export interface MarkdownProps {
 const STRUCTURED_BOLD_RE = /^\*\*(.+?)(?:\*\*:\s*|:\*\*\s*)(.*)$/;
 const STRUCTURED_PLAIN_RE = /^(What|Why|Where|Learned):\s*(.*)$/i;
 
-const ROLE_ACCENT: Record<string, string> = {
-  what: "bg-mist/60",
-  why: "bg-signal-teal",
-  where: "bg-iris",
-  learned: "bg-acid-lime",
+const ROLE_META: Record<string, { icon: typeof Info; title: string }> = {
+  what: { icon: Info, title: "Qué (What)" },
+  why: { icon: MessageCircleQuestion, title: "Por qué (Why)" },
+  where: { icon: MapPin, title: "Dónde (Where)" },
+  learned: { icon: Lightbulb, title: "Aprendido (Learned)" },
 };
 
 function renderInline(text: string): ReactNode[] {
@@ -89,6 +91,19 @@ function renderInline(text: string): ReactNode[] {
         <strong key={`b-${key++}`} className="font-semibold text-paper">
           {earliest.content}
         </strong>,
+      );
+    } else if (earliest.extra && /^https?:\/\//i.test(earliest.extra)) {
+      const href = earliest.extra;
+      parts.push(
+        <button
+          key={`l-${key++}`}
+          type="button"
+          title={href}
+          onClick={() => void api.openUrl(href)}
+          className="text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent break-words inline text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/40 rounded-sm"
+        >
+          {earliest.content}
+        </button>,
       );
     } else {
       parts.push(
@@ -305,17 +320,35 @@ export function Markdown({ content, className }: MarkdownProps) {
   const flushSection = (suffix: string) => {
     if (!activeSection) return;
     const roleKey = activeSection.label.toLowerCase();
-    const accent = ROLE_ACCENT[roleKey] ?? "bg-smoke";
+    const role = ROLE_META[roleKey];
     const body = renderFlowBlocks(activeSection.lines, `sec-${suffix}`);
-    blocks.push(
-      <div key={`section-${suffix}`} className="py-2 first:pt-0 last:pb-0 flex gap-3 min-w-0">
-        <span className={cn("w-0.5 rounded-full flex-shrink-0", accent)} aria-hidden="true" />
-        <div className="min-w-0 flex-1 space-y-1">
-          <span className="block text-xs font-semibold text-fog">{activeSection.label}</span>
-          {body.length > 0 && <div className="min-w-0">{body}</div>}
-        </div>
-      </div>,
-    );
+
+    if (role) {
+      const Icon = role.icon;
+      blocks.push(
+        <div
+          key={`section-${suffix}`}
+          className="my-2 first:mt-0 last:mb-0 rounded-lg bg-obsidian/55 px-3.5 py-2.5 flex items-start gap-3 min-w-0"
+        >
+          <span title={role.title} className="mt-1 flex-shrink-0">
+            <Icon
+              className={cn("h-4 w-4", roleKey === "learned" ? "text-accent" : "text-fog")}
+              aria-label={activeSection.label}
+            />
+          </span>
+          <div className="min-w-0 flex-1 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">{body}</div>
+        </div>,
+      );
+    } else {
+      blocks.push(
+        <div key={`section-${suffix}`} className="py-1.5 min-w-0">
+          <p className="text-xs font-semibold text-paper mb-0.5 break-words">
+            {activeSection.label}
+          </p>
+          <div className="min-w-0 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">{body}</div>
+        </div>,
+      );
+    }
     activeSection = null;
   };
 
@@ -339,7 +372,7 @@ export function Markdown({ content, className }: MarkdownProps) {
         return;
       }
 
-      if (activeSection && /^#{1,4}\s/.test(line)) {
+      if (activeSection && (/^#{1,4}\s/.test(line) || /^[-*_]{3,}\s*$/.test(line))) {
         flushSection(`head-${idx}`);
       }
     }

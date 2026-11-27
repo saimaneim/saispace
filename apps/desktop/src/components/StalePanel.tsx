@@ -47,23 +47,30 @@ function StaleItem({
         </div>
         {snippet && <p className="text-xs text-mist truncate">{snippet}</p>}
         <p className="text-xs text-fog tabular-nums truncate">
-          Guardada {formatTimeAgo(memory.updated_at)} · último uso:{" "}
-          {memory.last_used_at ? formatTimeAgo(memory.last_used_at) : "nunca"}
+          {formatTimeAgo(memory.updated_at)} ·{" "}
+          {memory.last_used_at ? `usada ${formatTimeAgo(memory.last_used_at)}` : "sin uso"}
         </p>
       </div>
-      <div className="flex items-center gap-1.5 flex-shrink-0">
-        <Button variant="secondary" size="sm" onClick={onOpen} className="h-8 text-xs">
-          <Eye className="w-3.5 h-3.5 mr-1.5" />
-          Abrir
+      <div className="flex items-center gap-1 flex-shrink-0">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onOpen}
+          aria-label="Abrir"
+          title="Abrir"
+          className="h-8 w-8 text-fog hover:text-paper hover:bg-obsidian"
+        >
+          <Eye className="w-4 h-4" />
         </Button>
         <Button
           variant="ghost"
-          size="sm"
+          size="icon"
           onClick={onDelete}
-          className="h-8 text-xs text-fog hover:text-coral-red hover:bg-coral-red/10"
+          aria-label="Eliminar"
+          title="Eliminar"
+          className="h-8 w-8 text-fog hover:text-coral-red hover:bg-coral-red/10"
         >
-          <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-          Eliminar
+          <Trash2 className="w-4 h-4" />
         </Button>
       </div>
     </div>
@@ -75,7 +82,7 @@ export function StalePanel({ report, onOpenMemory, onDeleteMemory, onClose }: St
   const [error, setError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const total = report.stale.length;
+  const total = report.stale.length + report.surplus_sessions.length;
 
   const confirmDelete = async () => {
     if (!pendingDelete) return;
@@ -93,13 +100,19 @@ export function StalePanel({ report, onOpenMemory, onDeleteMemory, onClose }: St
   return (
     <section className="flex-1 min-w-0 flex flex-col px-7 pt-5 pb-6">
       <div className="flex items-center justify-between gap-3 pb-4 flex-shrink-0">
-        <div className="min-w-0">
-          <h2 className="text-lg font-semibold text-paper tracking-tight">Memorias para revisar</h2>
-          <p className="text-xs text-fog tabular-nums">Sin uso en 60 días · {total}</p>
+        <div className="flex items-baseline gap-2.5 min-w-0">
+          <h2 className="text-lg font-semibold text-paper tracking-tight">Para revisar</h2>
+          <span className="text-xs text-fog tabular-nums">{total}</span>
         </div>
-        <Button variant="secondary" size="sm" onClick={onClose}>
-          <X className="w-3.5 h-3.5 mr-1.5" />
-          Cerrar
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          aria-label="Cerrar"
+          title="Cerrar"
+          className="h-8 w-8 text-fog hover:text-paper hover:bg-obsidian"
+        >
+          <X className="w-4 h-4" />
         </Button>
       </div>
 
@@ -115,21 +128,40 @@ export function StalePanel({ report, onOpenMemory, onDeleteMemory, onClose }: St
       {total === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-2.5 text-center bg-carbon rounded-xl p-6">
           <History className="w-7 h-7 text-ash" />
-          <p className="text-sm font-medium text-paper">Sin memorias para revisar</p>
+          <p className="text-sm font-medium text-paper">Nada para revisar</p>
           <Button variant="secondary" size="sm" onClick={onClose}>
-            Volver a memorias
+            Volver
           </Button>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-          {report.stale.map((m) => (
-            <StaleItem
-              key={m.id}
-              memory={m}
-              onOpen={() => onOpenMemory(m.id)}
-              onDelete={() => setPendingDelete(m)}
-            />
-          ))}
+        <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+          {report.stale.length > 0 && (
+            <div className="space-y-2">
+              {report.stale.map((m) => (
+                <StaleItem
+                  key={m.id}
+                  memory={m}
+                  onOpen={() => onOpenMemory(m.id)}
+                  onDelete={() => setPendingDelete(m)}
+                />
+              ))}
+            </div>
+          )}
+          {report.surplus_sessions.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-xs font-semibold text-fog px-1">
+                Resúmenes antiguos · {report.surplus_sessions.length}
+              </h3>
+              {report.surplus_sessions.map((m) => (
+                <StaleItem
+                  key={m.id}
+                  memory={m}
+                  onOpen={() => onOpenMemory(m.id)}
+                  onDelete={() => setPendingDelete(m)}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 

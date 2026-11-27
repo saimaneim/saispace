@@ -1,8 +1,9 @@
-import { FolderOpen, Globe, Pin, PinOff, Plus, Search, X } from "lucide-react";
+import { FolderOpen, Globe, Pin, PinOff, Plus, Search, Settings, X } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Project } from "../lib/types";
 import { cn } from "../lib/utils";
 import { ProjectIcon } from "./ProjectIcon";
+import { SettingsDialog } from "./SettingsDialog";
 
 interface SidebarProps {
   projects: Project[];
@@ -64,7 +65,7 @@ function ProjectRow({
         onPointerDown={onPointerDown}
         aria-current={isSelected ? "page" : undefined}
         className={cn(
-          "relative w-full flex items-center gap-2.5 pl-3 pr-9 h-10 rounded-md text-sm text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+          "relative w-full flex items-center gap-2.5 pl-3 pr-9 h-10 rounded-md text-sm text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
           isSelected || floating
             ? "bg-elevated text-paper font-medium"
             : "text-mist hover:text-paper hover:bg-obsidian",
@@ -74,7 +75,7 @@ function ProjectRow({
       >
         {isSelected && !floating && (
           <span
-            className="absolute left-1 top-2.5 bottom-2.5 w-0.5 rounded-full bg-acid-lime"
+            className="absolute left-1 top-2.5 bottom-2.5 w-0.5 rounded-full bg-accent"
             aria-hidden="true"
           />
         )}
@@ -92,7 +93,7 @@ function ProjectRow({
           onClick={() => onTogglePin(p.id, !p.pinned)}
           aria-label={p.pinned ? `Desfijar ${p.name}` : `Fijar ${p.name}`}
           title={p.pinned ? "Desfijar" : "Fijar arriba"}
-          className="absolute right-1.5 top-1/2 -translate-y-1/2 h-7 w-7 rounded-md flex items-center justify-center text-fog opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-paper hover:bg-graphite transition-opacity duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+          className="absolute right-1.5 top-1/2 -translate-y-1/2 h-7 w-7 rounded-md flex items-center justify-center text-fog opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-paper hover:bg-graphite transition-opacity duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
         >
           {p.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
         </button>
@@ -141,6 +142,7 @@ export function Sidebar({
   pendingRequests,
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [drag, setDrag] = useState<DragState | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const suppressClick = useRef(false);
@@ -153,6 +155,19 @@ export function Sidebar({
   );
   const byId = new Map(projects.map((p) => [p.id, p]));
   const dragging = drag?.active ? drag : null;
+
+  useEffect(() => {
+    if (projects.length <= 4 && searchQuery) {
+      setSearchQuery("");
+    }
+  }, [projects.length, searchQuery]);
+
+  useEffect(() => {
+    if (!isOpen && dragRef.current) {
+      dragRef.current = null;
+      setDrag(null);
+    }
+  }, [isOpen]);
 
   const columns = (group: Group): string[] => {
     const ids = filteredProjects
@@ -182,6 +197,7 @@ export function Sidebar({
         const el = zoneRefs.current[group];
         return el ? [{ group, rect: el.getBoundingClientRect(), el }] : [];
       });
+      if (zones.length === 0) return { group: "rest", index: 0 };
       const zone =
         zones.find((z) => y >= z.rect.top && y <= z.rect.bottom) ??
         zones.reduce((best, z) => {
@@ -245,11 +261,13 @@ export function Sidebar({
     window.addEventListener("pointermove", onMovePointer);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onCancel);
+    window.addEventListener("blur", onCancel);
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("pointermove", onMovePointer);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onCancel);
+      window.removeEventListener("blur", onCancel);
       window.removeEventListener("keydown", onKey);
     };
   }, [isArmed, projects, onMove]);
@@ -344,12 +362,12 @@ export function Sidebar({
             <rect width="24" height="24" rx="6" className="fill-elevated" />
             <path
               d="M15 7.5H9.5C8.11929 7.5 7 8.61929 7 10C7 11.3807 8.11929 12.5 9.5 12.5H14.5C15.8807 12.5 17 13.6193 17 15C17 16.3807 15.8807 17.5 14.5 17.5H9"
-              className="stroke-acid-lime"
+              className="stroke-accent"
               strokeWidth="2.2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
-            <circle cx="15.5" cy="7.5" r="1.5" className="fill-acid-lime" />
+            <circle cx="15.5" cy="7.5" r="1.5" className="fill-accent" />
           </svg>
           <span className="text-sm font-semibold tracking-tight text-paper pointer-events-none">
             saispace
@@ -362,7 +380,7 @@ export function Sidebar({
             onClick={onSelectGlobal}
             aria-current={isGlobalSelected ? "page" : undefined}
             className={cn(
-              "relative w-full flex items-center gap-2.5 px-3 h-10 rounded-md text-sm text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+              "relative w-full flex items-center gap-2.5 px-3 h-10 rounded-md text-sm text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
               isGlobalSelected
                 ? "bg-elevated text-paper font-medium"
                 : "text-mist hover:text-paper hover:bg-obsidian",
@@ -370,7 +388,7 @@ export function Sidebar({
           >
             {isGlobalSelected && (
               <span
-                className="absolute left-1 top-2.5 bottom-2.5 w-0.5 rounded-full bg-acid-lime"
+                className="absolute left-1 top-2.5 bottom-2.5 w-0.5 rounded-full bg-accent"
                 aria-hidden="true"
               />
             )}
@@ -380,7 +398,7 @@ export function Sidebar({
             <span className="flex-1">Global</span>
             {pendingRequests > 0 && (
               <span
-                className="min-w-5 h-5 px-1.5 rounded-full bg-acid-lime text-void text-xs font-semibold flex items-center justify-center tabular-nums"
+                className="min-w-5 h-5 px-1.5 rounded-full bg-accent text-accent-ink text-xs font-semibold flex items-center justify-center tabular-nums"
                 title="Solicitudes de acceso a claves"
               >
                 {pendingRequests}
@@ -399,14 +417,14 @@ export function Sidebar({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Buscar proyectos…"
                 aria-label="Buscar proyectos"
-                className="w-full h-8 pl-8 pr-7 text-xs bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 transition-colors duration-[120ms]"
+                className="w-full h-8 pl-8 pr-7 text-xs bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 transition-colors duration-[120ms]"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery("")}
                   aria-label="Limpiar búsqueda de proyectos"
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 rounded flex items-center justify-center text-fog hover:text-paper hover:bg-elevated transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 rounded flex items-center justify-center text-fog hover:text-paper hover:bg-elevated transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -422,13 +440,17 @@ export function Sidebar({
             onClick={onOpenDirectoryPicker}
             aria-label="Añadir carpeta"
             title="Añadir carpeta"
-            className="h-7 w-7 flex items-center justify-center rounded-md text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+            className="h-7 w-7 flex items-center justify-center rounded-md text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
           >
             <Plus className="w-4 h-4" />
           </button>
         </div>
 
-        <nav ref={navRef} className="flex-1 overflow-y-auto px-3 pb-3" aria-label="Proyectos">
+        <nav
+          ref={navRef}
+          className="flex-1 min-h-0 overflow-y-auto px-3 pb-3"
+          aria-label="Proyectos"
+        >
           {showPinned && (
             <Fragment>
               <p className="flex items-center gap-1.5 px-2.5 pt-1 pb-1 text-xs text-fog">
@@ -451,6 +473,19 @@ export function Sidebar({
             </div>
           )}
         </nav>
+        <div className="px-3 pb-3 pt-1 flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            aria-label="Configuración"
+            title="Configuración"
+            className="w-full flex h-9 items-center gap-2.5 px-3 rounded-md text-sm text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+          >
+            <Settings className="h-4 w-4 flex-shrink-0" />
+            <span className="truncate">Configuración</span>
+          </button>
+        </div>
+        <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       </div>
       {dragging && draggedProject && (
         <div

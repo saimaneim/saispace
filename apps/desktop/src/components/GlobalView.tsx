@@ -70,13 +70,13 @@ function InstructionsPanel({ inventory }: { inventory: AiInventory }) {
               onClick={() => setSelected(index)}
               aria-current={isSelected ? "true" : undefined}
               className={cn(
-                "relative w-full flex items-center gap-2.5 pl-3 pr-2.5 py-2 rounded-md text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+                "relative w-full flex items-center gap-2.5 pl-3 pr-2.5 py-2 rounded-md text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
                 isSelected ? "bg-elevated text-paper" : "text-mist hover:bg-obsidian",
               )}
             >
               {isSelected && (
                 <span
-                  className="absolute left-1 top-2 bottom-2 w-0.5 rounded-full bg-acid-lime"
+                  className="absolute left-1 top-2 bottom-2 w-0.5 rounded-full bg-accent"
                   aria-hidden="true"
                 />
               )}
@@ -127,14 +127,14 @@ function SkillsPanel({ inventory }: { inventory: AiInventory }) {
           onChange={(e) => setQuery(e.target.value)}
           placeholder={`Filtrar ${inventory.skills.length} skills…`}
           aria-label="Filtrar skills"
-          className="w-full h-9 pl-8 pr-8 text-sm bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 transition-colors duration-[120ms]"
+          className="w-full h-9 pl-8 pr-8 text-sm bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 transition-colors duration-[120ms]"
         />
         {query && (
           <button
             type="button"
             onClick={() => setQuery("")}
             aria-label="Limpiar filtro"
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 h-6 w-6 rounded flex items-center justify-center text-fog hover:text-paper hover:bg-elevated transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 h-6 w-6 rounded flex items-center justify-center text-fog hover:text-paper hover:bg-elevated transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -314,7 +314,7 @@ export function GlobalView({ refreshKey, pendingRequests, onSecretsChanged }: Gl
             aria-selected={tab === id}
             onClick={() => setTab(id)}
             className={cn(
-              "h-9 px-3 rounded-md text-sm font-medium flex items-center gap-2 transition-colors duration-[120ms] focus-visible:ring-2 focus-visible:ring-acid-lime/40 focus:outline-none",
+              "h-9 px-3 rounded-md text-sm font-medium flex items-center gap-2 transition-colors duration-[120ms] focus-visible:ring-2 focus-visible:ring-accent/40 focus:outline-none",
               tab === id ? "bg-elevated text-paper" : "text-fog hover:text-mist hover:bg-obsidian",
             )}
           >
@@ -324,7 +324,7 @@ export function GlobalView({ refreshKey, pendingRequests, onSecretsChanged }: Gl
               <span
                 className={cn(
                   "text-xs tabular-nums",
-                  id === "secrets" ? "text-acid-lime" : "text-fog",
+                  id === "secrets" ? "text-accent" : "text-fog",
                 )}
               >
                 {count}

@@ -66,7 +66,7 @@ export function ActivityFeed({ activities }: ActivityFeedProps) {
               <div className="flex items-center justify-between gap-2 min-w-0">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   {isAgent ? (
-                    <div className="w-5 h-5 rounded-md bg-acid-lime/12 text-acid-lime flex items-center justify-center flex-shrink-0">
+                    <div className="w-5 h-5 rounded-md bg-accent/12 text-accent flex items-center justify-center flex-shrink-0">
                       <Bot className="w-3.5 h-3.5" />
                     </div>
                   ) : (
@@ -78,7 +78,7 @@ export function ActivityFeed({ activities }: ActivityFeedProps) {
                   <span
                     className={cn(
                       "truncate font-sans text-xs font-medium",
-                      isAgent ? "text-acid-lime" : "text-paper",
+                      isAgent ? "text-accent" : "text-paper",
                     )}
                   >
                     {actorName}

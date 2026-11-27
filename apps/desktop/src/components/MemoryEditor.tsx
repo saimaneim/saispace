@@ -22,7 +22,7 @@ export interface MemoryEditorProps {
 }
 
 const inputClass =
-  "h-9 px-3 text-sm bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 transition-colors duration-[120ms]";
+  "h-9 px-3 text-sm bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 transition-colors duration-[120ms]";
 
 export function MemoryEditor({ memory, open, onOpenChange, onSaved }: MemoryEditorProps) {
   const [title, setTitle] = useState("");
@@ -135,7 +135,7 @@ export function MemoryEditor({ memory, open, onOpenChange, onSaved }: MemoryEdit
                 onChange={(e) => setContent(e.target.value)}
                 placeholder="Contenido en Markdown o What:/Why:/Where:/Learned:…"
                 aria-label="Contenido"
-                className="w-full h-60 p-3.5 text-sm font-mono leading-relaxed bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 resize-y transition-colors duration-[120ms]"
+                className="w-full h-60 max-h-[45vh] p-3.5 text-sm font-mono leading-relaxed bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 resize-y transition-colors duration-[120ms]"
                 required
               />
             </div>

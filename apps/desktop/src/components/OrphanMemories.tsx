@@ -122,7 +122,7 @@ export function OrphanMemories({ onLinked }: OrphanMemoriesProps) {
                 >
                   <SelectTrigger
                     aria-label={`Vincular ${group.project_name} a un proyecto`}
-                    className="h-8 w-44 text-xs"
+                    className="h-8 w-44 min-w-0 text-xs"
                   >
                     <SelectValue placeholder="Vincular a…" />
                   </SelectTrigger>

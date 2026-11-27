@@ -33,12 +33,18 @@ function DuplicateCard({ memory, onDelete }: { memory: Memory; onDelete: () => v
             <span className="tabular-nums truncate">{formatTimeAgo(memory.updated_at)}</span>
           </div>
         </div>
-        <Button variant="destructive" size="sm" onClick={onDelete} className="h-7 px-2.5 text-xs">
-          <Trash2 className="w-3.5 h-3.5 mr-1" />
-          Borrar esta
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onDelete}
+          aria-label="Eliminar memoria"
+          title="Eliminar esta memoria"
+          className="h-7 w-7 text-fog hover:text-coral-red hover:bg-coral-red/10 flex-shrink-0"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
         </Button>
       </div>
-      <div className="h-36 overflow-y-auto overscroll-contain rounded-md bg-void/60 p-3 text-xs text-mist">
+      <div className="h-36 min-w-0 overflow-y-auto overscroll-contain rounded-md bg-void/60 p-3 text-xs text-mist">
         {memory.content.trim() ? (
           <Markdown content={memory.content} />
         ) : (
@@ -75,15 +81,19 @@ export function DuplicatesPanel({
   return (
     <section className="flex-1 min-w-0 flex flex-col px-7 pt-5 pb-6">
       <div className="flex items-center justify-between gap-3 pb-4 flex-shrink-0">
-        <div className="min-w-0">
-          <h2 className="text-lg font-semibold text-paper tracking-tight">Posibles duplicados</h2>
-          <p className="text-xs text-fog tabular-nums">
-            {pairs.length} {pairs.length === 1 ? "par detectado" : "pares detectados"}
-          </p>
+        <div className="flex items-baseline gap-2.5 min-w-0">
+          <h2 className="text-lg font-semibold text-paper tracking-tight">Duplicados</h2>
+          <span className="text-xs text-fog tabular-nums">{pairs.length}</span>
         </div>
-        <Button variant="secondary" size="sm" onClick={onClose}>
-          <X className="w-3.5 h-3.5 mr-1.5" />
-          Cerrar
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          aria-label="Cerrar"
+          title="Cerrar"
+          className="h-8 w-8 text-fog hover:text-paper hover:bg-obsidian"
+        >
+          <X className="w-4 h-4" />
         </Button>
       </div>
 
@@ -99,9 +109,9 @@ export function DuplicatesPanel({
       {pairs.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-2.5 text-center bg-carbon rounded-xl p-6">
           <CopyCheck className="w-7 h-7 text-ash" />
-          <p className="text-sm font-medium text-paper">Sin duplicados pendientes</p>
+          <p className="text-sm font-medium text-paper">Sin duplicados</p>
           <Button variant="secondary" size="sm" onClick={onClose}>
-            Volver a memorias
+            Volver
           </Button>
         </div>
       ) : (
@@ -111,14 +121,14 @@ export function DuplicatesPanel({
               key={`${pair.a.id}:${pair.b.id}`}
               className="bg-carbon rounded-xl p-4 flex flex-col gap-3"
             >
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 xl:grid-cols-[repeat(2,minmax(0,1fr))] gap-3">
                 <DuplicateCard memory={pair.a} onDelete={() => setPendingDelete(pair.a)} />
                 <DuplicateCard memory={pair.b} onDelete={() => setPendingDelete(pair.b)} />
               </div>
 
               <div className="flex justify-end">
                 <Button variant="secondary" size="sm" onClick={() => onDismissPair(pair)}>
-                  No son duplicados
+                  Descartar
                 </Button>
               </div>
             </div>

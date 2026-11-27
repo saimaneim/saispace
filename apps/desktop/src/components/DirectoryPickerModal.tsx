@@ -21,30 +21,34 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
   const [search, setSearch] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const currentPathRef = useRef<string | undefined>(undefined);
+  const fetchSeq = useRef(0);
 
-  const fetchDirectory = useCallback(
-    async (path?: string) => {
-      setLoading(true);
-      setErrorMessage(null);
-      try {
-        const res = await api.listDirectory(path, showHidden);
-        setListing(res);
-        setSelectedIndex(0);
-        setSearch("");
-      } catch (err) {
-        setErrorMessage(formatError(err));
-      } finally {
-        setLoading(false);
-      }
-    },
-    [showHidden],
-  );
+  const fetchDirectory = useCallback(async (path: string | undefined, hidden: boolean) => {
+    const seq = ++fetchSeq.current;
+    setLoading(true);
+    setErrorMessage(null);
+    try {
+      const res = await api.listDirectory(path, hidden);
+      if (seq !== fetchSeq.current) return;
+      currentPathRef.current = res.current_path;
+      setListing(res);
+      setSelectedIndex(0);
+      setSearch("");
+    } catch (err) {
+      if (seq === fetchSeq.current) setErrorMessage(formatError(err));
+    } finally {
+      if (seq === fetchSeq.current) setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    if (isOpen) {
-      fetchDirectory();
+    if (!isOpen) {
+      currentPathRef.current = undefined;
+      return;
     }
-  }, [isOpen, fetchDirectory]);
+    void fetchDirectory(currentPathRef.current, showHidden);
+  }, [isOpen, showHidden, fetchDirectory]);
 
   const filteredEntries = (listing?.entries ?? []).filter((e) =>
     e.name.toLowerCase().includes(search.toLowerCase()),
@@ -52,31 +56,37 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
 
   const selectedEntry = filteredEntries[selectedIndex] ?? null;
 
-  const handleEnterDirectory = (path: string) => {
-    fetchDirectory(path);
-  };
+  const handleEnterDirectory = useCallback(
+    (path: string) => {
+      void fetchDirectory(path, showHidden);
+    },
+    [fetchDirectory, showHidden],
+  );
 
-  const handleGoBack = () => {
+  const handleGoBack = useCallback(() => {
     if (listing?.parent_path) {
-      fetchDirectory(listing.parent_path);
+      void fetchDirectory(listing.parent_path, showHidden);
     }
-  };
+  }, [listing?.parent_path, fetchDirectory, showHidden]);
 
-  const handleConfirm = async (explicitPath?: string) => {
-    if (!listing || isSubmitting) return;
-    const targetPath = explicitPath || selectedEntry?.path || listing.current_path;
+  const handleConfirm = useCallback(
+    async (explicitPath?: string) => {
+      if (!listing || isSubmitting) return;
+      const targetPath = explicitPath || selectedEntry?.path || listing.current_path;
 
-    setIsSubmitting(true);
-    setErrorMessage(null);
-    try {
-      await onSelect(targetPath);
-      onClose();
-    } catch (err) {
-      setErrorMessage(formatError(err));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+      setIsSubmitting(true);
+      setErrorMessage(null);
+      try {
+        await onSelect(targetPath);
+        onClose();
+      } catch (err) {
+        setErrorMessage(formatError(err));
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [listing, isSubmitting, selectedEntry?.path, onSelect, onClose],
+  );
 
   useEffect(() => {
     if (!isOpen) return;
@@ -84,7 +94,7 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         e.preventDefault();
-        handleConfirm();
+        void handleConfirm();
         return;
       }
 
@@ -95,11 +105,13 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
         e.preventDefault();
         setSelectedIndex((prev) => (prev > 0 ? prev - 1 : 0));
       } else if (e.key === "Enter" && document.activeElement !== searchInputRef.current) {
+        const target = e.target as HTMLElement | null;
+        if (target?.closest("button, a")) return;
         e.preventDefault();
         if (selectedEntry) {
           handleEnterDirectory(selectedEntry.path);
         } else {
-          handleConfirm();
+          void handleConfirm();
         }
       } else if (
         e.key === "Backspace" &&
@@ -113,11 +125,19 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, filteredEntries, selectedIndex, search, selectedEntry, listing]);
+  }, [
+    isOpen,
+    filteredEntries.length,
+    search,
+    selectedEntry,
+    handleConfirm,
+    handleEnterDirectory,
+    handleGoBack,
+  ]);
 
   useEffect(() => {
     if (listRef.current) {
-      const activeEl = listRef.current.children[selectedIndex] as HTMLElement;
+      const activeEl = listRef.current.children[selectedIndex] as HTMLElement | undefined;
       if (activeEl) {
         activeEl.scrollIntoView({ block: "nearest" });
       }
@@ -136,14 +156,15 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
           Explora carpetas locales para añadir un proyecto a saispace.
         </DialogDescription>
 
-        <div className="flex items-center justify-between p-4 bg-obsidian">
+        <div className="flex items-center justify-between px-4 py-3.5 bg-obsidian">
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <button
               type="button"
               onClick={handleGoBack}
               disabled={!listing?.parent_path}
               aria-label="Volver al directorio anterior"
-              className="p-1.5 rounded-md text-fog hover:text-paper hover:bg-elevated disabled:opacity-20 focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 transition-colors duration-[120ms]"
+              title="Subir una carpeta"
+              className="p-1.5 rounded-md text-fog hover:text-paper hover:bg-elevated disabled:opacity-20 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 transition-colors duration-[120ms]"
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
@@ -156,16 +177,15 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
             </span>
           </div>
 
-          <div className="flex items-center gap-2 flex-shrink-0 mr-8">
+          <div className="flex items-center gap-2 flex-shrink-0 mr-9">
             <button
               type="button"
               onClick={() => setShowHidden((prev) => !prev)}
               aria-label={showHidden ? "Ocultar carpetas ocultas" : "Mostrar carpetas ocultas"}
+              title={showHidden ? "Ocultar ocultos" : "Mostrar ocultos"}
               className={cn(
-                "flex items-center gap-1.5 px-2.5 h-8 rounded-md text-xs font-sans transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
-                showHidden
-                  ? "bg-pulse-green/15 text-pulse-green"
-                  : "bg-elevated text-fog hover:text-paper",
+                "flex items-center gap-1.5 px-2.5 h-7 rounded-md text-xs font-sans transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
+                showHidden ? "bg-accent/15 text-accent" : "bg-elevated text-fog hover:text-paper",
               )}
             >
               {showHidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
@@ -191,10 +211,13 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
               ref={searchInputRef}
               type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setSelectedIndex(0);
+              }}
               placeholder="Filtrar carpetas…"
               aria-label="Filtrar carpetas"
-              className="w-full h-9 pl-9 pr-3 text-sm bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 transition-colors duration-[120ms]"
+              className="w-full h-9 pl-9 pr-3 text-sm bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 transition-colors duration-[120ms]"
             />
           </div>
         </div>
@@ -207,8 +230,8 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
         >
           {loading ? (
             <div className="flex items-center justify-center py-16 text-fog gap-2">
-              <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none text-pulse-green" />
-              <span className="text-sm font-sans text-fog">Leyendo carpetas…</span>
+              <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none text-accent" />
+              <span className="text-sm font-sans text-fog">Leyendo…</span>
             </div>
           ) : filteredEntries.length > 0 ? (
             filteredEntries.map((entry, idx) => {
@@ -221,7 +244,7 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
                   onClick={() => setSelectedIndex(idx)}
                   onDoubleClick={() => handleEnterDirectory(entry.path)}
                   className={cn(
-                    "group relative flex items-center justify-between pl-3.5 pr-3 h-10 rounded-md cursor-pointer text-sm transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+                    "group relative flex items-center justify-between pl-3.5 pr-3 h-10 rounded-md cursor-pointer text-sm transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
                     isSelected
                       ? "bg-elevated text-paper font-medium"
                       : "text-mist hover:bg-obsidian hover:text-paper",
@@ -229,7 +252,7 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
                 >
                   {isSelected && (
                     <span
-                      className="absolute left-1 top-2.5 bottom-2.5 w-0.5 rounded-full bg-acid-lime"
+                      className="absolute left-1 top-2.5 bottom-2.5 w-0.5 rounded-full bg-accent"
                       aria-hidden="true"
                     />
                   )}
@@ -242,10 +265,10 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleConfirm(entry.path);
+                      void handleConfirm(entry.path);
                     }}
                     aria-label={`Añadir ${entry.name}`}
-                    className="opacity-0 group-hover:opacity-100 px-2.5 h-7 rounded-md text-xs font-medium bg-obsidian hover:bg-acid-lime hover:text-void text-pulse-green transition-[opacity,background-color,color] duration-[120ms] focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+                    className="opacity-0 group-hover:opacity-100 px-2.5 h-7 rounded-md text-xs font-medium bg-obsidian hover:bg-accent hover:text-accent-ink text-accent transition-[opacity,background-color,color] duration-[120ms] focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                   >
                     + Añadir
                   </button>
@@ -253,9 +276,7 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
               );
             })
           ) : (
-            <div className="py-16 text-center text-sm text-fog font-sans">
-              Sin carpetas en esta ubicación
-            </div>
+            <div className="py-16 text-center text-sm text-fog font-sans">Sin carpetas</div>
           )}
         </div>
 
@@ -266,9 +287,9 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
             {selectedEntry && (
               <button
                 type="button"
-                onClick={() => handleConfirm(listing?.current_path)}
+                onClick={() => void handleConfirm(listing?.current_path)}
                 disabled={isSubmitting || !listing}
-                className="text-xs text-fog hover:text-paper transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 rounded-md px-2.5 py-1.5"
+                className="text-xs text-fog hover:text-paper transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 rounded-md px-2.5 py-1.5"
                 title="Añadir la carpeta abierta actualmente"
               >
                 Añadir actual
@@ -277,11 +298,11 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
 
             <button
               type="button"
-              onClick={() => handleConfirm()}
+              onClick={() => void handleConfirm()}
               disabled={isSubmitting || !listing}
-              className="h-9 px-4 rounded-md bg-acid-lime text-void hover:brightness-105 text-sm font-medium transition-[filter] duration-[120ms] disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 flex items-center gap-2"
+              className="h-9 px-4 rounded-md bg-accent text-accent-ink hover:brightness-105 text-sm font-medium transition-[filter] duration-[120ms] disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 flex items-center gap-2"
             >
-              <FolderPlus className="w-4 h-4 text-void" />
+              <FolderPlus className="w-4 h-4" />
               <span className="truncate max-w-48">Añadir &ldquo;{targetLabel}&rdquo;</span>
             </button>
           </div>

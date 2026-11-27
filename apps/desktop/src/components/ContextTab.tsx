@@ -1,13 +1,18 @@
 import {
   BookOpen,
+  Check,
   ChevronRight,
   Compass,
+  Eye,
   FileCode,
   FilePlus,
   FileText,
   Folder,
   Link2,
+  Loader2,
   type LucideIcon,
+  Pencil,
+  Save,
   Scale,
   Search,
   ShieldCheck,
@@ -86,7 +91,7 @@ function CategorySection({
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="w-full flex items-center gap-1.5 px-1.5 h-7 rounded-md text-xs font-semibold text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+        className="w-full flex items-center gap-1.5 px-1.5 h-7 rounded-md text-xs font-semibold text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
       >
         <ChevronRight
           className={cn(
@@ -460,7 +465,7 @@ export function ContextTab({ project }: ContextTabProps) {
         title={file.path}
         aria-current={selected ? "true" : undefined}
         className={cn(
-          "relative w-full flex items-center gap-2 pl-3 pr-2.5 h-8 rounded-md text-xs text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+          "relative w-full flex items-center gap-2 pl-3 pr-2.5 h-8 rounded-md text-xs text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
           selected
             ? "bg-elevated text-paper font-medium"
             : "text-mist hover:text-paper hover:bg-obsidian",
@@ -468,7 +473,7 @@ export function ContextTab({ project }: ContextTabProps) {
       >
         {selected && (
           <span
-            className="absolute left-1 top-2 bottom-2 w-0.5 rounded-full bg-acid-lime"
+            className="absolute left-1 top-2 bottom-2 w-0.5 rounded-full bg-accent"
             aria-hidden="true"
           />
         )}
@@ -490,14 +495,14 @@ export function ContextTab({ project }: ContextTabProps) {
               onChange={(e) => setSearchFilter(e.target.value)}
               placeholder="Filtrar contexto…"
               aria-label="Filtrar contexto"
-              className="w-full h-8 pl-8 pr-7 text-xs bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 transition-colors duration-[120ms]"
+              className="w-full h-8 pl-8 pr-7 text-xs bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 transition-colors duration-[120ms]"
             />
             {searchFilter && (
               <button
                 type="button"
                 onClick={() => setSearchFilter("")}
                 aria-label="Limpiar filtro"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 rounded flex items-center justify-center text-fog hover:text-paper hover:bg-elevated transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 rounded flex items-center justify-center text-fog hover:text-paper hover:bg-elevated transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -506,7 +511,7 @@ export function ContextTab({ project }: ContextTabProps) {
         </div>
 
         <nav
-          className="flex-1 overflow-y-auto px-3 pb-3 space-y-1"
+          className="flex-1 min-h-0 overflow-y-auto px-3 pb-3 space-y-1"
           aria-label="Ficheros de contexto"
         >
           {categorized.guidelines.length > 0 && (
@@ -541,7 +546,7 @@ export function ContextTab({ project }: ContextTabProps) {
                         onClick={() => toggleSkill(skill.id)}
                         aria-expanded={open}
                         title={skill.baseDir}
-                        className="w-full flex items-center gap-1.5 px-2 h-7 rounded-md text-xs text-mist hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+                        className="w-full flex items-center gap-1.5 px-2 h-7 rounded-md text-xs text-mist hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                       >
                         <ChevronRight
                           className={cn(
@@ -643,22 +648,26 @@ export function ContextTab({ project }: ContextTabProps) {
                 />
               )}
             </div>
-            <div className="flex items-center gap-2 min-w-0 mt-0.5">
-              <p className="text-xs text-fog font-mono truncate">{currentSubtitle}</p>
-              {selectedFile?.link &&
-                (linkTarget ? (
-                  <button
-                    type="button"
-                    onClick={() => selectItem(linkTarget.path)}
-                    title={linkHint(selectedFile)}
-                    className="rounded-md transition-colors duration-[120ms] hover:[&>span]:text-paper focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
-                  >
+            {(currentSubtitle !== currentLabel || selectedFile?.link) && (
+              <div className="flex items-center gap-2 min-w-0 mt-0.5">
+                {currentSubtitle !== currentLabel && (
+                  <p className="text-xs text-fog font-mono truncate">{currentSubtitle}</p>
+                )}
+                {selectedFile?.link &&
+                  (linkTarget ? (
+                    <button
+                      type="button"
+                      onClick={() => selectItem(linkTarget.path)}
+                      title={linkHint(selectedFile)}
+                      className="rounded-md transition-colors duration-[120ms] hover:[&>span]:text-paper focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                    >
+                      <LinkPill target={selectedFile.link.target} />
+                    </button>
+                  ) : (
                     <LinkPill target={selectedFile.link.target} />
-                  </button>
-                ) : (
-                  <LinkPill target={selectedFile.link.target} />
-                ))}
-            </div>
+                  ))}
+              </div>
+            )}
           </div>
 
           <div
@@ -666,21 +675,23 @@ export function ContextTab({ project }: ContextTabProps) {
             role="tablist"
           >
             {[
-              { id: false, label: "Editar" },
-              { id: true, label: "Vista previa" },
-            ].map(({ id, label }) => (
+              { id: false, label: "Editar", icon: Pencil },
+              { id: true, label: "Vista previa", icon: Eye },
+            ].map(({ id, label, icon: Icon }) => (
               <button
                 key={label}
                 type="button"
                 role="tab"
                 aria-selected={isPreview === id}
+                aria-label={label}
+                title={label}
                 onClick={() => setIsPreview(id)}
                 className={cn(
-                  "h-7 px-3 rounded-md text-xs font-medium transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+                  "h-7 w-8 rounded-md flex items-center justify-center transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
                   isPreview === id ? "bg-elevated text-paper" : "text-fog hover:text-mist",
                 )}
               >
-                {label}
+                <Icon className="w-3.5 h-3.5" />
               </button>
             ))}
           </div>
@@ -689,11 +700,18 @@ export function ContextTab({ project }: ContextTabProps) {
             onClick={handleSave}
             disabled={!hasChanges || isSaving || loadFailed}
             variant={hasChanges ? "default" : "secondary"}
-            size="sm"
+            size="icon"
+            aria-label={hasSaved ? "Guardado" : isSaving ? "Guardando" : "Guardar"}
             title="Guardar (Ctrl+S)"
-            className="flex-shrink-0 min-w-24"
+            className="flex-shrink-0"
           >
-            {hasSaved ? "Guardado" : isSaving ? "Guardando…" : "Guardar"}
+            {isSaving ? (
+              <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none" />
+            ) : hasSaved ? (
+              <Check className="w-4 h-4 text-pulse-green" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
           </Button>
         </div>
 
@@ -743,7 +761,7 @@ export function ContextTab({ project }: ContextTabProps) {
               value={content}
               onChange={(e) => setContent(e.target.value)}
               placeholder="Escribe aquí las directrices y el contexto para los agentes…"
-              className="w-full h-full min-h-96 font-mono text-sm leading-relaxed p-5 bg-carbon rounded-xl text-paper placeholder:text-fog resize-none focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 transition-colors duration-[120ms]"
+              className="w-full h-full min-h-96 font-mono text-sm leading-relaxed p-5 bg-carbon rounded-xl text-paper placeholder:text-fog resize-none focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 transition-colors duration-[120ms]"
             />
           )}
         </div>

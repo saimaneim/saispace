@@ -1,5 +1,5 @@
 import { ExternalLink, Search, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, formatError } from "../lib/api";
 import type { Project, Technology } from "../lib/types";
 import { cn } from "../lib/utils";
@@ -121,7 +121,7 @@ function TechRow({
       onClick={() => api.openUrl(tech.docs_url).catch((e) => onError(formatError(e)))}
       title={`Abrir documentación de ${tech.name} ${tech.version}`}
       className={cn(
-        "group w-full flex items-center gap-2.5 px-2.5 rounded-md text-left hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 min-w-0",
+        "group w-full flex items-center gap-2.5 px-2.5 rounded-md text-left hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 min-w-0",
         nested ? "h-8" : "h-10",
       )}
     >
@@ -152,15 +152,18 @@ export function TechnologiesTab({ project }: TechnologiesTabProps) {
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [syncCount, setSyncCount] = useState(0);
+  const syncSeq = useRef(0);
 
   const sync = useCallback(async () => {
+    const seq = ++syncSeq.current;
     try {
       const synced = await api.syncProjectStack(project.id);
+      if (seq !== syncSeq.current) return;
       setItems(synced);
       setSyncCount((n) => n + 1);
       setError(null);
     } catch (err) {
-      setError(formatError(err));
+      if (seq === syncSeq.current) setError(formatError(err));
     }
   }, [project.id]);
 
@@ -199,12 +202,9 @@ export function TechnologiesTab({ project }: TechnologiesTabProps) {
   }, [items, query]);
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 px-6 pb-6 gap-4">
-      <div className="flex items-center gap-3 min-h-9">
-        <div className="flex-1 min-w-0">
-          <h2 className="text-sm font-semibold text-paper">Stack y reglas</h2>
-        </div>
-        {items.length > 12 && (
+    <div className="flex-1 flex flex-col min-h-0 px-6 pt-2 pb-6 gap-4">
+      {items.length > 12 && (
+        <div className="flex items-center justify-end">
           <div className="relative w-56">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-fog pointer-events-none" />
             <input
@@ -213,21 +213,21 @@ export function TechnologiesTab({ project }: TechnologiesTabProps) {
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Filtrar…"
               aria-label="Filtrar tecnologías"
-              className="w-full h-9 pl-8 pr-7 text-sm bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 transition-colors duration-[120ms]"
+              className="w-full h-9 pl-8 pr-7 text-sm bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 transition-colors duration-[120ms]"
             />
             {query && (
               <button
                 type="button"
                 onClick={() => setQuery("")}
                 aria-label="Limpiar filtro"
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 h-6 w-6 rounded flex items-center justify-center text-fog hover:text-paper hover:bg-elevated transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 h-6 w-6 rounded flex items-center justify-center text-fog hover:text-paper hover:bg-elevated transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {error && (
         <div className="px-3 py-2 rounded-md bg-coral-red/10 text-coral-red text-sm" role="alert">
@@ -252,8 +252,9 @@ export function TechnologiesTab({ project }: TechnologiesTabProps) {
           const singles = families.filter((f) => f.members.length === 1).map((f) => f.members[0]);
           return (
             <section key={ecosystem} className="space-y-2">
-              <h3 className="text-xs font-semibold text-fog px-1 tabular-nums">
-                {ECOSYSTEM_LABELS[ecosystem]} · {list.length} paquetes
+              <h3 className="flex items-center gap-2 text-xs font-semibold text-fog px-1 tabular-nums">
+                <span>{ECOSYSTEM_LABELS[ecosystem]}</span>
+                <span className="text-ash font-normal">{list.length}</span>
               </h3>
               {multi.length > 0 && (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-2.5 items-start">
@@ -280,13 +281,15 @@ export function TechnologiesTab({ project }: TechnologiesTabProps) {
                 </div>
               )}
               {singles.length > 0 && (
-                <ul className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-1">
-                  {singles.map((tech) => (
-                    <li key={tech.id}>
-                      <TechRow tech={tech} onError={setError} />
-                    </li>
-                  ))}
-                </ul>
+                <div className="bg-carbon rounded-xl p-1.5">
+                  <ul className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-0.5">
+                    {singles.map((tech) => (
+                      <li key={tech.id}>
+                        <TechRow tech={tech} onError={setError} />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </section>
           );

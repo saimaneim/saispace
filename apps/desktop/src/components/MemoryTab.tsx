@@ -1,8 +1,11 @@
 import {
   Brain,
   ChevronRight,
+  Clock,
   Copy,
   Eye,
+  Folder,
+  Hash,
   History,
   Pencil,
   Pin,
@@ -11,7 +14,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, formatError } from "../lib/api";
 import type { DuplicatePair, Memory, Project, StaleReport } from "../lib/types";
 import { cn, formatTimeAgo } from "../lib/utils";
@@ -37,6 +40,7 @@ export interface MemoryTabProps {
   project: Project | null;
   refreshKey?: string | null;
   focusId?: string | null;
+  focusSeq?: number;
 }
 
 export const KIND_LABELS = MEMORY_KIND_LABELS;
@@ -52,7 +56,7 @@ function formatFullDate(isoString: string): string {
   }
 }
 
-export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
+export function MemoryTab({ project, refreshKey, focusId, focusSeq }: MemoryTabProps) {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(refreshKey !== undefined);
   const [duplicates, setDuplicates] = useState<DuplicatePair[]>([]);
@@ -67,6 +71,8 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
   const [pendingDelete, setPendingDelete] = useState<Memory | null>(null);
   const [editingMemory, setEditingMemory] = useState<Memory | null>(null);
   const [agentDialogOpen, setAgentDialogOpen] = useState(false);
+  const memoriesRef = useRef(memories);
+  memoriesRef.current = memories;
 
   const load = useCallback(async () => {
     try {
@@ -90,11 +96,15 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
   }, [load, refreshKey]);
 
   useEffect(() => {
-    if (focusId) setSelectedId(focusId);
-  }, [focusId]);
+    if (!focusId) return;
+    void focusSeq;
+    setSelectedId(focusId);
+    setShowDuplicates(false);
+    setShowStale(false);
+    setScopeFilter("all");
+    setFilter("");
 
-  useEffect(() => {
-    if (!focusId || memories.length === 0 || memories.some((m) => m.id === focusId)) return;
+    if (memoriesRef.current.some((m) => m.id === focusId)) return;
     let cancelled = false;
     api
       .getMemory(focusId)
@@ -107,7 +117,7 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
     return () => {
       cancelled = true;
     };
-  }, [focusId, memories]);
+  }, [focusId, focusSeq]);
 
   useEffect(() => {
     setShowStale(false);
@@ -143,14 +153,16 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
     return duplicates.filter((pair) => !dismissedPairKeys.has(`${pair.a.id}:${pair.b.id}`));
   }, [duplicates, dismissedPairKeys]);
 
-  const staleCount = staleReport.stale.length;
+  const staleCount = staleReport.stale.length + staleReport.surplus_sessions.length;
+  const isFiltering = filter.trim().length > 0;
 
-  const selected =
-    memories.find((m) => m.id === selectedId) ??
-    staleReport.stale.find((m) => m.id === selectedId) ??
-    staleReport.surplus_sessions.find((m) => m.id === selectedId) ??
-    visible[0] ??
-    null;
+  const selected = isFiltering
+    ? (visible.find((m) => m.id === selectedId) ?? visible[0] ?? null)
+    : (memories.find((m) => m.id === selectedId) ??
+      staleReport.stale.find((m) => m.id === selectedId) ??
+      staleReport.surplus_sessions.find((m) => m.id === selectedId) ??
+      visible[0] ??
+      null);
 
   const openMemory = async (id: string) => {
     if (!memories.some((m) => m.id === id)) {
@@ -164,6 +176,7 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
     }
     setShowStale(false);
     setShowDuplicates(false);
+    setScopeFilter("all");
     setSelectedId(id);
   };
 
@@ -194,7 +207,7 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
         <aside className="w-80 flex-shrink-0 bg-carbon flex flex-col min-h-0 p-3 gap-2">
           <div className="h-7 flex items-center justify-between px-1">
             <div className="h-3 w-16 rounded bg-obsidian" />
-            <div className="h-6 w-24 rounded-md bg-obsidian" />
+            <div className="h-7 w-7 rounded-md bg-obsidian" />
           </div>
           <div className="h-9 rounded-md bg-obsidian" />
           <div className="space-y-1.5 pt-1">
@@ -204,15 +217,15 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
           </div>
         </aside>
         <section className="flex-1 min-w-0 px-7 pt-5 pb-7 space-y-4">
-          <div className="h-6 w-28 rounded-md bg-carbon" />
           <div className="h-7 w-72 rounded-md bg-carbon" />
+          <div className="h-5 w-44 rounded-md bg-carbon" />
           <div className="h-44 max-w-[76ch] rounded-xl bg-carbon" />
         </section>
       </div>
     );
   }
 
-  if (memories.length === 0) {
+  if (memories.length === 0 && scopeFilter !== "orphans") {
     return (
       <div className="flex-1 flex flex-col min-h-0">
         <div className="flex-1 flex flex-col items-center justify-center gap-2.5 text-center px-6">
@@ -221,19 +234,24 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
           </div>
           <p className="text-sm font-medium text-paper">Sin memorias</p>
           <p className="text-xs text-fog max-w-xs leading-relaxed">
-            Se guardan con <code className="font-mono text-mist">save_memory</code> o{" "}
-            <code className="font-mono text-mist">sai memory save</code>.
+            <code className="font-mono text-mist">save_memory</code> /{" "}
+            <code className="font-mono text-mist">sai memory save</code>
           </p>
           <Button
             variant="secondary"
-            size="sm"
+            size="icon"
             onClick={() => setAgentDialogOpen(true)}
-            className="mt-1 gap-1.5 text-xs"
+            title="Vista del agente"
+            aria-label="Vista del agente"
+            className="mt-1"
           >
-            <Eye className="w-3.5 h-3.5" />
-            Vista del agente
+            <Eye className="w-4 h-4" />
           </Button>
-          {error && <p className="text-xs text-coral-red">{error}</p>}
+          {error && (
+            <p className="text-xs text-coral-red" role="alert">
+              {error}
+            </p>
+          )}
           <AgentContextDialog
             open={agentDialogOpen}
             onOpenChange={setAgentDialogOpen}
@@ -253,15 +271,15 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
               <span className="text-xs font-medium text-fog tabular-nums">
                 {visible.length} {visible.length === 1 ? "memoria" : "memorias"}
               </span>
-              <Button
-                variant="ghost"
-                size="sm"
+              <button
+                type="button"
                 onClick={() => setAgentDialogOpen(true)}
-                className="h-7 px-2 text-xs gap-1.5 text-fog hover:text-paper hover:bg-obsidian"
+                title="Vista del agente"
+                aria-label="Vista del agente"
+                className="h-7 w-7 rounded-md flex items-center justify-center text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
               >
-                <Eye className="w-3.5 h-3.5" />
-                Vista del agente
-              </Button>
+                <Eye className="w-4 h-4" />
+              </button>
             </div>
 
             {scopeFilter !== "orphans" && (
@@ -270,16 +288,17 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
                 <input
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
-                  placeholder="Filtrar memorias…"
+                  placeholder="Filtrar…"
                   aria-label="Filtrar memorias"
-                  className="w-full h-9 pl-8 pr-8 text-sm bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 transition-colors duration-[120ms]"
+                  className="w-full h-9 pl-8 pr-8 text-sm bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 transition-colors duration-[120ms]"
                 />
                 {filter && (
                   <button
                     type="button"
                     onClick={() => setFilter("")}
                     aria-label="Limpiar filtro"
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2 h-6 w-6 rounded flex items-center justify-center text-fog hover:text-paper hover:bg-elevated transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+                    title="Limpiar filtro"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 h-6 w-6 rounded flex items-center justify-center text-fog hover:text-paper hover:bg-elevated transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -293,7 +312,7 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
                   type="button"
                   onClick={() => setScopeFilter("all")}
                   className={cn(
-                    "flex-1 h-7 text-xs rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+                    "flex-1 h-7 text-xs rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
                     scopeFilter === "all"
                       ? "bg-elevated text-paper font-medium"
                       : "text-fog hover:text-mist",
@@ -305,7 +324,7 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
                   type="button"
                   onClick={() => setScopeFilter("global")}
                   className={cn(
-                    "flex-1 h-7 text-xs rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+                    "flex-1 h-7 text-xs rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
                     scopeFilter === "global"
                       ? "bg-elevated text-paper font-medium"
                       : "text-fog hover:text-mist",
@@ -317,7 +336,7 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
                   type="button"
                   onClick={() => setScopeFilter("orphans")}
                   className={cn(
-                    "flex-1 h-7 text-xs rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+                    "flex-1 h-7 text-xs rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
                     scopeFilter === "orphans"
                       ? "bg-elevated text-paper font-medium"
                       : "text-fog hover:text-mist",
@@ -329,7 +348,7 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
             )}
 
             {scopeFilter !== "orphans" && (activeDuplicates.length > 0 || staleCount > 0) && (
-              <div className="space-y-1">
+              <div className="flex items-center gap-1.5">
                 {activeDuplicates.length > 0 && (
                   <button
                     type="button"
@@ -337,18 +356,17 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
                       setShowDuplicates(true);
                       setShowStale(false);
                     }}
+                    title="Posibles duplicados"
                     className={cn(
-                      "w-full flex items-center gap-2 px-2.5 h-8 text-xs font-medium rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+                      "flex-1 flex items-center gap-1.5 px-2.5 h-8 text-xs font-medium rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 min-w-0",
                       showDuplicates
                         ? "bg-status-amber/20 text-status-amber"
                         : "bg-status-amber/10 text-status-amber hover:bg-status-amber/15",
                     )}
                   >
                     <Copy className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span className="truncate flex-1 text-left">
-                      {activeDuplicates.length === 1
-                        ? "1 posible duplicado"
-                        : `${activeDuplicates.length} posibles duplicados`}
+                    <span className="truncate tabular-nums flex-1 text-left">
+                      {activeDuplicates.length} dup.
                     </span>
                     <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 opacity-75" />
                   </button>
@@ -361,16 +379,17 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
                       setShowStale(true);
                       setShowDuplicates(false);
                     }}
+                    title="Memorias para revisar"
                     className={cn(
-                      "w-full flex items-center gap-2 px-2.5 h-8 text-xs font-medium rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+                      "flex-1 flex items-center gap-1.5 px-2.5 h-8 text-xs font-medium rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 min-w-0",
                       showStale
                         ? "bg-status-amber/20 text-status-amber"
                         : "bg-status-amber/10 text-status-amber hover:bg-status-amber/15",
                     )}
                   >
                     <History className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span className="truncate flex-1 text-left">
-                      {staleCount === 1 ? "1 para revisar" : `${staleCount} para revisar`}
+                    <span className="truncate tabular-nums flex-1 text-left">
+                      {staleCount} rev.
                     </span>
                     <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 opacity-75" />
                   </button>
@@ -380,7 +399,7 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
           </div>
 
           {scopeFilter !== "orphans" && (
-            <ul className="flex-1 overflow-y-auto px-2 pb-3 space-y-0.5">
+            <ul className="flex-1 min-h-0 overflow-y-auto px-2 pb-3 space-y-0.5">
               {visible.map((m) => {
                 const isSelected = !showDuplicates && !showStale && selected?.id === m.id;
                 return (
@@ -394,18 +413,18 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
                       }}
                       aria-current={isSelected ? "true" : undefined}
                       className={cn(
-                        "group relative w-full text-left pl-3 pr-2.5 py-2.5 rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+                        "group relative w-full text-left pl-3 pr-2.5 py-2.5 rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
                         isSelected ? "bg-elevated" : "hover:bg-obsidian",
                       )}
                     >
                       {isSelected && (
                         <span
-                          className="absolute left-1 top-2.5 bottom-2.5 w-0.5 rounded-full bg-acid-lime"
+                          className="absolute left-1 top-2.5 bottom-2.5 w-0.5 rounded-full bg-accent"
                           aria-hidden="true"
                         />
                       )}
                       <div className="flex items-center gap-1.5 min-w-0">
-                        {m.pinned && <Pin className="w-3.5 h-3.5 text-acid-lime flex-shrink-0" />}
+                        {m.pinned && <Pin className="w-3.5 h-3.5 text-accent flex-shrink-0" />}
                         <span
                           className={cn(
                             "block text-sm truncate font-medium flex-1 min-w-0",
@@ -424,17 +443,14 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
                             )}
                             aria-hidden="true"
                           />
-                          <span className="truncate text-xs text-fog tabular-nums">
+                          <span className="truncate text-xs text-fog">
                             {KIND_LABELS[m.kind]}
                             {!project ? ` · ${m.project_name || "Global"}` : ""}
-                            {` · ${formatTimeAgo(m.updated_at)}`}
                           </span>
                         </div>
-                        {project && m.topic_key && (
-                          <span className="truncate font-mono text-[11px] text-ash max-w-[110px] flex-shrink-0">
-                            {m.topic_key}
-                          </span>
-                        )}
+                        <span className="text-[11px] text-ash tabular-nums flex-shrink-0">
+                          {formatTimeAgo(m.updated_at)}
+                        </span>
                       </div>
                     </button>
                   </li>
@@ -451,7 +467,7 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
                       onClick={() => setFilter("")}
                       className="h-7 text-xs"
                     >
-                      Limpiar filtro
+                      Limpiar
                     </Button>
                   )}
                 </li>
@@ -460,154 +476,153 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
           )}
         </aside>
 
-        {scopeFilter === "orphans" ? (
-          <OrphanMemories onLinked={load} />
-        ) : showStale ? (
-          <StalePanel
-            report={staleReport}
-            onOpenMemory={(id) => {
-              setSelectedId(id);
-              setShowStale(false);
-            }}
-            onDeleteMemory={async (id) => {
-              await api.deleteMemory(id);
-              await load();
-            }}
-            onClose={() => setShowStale(false)}
-          />
-        ) : showDuplicates ? (
-          <DuplicatesPanel
-            pairs={activeDuplicates}
-            onDeleteMemory={async (id) => {
-              await api.deleteMemory(id);
-              await load();
-            }}
-            onDismissPair={(pair) => {
-              setDismissedPairKeys((prev) => {
-                const next = new Set(prev);
-                next.add(`${pair.a.id}:${pair.b.id}`);
-                return next;
-              });
-            }}
-            onClose={() => setShowDuplicates(false)}
-          />
-        ) : selected ? (
-          <section className="flex-1 min-w-0 flex flex-col bg-void">
-            <header className="px-7 pt-5 pb-4 flex-shrink-0 space-y-2.5 max-w-[82ch]">
-              <div className="flex flex-wrap items-center justify-between gap-3 min-w-0">
-                <div className="flex flex-wrap items-center gap-1.5 text-xs text-fog min-w-0">
+        <div className="flex-1 min-w-0 flex flex-col bg-void min-h-0">
+          {error && (
+            <div
+              className="mx-7 mt-4 max-w-[76ch] px-3 py-2 rounded-md bg-coral-red/10 text-coral-red text-sm flex-shrink-0"
+              role="alert"
+            >
+              {error}
+            </div>
+          )}
+
+          {scopeFilter === "orphans" ? (
+            <OrphanMemories onLinked={load} />
+          ) : showStale ? (
+            <StalePanel
+              report={staleReport}
+              onOpenMemory={(id) => {
+                setSelectedId(id);
+                setShowStale(false);
+              }}
+              onDeleteMemory={async (id) => {
+                await api.deleteMemory(id);
+                await load();
+              }}
+              onClose={() => setShowStale(false)}
+            />
+          ) : showDuplicates ? (
+            <DuplicatesPanel
+              pairs={activeDuplicates}
+              onDeleteMemory={async (id) => {
+                await api.deleteMemory(id);
+                await load();
+              }}
+              onDismissPair={(pair) => {
+                setDismissedPairKeys((prev) => {
+                  const next = new Set(prev);
+                  next.add(`${pair.a.id}:${pair.b.id}`);
+                  return next;
+                });
+              }}
+              onClose={() => setShowDuplicates(false)}
+            />
+          ) : selected ? (
+            <section className="flex-1 min-w-0 flex flex-col min-h-0">
+              <header className="px-7 pt-5 pb-4 flex-shrink-0 space-y-2.5 max-w-[82ch]">
+                <div className="flex items-start justify-between gap-4 min-w-0">
+                  <h2 className="text-lg font-semibold text-paper tracking-tight leading-snug break-words text-pretty min-w-0 flex-1">
+                    {selected.title}
+                  </h2>
+
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setEditingMemory(selected)}
+                      aria-label="Editar"
+                      title="Editar"
+                      className="h-8 w-8 text-fog hover:text-paper hover:bg-obsidian"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => togglePin(selected)}
+                      aria-label={selected.pinned ? "Desfijar" : "Fijar"}
+                      title={selected.pinned ? "Desfijar" : "Fijar"}
+                      className="h-8 w-8 text-fog hover:text-paper hover:bg-obsidian"
+                    >
+                      {selected.pinned ? (
+                        <PinOff className="w-4 h-4 text-accent" />
+                      ) : (
+                        <Pin className="w-4 h-4" />
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setPendingDelete(selected)}
+                      aria-label="Eliminar"
+                      title="Eliminar"
+                      className="h-8 w-8 text-fog hover:text-coral-red hover:bg-coral-red/10"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 text-xs text-fog min-w-0">
                   <MemoryKindBadge kind={selected.kind} />
                   {selected.topic_key && (
-                    <>
-                      <span aria-hidden="true" className="text-ash">
-                        {" · "}
-                      </span>
-                      <span
-                        className="font-mono text-[11.5px] text-mist bg-obsidian px-2 py-0.5 rounded-md truncate max-w-[240px]"
-                        title={selected.topic_key}
-                      >
-                        {selected.topic_key}
-                      </span>
-                    </>
+                    <span
+                      className="inline-flex items-center gap-1 font-mono text-[11.5px] text-mist bg-obsidian px-2 py-0.5 rounded-md truncate max-w-[240px]"
+                      title={selected.topic_key}
+                    >
+                      <Hash className="w-3 h-3 text-ash flex-shrink-0" />
+                      <span className="truncate">{selected.topic_key}</span>
+                    </span>
                   )}
                   {!project && selected.project_name && (
-                    <>
-                      <span aria-hidden="true" className="text-ash">
-                        {" · "}
-                      </span>
-                      <span className="text-mist truncate max-w-[180px]">
-                        {selected.project_name}
-                      </span>
-                    </>
+                    <span className="inline-flex items-center gap-1 text-mist bg-obsidian px-2 py-0.5 rounded-md truncate max-w-[180px]">
+                      <Folder className="w-3 h-3 text-ash flex-shrink-0" />
+                      <span className="truncate">{selected.project_name}</span>
+                    </span>
                   )}
-                  <span aria-hidden="true" className="text-ash">
-                    {" · "}
-                  </span>
                   <span
-                    className="tabular-nums text-fog"
+                    className="inline-flex items-center gap-1 tabular-nums text-fog"
                     title={formatFullDate(selected.updated_at)}
                   >
-                    {formatTimeAgo(selected.updated_at)}
+                    <Clock className="w-3 h-3 text-ash flex-shrink-0" />
+                    <span>{formatTimeAgo(selected.updated_at)}</span>
                   </span>
                   {selected.use_count > 0 && (
-                    <>
-                      <span aria-hidden="true" className="text-ash">
-                        {" · "}
-                      </span>
-                      <span className="tabular-nums text-fog">
-                        {selected.use_count} {selected.use_count === 1 ? "consulta" : "consultas"}
-                      </span>
-                    </>
+                    <span
+                      className="inline-flex items-center gap-1 tabular-nums text-fog"
+                      title={`${selected.use_count} ${selected.use_count === 1 ? "consulta" : "consultas"}`}
+                    >
+                      <Eye className="w-3 h-3 text-ash flex-shrink-0" />
+                      <span>{selected.use_count}</span>
+                    </span>
                   )}
                 </div>
+              </header>
 
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <Button variant="secondary" size="sm" onClick={() => setEditingMemory(selected)}>
-                    <Pencil className="w-3.5 h-3.5 mr-1.5" />
-                    Editar
-                  </Button>
-                  <Button variant="secondary" size="sm" onClick={() => togglePin(selected)}>
-                    {selected.pinned ? (
-                      <>
-                        <PinOff className="w-3.5 h-3.5 mr-1.5 text-acid-lime" />
-                        Desfijar
-                      </>
+              <div className="flex-1 min-h-0 overflow-y-auto px-7 pb-7">
+                <div className="max-w-[76ch] space-y-3">
+                  <div className="bg-carbon rounded-xl px-6 py-5 min-w-0">
+                    {selected.content.trim() ? (
+                      <Markdown content={selected.content} />
                     ) : (
-                      <>
-                        <Pin className="w-3.5 h-3.5 mr-1.5" />
-                        Fijar
-                      </>
+                      <p className="text-xs text-ash">Sin contenido</p>
                     )}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setPendingDelete(selected)}
-                    className="text-fog hover:text-coral-red hover:bg-coral-red/10"
-                  >
-                    <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-                    Eliminar
-                  </Button>
+                  </div>
+                  <MemoryLinks memory={selected} onOpen={openMemory} />
                 </div>
               </div>
-
-              <h2 className="text-lg font-semibold text-paper tracking-tight leading-snug break-words text-pretty">
-                {selected.title}
-              </h2>
-            </header>
-
-            {error && (
-              <div
-                className="mx-7 mb-3 max-w-[76ch] px-3 py-2 rounded-md bg-coral-red/10 text-coral-red text-sm"
-                role="alert"
-              >
-                {error}
-              </div>
-            )}
-
-            <div className="flex-1 min-h-0 overflow-y-auto px-7 pb-7">
-              <div className="max-w-[76ch] space-y-3">
-                <div className="bg-carbon rounded-xl px-6 py-5 min-w-0">
-                  {selected.content.trim() ? (
-                    <Markdown content={selected.content} />
-                  ) : (
-                    <p className="text-xs text-ash">Sin contenido</p>
-                  )}
-                </div>
-                <MemoryLinks memory={selected} onOpen={openMemory} />
-              </div>
+            </section>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-6">
+              <p className="text-sm text-fog">Sin coincidencias</p>
+              {filter && (
+                <Button variant="secondary" size="sm" onClick={() => setFilter("")}>
+                  Limpiar
+                </Button>
+              )}
             </div>
-          </section>
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-6">
-            <p className="text-sm text-fog">Ninguna memoria coincide con el filtro</p>
-            {filter && (
-              <Button variant="secondary" size="sm" onClick={() => setFilter("")}>
-                Limpiar filtro
-              </Button>
-            )}
-          </div>
-        )}
+          )}
+        </div>
 
         <Dialog
           open={Boolean(pendingDelete)}

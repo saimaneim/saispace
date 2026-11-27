@@ -68,7 +68,7 @@ export function ProjectHeader({
           type="button"
           onClick={copyPath}
           title={hasCopiedPath ? "Ruta copiada" : "Copiar ruta"}
-          className="group pointer-events-auto flex items-center gap-1.5 min-w-0 px-1.5 py-0.5 -mx-1.5 rounded-md text-xs text-fog hover:text-mist hover:bg-obsidian/70 transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+          className="group pointer-events-auto flex items-center gap-1.5 min-w-0 px-1.5 py-0.5 -mx-1.5 rounded-md text-xs text-fog hover:text-mist hover:bg-obsidian/70 transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
         >
           <span className="truncate font-mono">{project.path}</span>
           {hasCopiedPath ? (
@@ -88,7 +88,7 @@ export function ProjectHeader({
         >
           <SelectTrigger
             aria-label="Estado del proyecto"
-            className="w-auto gap-2 h-8 px-2.5 bg-obsidian/70 rounded-md text-xs font-medium text-mist hover:text-paper hover:bg-obsidian focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+            className="w-auto gap-2 h-8 px-2.5 bg-obsidian/70 rounded-md text-xs font-medium text-mist hover:text-paper hover:bg-obsidian focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
           >
             <SelectValue />
           </SelectTrigger>
@@ -111,7 +111,7 @@ export function ProjectHeader({
           aria-label={isFeedOpen ? "Ocultar actividad" : "Mostrar actividad"}
           aria-pressed={isFeedOpen}
           className={cn(
-            "h-8 w-8 rounded-md flex items-center justify-center transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+            "h-8 w-8 rounded-md flex items-center justify-center transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
             isFeedOpen ? "bg-elevated text-paper" : "text-fog hover:text-paper hover:bg-obsidian",
           )}
         >
@@ -125,7 +125,7 @@ export function ProjectHeader({
               onClick={toggle}
               aria-label="Más opciones"
               title="Más opciones"
-              className="h-8 w-8 rounded-md flex items-center justify-center text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+              className="h-8 w-8 rounded-md flex items-center justify-center text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
             >
               <MoreHorizontal className="w-4 h-4" />
             </button>

@@ -69,13 +69,11 @@ export function MemoryLinks({ memory, onOpen }: MemoryLinksProps) {
         <button
           type="button"
           onClick={() => memory.superseded_by && onOpen(memory.superseded_by)}
-          className="w-full flex items-center justify-between gap-2 px-4 h-10 rounded-lg bg-status-amber/10 text-xs font-medium text-status-amber hover:bg-status-amber/15 transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 min-w-0"
+          className="w-full flex items-center justify-between gap-2 px-4 h-10 rounded-lg bg-status-amber/10 text-xs font-medium text-status-amber hover:bg-status-amber/15 transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 min-w-0"
         >
           <span className="flex items-center gap-2 min-w-0">
             <Archive className="w-3.5 h-3.5 flex-shrink-0" />
-            <span className="truncate">
-              Archivada: se consolidó en otra memoria. Abrir la vigente
-            </span>
+            <span className="truncate">Consolidada · abrir vigente</span>
           </span>
           <ArrowUpRight className="w-3.5 h-3.5 flex-shrink-0" />
         </button>
@@ -87,8 +85,8 @@ export function MemoryLinks({ memory, onOpen }: MemoryLinksProps) {
             className="flex items-center gap-1.5 text-xs font-semibold text-fog tabular-nums"
             title="El agente recibe esta memoria sola cuando un comando muestra este texto, o al empezar en ese entorno"
           >
-            <Zap className="w-3.5 h-3.5 text-acid-lime flex-shrink-0" />
-            <span>Vuelve sola cuando aparece · {triggers.length}</span>
+            <Zap className="w-3.5 h-3.5 text-accent flex-shrink-0" />
+            <span>Activadores · {triggers.length}</span>
           </p>
           <ul className="flex flex-wrap gap-1.5">
             {triggers.map((pattern) => (
@@ -115,7 +113,7 @@ export function MemoryLinks({ memory, onOpen }: MemoryLinksProps) {
                 <button
                   type="button"
                   onClick={() => onOpen(link.id)}
-                  className="w-full flex items-center gap-2.5 px-2.5 h-9 rounded-md text-left text-sm text-mist hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 min-w-0"
+                  className="w-full flex items-center gap-2.5 px-2.5 h-9 rounded-md text-left text-sm text-mist hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 min-w-0"
                 >
                   <span className="text-xs text-fog w-24 flex-shrink-0 truncate">
                     {RELATION_LABEL[`${link.relation}:${link.direction}`]}

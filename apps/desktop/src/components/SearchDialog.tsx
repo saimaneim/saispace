@@ -34,7 +34,7 @@ function Snippet({ text }: { text: string }) {
     <>
       {parts.map((part, i) =>
         part.startsWith("[") && part.endsWith("]") ? (
-          <span key={i} className="text-acid-lime font-medium">
+          <span key={i} className="text-accent font-medium">
             {part.slice(1, -1)}
           </span>
         ) : (
@@ -114,7 +114,7 @@ export function SearchDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl p-0 top-[20%] translate-y-0 overflow-hidden bg-carbon">
+      <DialogContent className="max-w-xl p-0 top-[14%] translate-y-0 overflow-hidden bg-carbon">
         <DialogTitle className="sr-only">Buscar</DialogTitle>
         <DialogDescription className="sr-only">
           Busca en notas de contexto, tareas, reglas y memorias.
@@ -126,7 +126,7 @@ export function SearchDialog({
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar en contexto, tareas, reglas y memorias…"
+            placeholder="Buscar…"
             aria-label="Consulta de búsqueda"
             className="flex-1 min-w-0 h-full bg-transparent text-sm text-paper placeholder:text-fog focus:outline-none"
           />
@@ -135,7 +135,7 @@ export function SearchDialog({
               type="button"
               onClick={() => setQuery("")}
               aria-label="Limpiar consulta"
-              className="h-6 w-6 rounded flex items-center justify-center text-fog hover:text-paper hover:bg-elevated transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 flex-shrink-0"
+              className="h-6 w-6 rounded flex items-center justify-center text-fog hover:text-paper hover:bg-elevated transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 flex-shrink-0"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -146,7 +146,7 @@ export function SearchDialog({
               onClick={() => setOnlyProject((v) => !v)}
               aria-pressed={onlyProject}
               className={cn(
-                "h-7 px-2.5 mr-7 rounded-md text-xs font-medium flex-shrink-0 transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+                "h-7 px-2.5 mr-8 rounded-md text-xs font-medium flex-shrink-0 transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
                 onlyProject ? "bg-elevated text-paper" : "text-fog hover:text-mist",
               )}
             >
@@ -156,7 +156,7 @@ export function SearchDialog({
         </div>
 
         <div
-          className="max-h-96 overflow-y-auto overscroll-contain p-2 space-y-0.5"
+          className="max-h-[min(24rem,calc(100vh-12rem))] overflow-y-auto overscroll-contain p-2 space-y-0.5"
           onKeyDown={onKeyDown}
         >
           {error && <p className="px-3 py-2 text-sm text-coral-red">{error}</p>}
@@ -176,7 +176,7 @@ export function SearchDialog({
               >
                 {isSelected && (
                   <span
-                    className="absolute left-1 top-2.5 bottom-2.5 w-0.5 rounded-full bg-acid-lime"
+                    className="absolute left-1 top-2.5 bottom-2.5 w-0.5 rounded-full bg-accent"
                     aria-hidden="true"
                   />
                 )}

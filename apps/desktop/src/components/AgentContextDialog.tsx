@@ -65,7 +65,7 @@ export function AgentContextDialog({ open, onOpenChange, projectId }: AgentConte
       <DialogContent className="max-w-2xl p-6 bg-elevated">
         <DialogHeader>
           <DialogTitle className="text-base font-semibold text-paper">
-            Lo que ve el agente al empezar
+            Contexto del agente
           </DialogTitle>
           <DialogDescription className="sr-only">
             Contexto de memoria serializado que recibe el agente al iniciar sesión.
@@ -74,7 +74,7 @@ export function AgentContextDialog({ open, onOpenChange, projectId }: AgentConte
 
         {loading && (
           <div className="flex items-center justify-center min-h-48 py-12 text-fog gap-2 text-sm">
-            <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none text-acid-lime" />
+            <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none text-accent" />
             <span>Cargando contexto…</span>
           </div>
         )}
@@ -99,7 +99,7 @@ export function AgentContextDialog({ open, onOpenChange, projectId }: AgentConte
             {isNearBudget && (
               <span className="text-xs text-status-amber flex items-center gap-1 min-w-0 truncate">
                 <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                <span className="truncate">Cerca del límite de Claude Code</span>
+                <span className="truncate">Cerca del límite</span>
               </span>
             )}
           </div>

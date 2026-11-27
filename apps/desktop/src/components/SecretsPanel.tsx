@@ -26,7 +26,7 @@ const STATUS_LABEL: Record<SecretGrant["status"], string> = {
 };
 
 const inputClass =
-  "h-9 px-3 text-sm bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 transition-colors duration-[120ms]";
+  "h-9 px-3 text-sm bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 transition-colors duration-[120ms]";
 
 function AddSecretDialog({
   open,
@@ -190,7 +190,7 @@ export function SecretsPanel({ onChanged }: SecretsPanelProps) {
       <div className="max-w-3xl space-y-6">
         {pending.length > 0 && (
           <section className="space-y-2">
-            <h3 className="text-xs font-semibold text-acid-lime px-1">Solicitudes de acceso</h3>
+            <h3 className="text-xs font-semibold text-accent px-1">Solicitudes de acceso</h3>
             {pending.map((grant) => (
               <div
                 key={grant.id}
@@ -275,7 +275,7 @@ export function SecretsPanel({ onChanged }: SecretsPanelProps) {
                     type="button"
                     onClick={() => setPendingDelete(secret)}
                     aria-label={`Eliminar ${secret.name}`}
-                    className="h-7 w-7 rounded-md flex items-center justify-center text-fog opacity-0 group-hover:opacity-100 hover:text-coral-red hover:bg-coral-red/10 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 transition-opacity duration-[120ms] flex-shrink-0"
+                    className="h-7 w-7 rounded-md flex items-center justify-center text-fog opacity-0 group-hover:opacity-100 hover:text-coral-red hover:bg-coral-red/10 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 transition-opacity duration-[120ms] flex-shrink-0"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -298,7 +298,7 @@ export function SecretsPanel({ onChanged }: SecretsPanelProps) {
                           onClick={() => act(() => api.revokeSecretGrant(grant.id))}
                           aria-label={`Quitar permiso de ${grant.agent}`}
                           title="Quitar"
-                          className="h-4 w-4 rounded-full flex items-center justify-center hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+                          className="h-4 w-4 rounded-full flex items-center justify-center hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                         >
                           <X className="w-3 h-3" />
                         </button>
