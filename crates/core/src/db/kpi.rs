@@ -1386,6 +1386,9 @@ mod tests {
             .expect("snapshot");
         let elapsed = t0.elapsed();
         eprintln!("take_daily_snapshot (200 memories, 4 projects): {elapsed:?}");
-        assert!(elapsed.as_millis() < 50, "took {elapsed:?}");
+        // The snapshot runs detached from the session hook, so this only
+        // guards against pathological scaling: a tight bound flakes on busy
+        // CI runners and debug builds (~60 ms there for this data).
+        assert!(elapsed.as_millis() < 1_000, "took {elapsed:?}");
     }
 }
