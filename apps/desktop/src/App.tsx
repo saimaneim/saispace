@@ -9,7 +9,7 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityFeed } from "./components/ActivityFeed";
 import { ContextTab } from "./components/ContextTab";
 import { DirectoryPickerModal } from "./components/DirectoryPickerModal";
@@ -100,15 +100,19 @@ export function App() {
   // Drag and drop: moves a project to a new slot, pinning or unpinning it
   // when it crosses groups. The list updates first so the drop feels instant.
   const moveProject = useCallback(
-    async (id: string, pinned: boolean, ids: string[]) => {
-      const pinChanged = projectsRef.current.some((p) => p.id === id && p.pinned !== pinned);
+    async (id: string, target: { pinned: boolean; status: ProjectStatus }, ids: string[]) => {
+      const { pinned, status } = target;
+      const current = projectsRef.current.find((p) => p.id === id);
+      const pinChanged = current?.pinned !== pinned;
+      const statusChanged = current?.status !== status;
       setProjects((prev) => {
-        const byId = new Map(prev.map((p) => [p.id, p.id === id ? { ...p, pinned } : p]));
+        const byId = new Map(prev.map((p) => [p.id, p.id === id ? { ...p, pinned, status } : p]));
         const ordered = ids.flatMap((pid) => byId.get(pid) ?? []);
         return [...ordered, ...[...byId.values()].filter((p) => !ids.includes(p.id))];
       });
       try {
         if (pinChanged) await api.setProjectPinned(id, pinned);
+        if (statusChanged) await api.updateProject(id, { status });
         await api.reorderProjects(ids);
       } catch (err) {
         reportError(err);
@@ -236,14 +240,6 @@ export function App() {
     await run(() => api.updateProject(activeProject.id, { status }));
   };
 
-  const taskCounts = useMemo(
-    () =>
-      Object.fromEntries(
-        Object.entries(tasksByProject).map(([id, list]) => [id, list.filter(isOpenTask).length]),
-      ),
-    [tasksByProject],
-  );
-
   const openTasksCount = tasks.filter(isOpenTask).length;
 
   const tabs: { id: TabId; label: string; icon: typeof ListTodo; count?: number }[] = [
@@ -263,7 +259,6 @@ export function App() {
         onSelectGlobal={() => setIsGlobal(true)}
         pendingRequests={pendingRequests}
         onOpenDirectoryPicker={() => setIsPickerOpen(true)}
-        taskCounts={taskCounts}
         onTogglePin={toggleProjectPin}
         onMove={moveProject}
         isOpen={isSidebarOpen}

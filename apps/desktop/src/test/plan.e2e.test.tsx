@@ -5,8 +5,6 @@ import { renderApp } from "./renderApp";
 
 const project = makeProject({ id: "proj-plan", name: "saispace", path: "/home/test/saispace" });
 
-const goalFilters = () => within(screen.getByRole("tablist", { name: "Filtro de metas" }));
-
 describe("flujo: Plan", () => {
   it("crea una meta con criterio y la desglosa en tareas", async () => {
     const { backend, user } = await renderApp({ projects: [project] });
@@ -117,7 +115,7 @@ describe("flujo: Plan", () => {
     expect(backend.tasks.find((task) => task.id === todo.id)?.status).toBe("todo");
   });
 
-  it("filtra activas, completadas y todas con los contadores del plan", async () => {
+  it("agrupa por hitos: activos arriba, completados plegados al final y archivados fuera", async () => {
     const active = makeGoal({
       id: "goal-active",
       project_id: project.id,
@@ -139,32 +137,15 @@ describe("flujo: Plan", () => {
       status: "archived",
       position: 2,
     });
-    const { backend, user } = await renderApp({
-      projects: [project],
-      goals: [active, completed, archived],
-    });
+    const { user } = await renderApp({ projects: [project], goals: [active, completed, archived] });
 
-    expect(await screen.findByRole("article", { name: active.title })).toBeInTheDocument();
-    expect(goalFilters().getByRole("tab", { name: /Activas/ })).toHaveTextContent("1");
-    expect(goalFilters().getByRole("tab", { name: /Completadas/ })).toHaveTextContent("1");
-    expect(goalFilters().getByRole("tab", { name: /Todas/ })).toHaveTextContent("3");
-
-    await user.click(goalFilters().getByRole("tab", { name: /Completadas/ }));
-    expect(await screen.findByRole("article", { name: completed.title })).toBeInTheDocument();
-    expect(screen.queryByRole("article", { name: active.title })).not.toBeInTheDocument();
-    expect(backend.callsTo("plan_get").at(-1)?.args).toEqual({
-      projectId: project.id,
-      filter: "completed",
-    });
-
-    await user.click(goalFilters().getByRole("tab", { name: /Todas/ }));
-    expect(await screen.findByRole("article", { name: archived.title })).toBeInTheDocument();
-    expect(screen.getByRole("article", { name: active.title })).toBeInTheDocument();
-    expect(screen.getByRole("article", { name: completed.title })).toBeInTheDocument();
-
-    await user.click(goalFilters().getByRole("tab", { name: /Activas/ }));
     expect(await screen.findByRole("article", { name: active.title })).toBeInTheDocument();
     expect(screen.queryByRole("article", { name: completed.title })).not.toBeInTheDocument();
+    expect(screen.queryByRole("article", { name: archived.title })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Completadas: 1" }));
+    expect(await screen.findByRole("article", { name: completed.title })).toBeInTheDocument();
+    expect(screen.queryByRole("article", { name: archived.title })).not.toBeInTheDocument();
   });
 
   it("muestra Sin meta solo cuando hay tareas sueltas y permite plegarlas", async () => {

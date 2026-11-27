@@ -1,6 +1,6 @@
 import { FolderOpen, Globe, Pin, PinOff, Plus, Search, Settings, X } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { Project } from "../lib/types";
+import type { Project, ProjectStatus } from "../lib/types";
 import { cn } from "../lib/utils";
 import { ProjectIcon } from "./ProjectIcon";
 import { SettingsDialog } from "./SettingsDialog";
@@ -10,16 +10,25 @@ interface SidebarProps {
   selectedProjectId: string | null;
   onSelectProject: (id: string) => void;
   onOpenDirectoryPicker: () => void;
-  taskCounts: Record<string, number>;
   onTogglePin: (id: string, pinned: boolean) => void;
-  onMove: (id: string, pinned: boolean, ids: string[]) => void;
+  onMove: (id: string, target: { pinned: boolean; status: ProjectStatus }, ids: string[]) => void;
   isOpen: boolean;
   isGlobalSelected: boolean;
   onSelectGlobal: () => void;
   pendingRequests: number;
 }
 
-type Group = "pinned" | "rest";
+/** Sidebar zones: dropping a project in one pins it or sets its status. */
+type Group = "pinned" | ProjectStatus;
+const GROUPS: Group[] = ["pinned", "active", "on_hold", "completed", "archived"];
+const GROUP_LABEL: Record<Group, string> = {
+  pinned: "Fijados",
+  active: "Activos",
+  on_hold: "En pausa",
+  completed: "Completados",
+  archived: "Archivados",
+};
+const groupOf = (p: Project): Group => (p.pinned ? "pinned" : p.status);
 
 interface DragState {
   id: string;
@@ -39,7 +48,6 @@ const PLACEHOLDER = "__placeholder__";
 interface RowProps {
   project: Project;
   isSelected: boolean;
-  openTasks: number;
   canDrag: boolean;
   onSelect: (id: string) => void;
   onTogglePin: (id: string, pinned: boolean) => void;
@@ -50,7 +58,6 @@ interface RowProps {
 function ProjectRow({
   project: p,
   isSelected,
-  openTasks,
   canDrag,
   onSelect,
   onTogglePin,
@@ -79,13 +86,8 @@ function ProjectRow({
             aria-hidden="true"
           />
         )}
-        <ProjectIcon projectId={p.id} name={p.name} status={p.status} />
+        <ProjectIcon projectId={p.id} name={p.name} />
         <span className="truncate flex-1">{p.name}</span>
-        {openTasks > 0 && (
-          <span className="text-xs text-fog tabular-nums flex-shrink-0 transition-opacity duration-[120ms] group-hover:opacity-0">
-            {openTasks}
-          </span>
-        )}
       </button>
       {!floating && (
         <button
@@ -133,7 +135,6 @@ export function Sidebar({
   selectedProjectId,
   onSelectProject,
   onOpenDirectoryPicker,
-  taskCounts,
   onTogglePin,
   onMove,
   isOpen,
@@ -147,7 +148,7 @@ export function Sidebar({
   const dragRef = useRef<DragState | null>(null);
   const suppressClick = useRef(false);
   const navRef = useRef<HTMLElement | null>(null);
-  const zoneRefs = useRef<Record<Group, HTMLElement | null>>({ pinned: null, rest: null });
+  const zoneRefs = useRef<Partial<Record<Group, HTMLElement | null>>>({});
 
   const isFiltering = searchQuery.trim() !== "";
   const filteredProjects = projects.filter((p) =>
@@ -171,16 +172,18 @@ export function Sidebar({
 
   const columns = (group: Group): string[] => {
     const ids = filteredProjects
-      .filter((p) => p.pinned === (group === "pinned") && p.id !== dragging?.id)
+      .filter((p) => groupOf(p) === group && p.id !== dragging?.id)
       .map((p) => p.id);
     if (dragging?.target.group === group) {
       ids.splice(Math.min(dragging.target.index, ids.length), 0, PLACEHOLDER);
     }
     return ids;
   };
-  const pinnedIds = columns("pinned");
-  const restIds = columns("rest");
-  const setRowRef = useFlip(`${pinnedIds.join()}|${restIds.join()}`);
+  const groupIds = Object.fromEntries(GROUPS.map((g) => [g, columns(g)])) as Record<
+    Group,
+    string[]
+  >;
+  const setRowRef = useFlip(GROUPS.map((g) => groupIds[g].join()).join("|"));
 
   const update = (next: DragState | null) => {
     dragRef.current = next;
@@ -193,11 +196,11 @@ export function Sidebar({
     if (!isArmed) return;
 
     const targetAt = (y: number, id: string): DragState["target"] => {
-      const zones = (["pinned", "rest"] as const).flatMap((group) => {
+      const zones = GROUPS.flatMap((group) => {
         const el = zoneRefs.current[group];
         return el ? [{ group, rect: el.getBoundingClientRect(), el }] : [];
       });
-      if (zones.length === 0) return { group: "rest", index: 0 };
+      if (zones.length === 0) return { group: "active", index: 0 };
       const zone =
         zones.find((z) => y >= z.rect.top && y <= z.rect.bottom) ??
         zones.reduce((best, z) => {
@@ -238,19 +241,23 @@ export function Sidebar({
         suppressClick.current = false;
       }, 0);
       if (!commit) return;
-      const pinned = current.target.group === "pinned";
-      const without = (group: Group) =>
-        projects
-          .filter((p) => p.pinned === (group === "pinned") && p.id !== current.id)
-          .map((p) => p.id);
-      const pinnedOrder = without("pinned");
-      const restOrder = without("rest");
-      (pinned ? pinnedOrder : restOrder).splice(current.target.index, 0, current.id);
-      const ids = [...pinnedOrder, ...restOrder];
+      const moved = projects.find((p) => p.id === current.id);
+      if (!moved) return;
+      const targetGroup = current.target.group;
+      const orders = Object.fromEntries(
+        GROUPS.map((g) => [
+          g,
+          projects.filter((p) => groupOf(p) === g && p.id !== current.id).map((p) => p.id),
+        ]),
+      ) as Record<Group, string[]>;
+      orders[targetGroup].splice(current.target.index, 0, current.id);
+      const ids = GROUPS.flatMap((g) => orders[g]);
+      const pinned = targetGroup === "pinned";
+      // Pinning keeps the status; any other zone is the new status.
+      const status = pinned ? moved.status : targetGroup;
       const before = projects.map((p) => p.id).join();
-      const wasPinned = projects.find((p) => p.id === current.id)?.pinned;
-      if (ids.join() === before && wasPinned === pinned) return;
-      onMove(current.id, pinned, ids);
+      if (ids.join() === before && groupOf(moved) === targetGroup) return;
+      onMove(current.id, { pinned, status }, ids);
     };
 
     const onUp = () => finish(true);
@@ -275,9 +282,9 @@ export function Sidebar({
   const startDrag = (project: Project, e: React.PointerEvent<HTMLElement>) => {
     if (isFiltering || e.button !== 0) return;
     const row = e.currentTarget.getBoundingClientRect();
-    const group: Group = project.pinned ? "pinned" : "rest";
+    const group = groupOf(project);
     const index = projects
-      .filter((p) => p.pinned === project.pinned)
+      .filter((p) => groupOf(p) === group)
       .findIndex((p) => p.id === project.id);
     update({
       id: project.id,
@@ -324,7 +331,6 @@ export function Sidebar({
             <ProjectRow
               project={p}
               isSelected={id === selectedProjectId}
-              openTasks={taskCounts[id] ?? 0}
               canDrag={!isFiltering}
               onSelect={select}
               onTogglePin={onTogglePin}
@@ -336,7 +342,6 @@ export function Sidebar({
     </ul>
   );
 
-  const showPinned = pinnedIds.length > 0 || dragging !== null;
   const draggedProject = dragging ? byId.get(dragging.id) : undefined;
 
   return (
@@ -451,20 +456,19 @@ export function Sidebar({
           className="flex-1 min-h-0 overflow-y-auto px-3 pb-3"
           aria-label="Proyectos"
         >
-          {showPinned && (
-            <Fragment>
-              <p className="flex items-center gap-1.5 px-2.5 pt-1 pb-1 text-xs text-fog">
-                <Pin className="w-3 h-3" />
-                Fijados
-                {dragging && pinnedIds.length === 0 && (
-                  <span className="text-ash">· suelta aquí para fijar</span>
-                )}
-              </p>
-              {renderColumn("pinned", pinnedIds)}
-              <div className="h-px bg-obsidian mx-2.5 my-2" />
-            </Fragment>
-          )}
-          {renderColumn("rest", restIds)}
+          {GROUPS.map((group) => {
+            const ids = groupIds[group];
+            // Empty zones appear only while dragging, as drop targets.
+            if (ids.length === 0 && !dragging) return null;
+            return (
+              <Fragment key={group}>
+                <p className="px-2.5 pt-3 pb-1 text-[11px] font-medium text-ash first:pt-1">
+                  {GROUP_LABEL[group]}
+                </p>
+                {renderColumn(group, ids)}
+              </Fragment>
+            );
+          })}
 
           {filteredProjects.length === 0 && (
             <div className="py-8 text-center text-xs text-fog space-y-1">
@@ -499,7 +503,6 @@ export function Sidebar({
           <ProjectRow
             project={draggedProject}
             isSelected={false}
-            openTasks={taskCounts[draggedProject.id] ?? 0}
             canDrag
             onSelect={() => {}}
             onTogglePin={() => {}}

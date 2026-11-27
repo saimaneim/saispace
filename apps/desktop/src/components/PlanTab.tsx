@@ -14,12 +14,6 @@ import { api } from "../lib/api";
 import type { GoalWithTasks, Plan, PlanFilter, Project, Task, UpdateGoalInput } from "../lib/types";
 import { cn } from "../lib/utils";
 
-const FILTERS: { id: PlanFilter; label: string }[] = [
-  { id: "active", label: "Activas" },
-  { id: "completed", label: "Completadas" },
-  { id: "all", label: "Todas" },
-];
-
 const doneCount = (tasks: Task[]) => tasks.filter((task) => task.status === "done").length;
 
 function replaceTask(plan: Plan, replacement: Task): Plan {
@@ -328,7 +322,10 @@ export interface PlanTabProps {
 }
 
 export function PlanTab({ project, refreshKey, onError, onChanged }: PlanTabProps) {
-  const [filter, setFilter] = useState<PlanFilter>("active");
+  // One list grouped by milestone: active goals first, finished ones folded
+  // at the end. Archived goals stay out of the way.
+  const filter: PlanFilter = "all";
+  const [doneCollapsed, setDoneCollapsed] = useState(true);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(true);
   const [goalTitle, setGoalTitle] = useState("");
@@ -359,12 +356,6 @@ export function PlanTab({ project, refreshKey, onError, onChanged }: PlanTabProp
   useEffect(() => {
     void loadPlan();
   }, [loadPlan, refreshKey]);
-
-  const changeFilter = (next: PlanFilter) => {
-    if (next === filter) return;
-    setPlan(null);
-    setFilter(next);
-  };
 
   const createGoal = async () => {
     const title = goalTitle.trim();
@@ -483,6 +474,26 @@ export function PlanTab({ project, refreshKey, onError, onChanged }: PlanTabProp
     }
   };
 
+  const renderGoals = (items: GoalWithTasks[]) =>
+    items.map((item) => (
+      <GoalSection
+        key={item.goal.id}
+        item={item}
+        collapsed={collapsedGoalIds.has(item.goal.id)}
+        busy={busyGoalId === item.goal.id}
+        addingTask={addingTaskGoalId === item.goal.id}
+        confirmingDelete={confirmDeleteId === item.goal.id}
+        pendingTaskIds={pendingTaskIds}
+        onToggleCollapsed={() => toggleCollapsed(item.goal.id)}
+        onToggleTask={toggleTask}
+        onUpdate={(input) => updateGoal(item.goal.id, input)}
+        onDelete={() => deleteGoal(item.goal.id)}
+        onConfirmDeleteChange={(confirming) => setConfirmDeleteId(confirming ? item.goal.id : null)}
+        onAddTask={(title) => addTask(item.goal.id, title)}
+      />
+    ));
+  const doneGoals = plan?.goals.filter((g) => g.goal.status === "completed") ?? [];
+
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-4 overflow-hidden px-6 pt-2 pb-4">
       <div className="mx-auto flex w-full max-w-4xl flex-shrink-0 flex-col gap-3">
@@ -547,52 +558,33 @@ export function PlanTab({ project, refreshKey, onError, onChanged }: PlanTabProp
             </div>
           )}
         </div>
-
-        <div
-          role="tablist"
-          aria-label="Filtro de metas"
-          className="flex items-center gap-1 self-start rounded-lg bg-obsidian p-1"
-        >
-          {FILTERS.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={filter === id}
-              onClick={() => changeFilter(id)}
-              className={cn(
-                "flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
-                filter === id ? "bg-elevated text-paper" : "text-fog hover:text-mist",
-              )}
-            >
-              <span>{label}</span>
-              <span className="text-xs tabular-nums text-fog">{plan?.counts[id] ?? 0}</span>
-            </button>
-          ))}
-        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto pr-1">
         <div className="mx-auto w-full max-w-4xl min-w-0 space-y-2.5">
-          {plan?.goals.map((item) => (
-            <GoalSection
-              key={item.goal.id}
-              item={item}
-              collapsed={collapsedGoalIds.has(item.goal.id)}
-              busy={busyGoalId === item.goal.id}
-              addingTask={addingTaskGoalId === item.goal.id}
-              confirmingDelete={confirmDeleteId === item.goal.id}
-              pendingTaskIds={pendingTaskIds}
-              onToggleCollapsed={() => toggleCollapsed(item.goal.id)}
-              onToggleTask={toggleTask}
-              onUpdate={(input) => updateGoal(item.goal.id, input)}
-              onDelete={() => deleteGoal(item.goal.id)}
-              onConfirmDeleteChange={(confirming) =>
-                setConfirmDeleteId(confirming ? item.goal.id : null)
-              }
-              onAddTask={(title) => addTask(item.goal.id, title)}
-            />
-          ))}
+          {renderGoals(plan?.goals.filter((g) => g.goal.status === "active") ?? [])}
+
+          {doneGoals.length > 0 && (
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setDoneCollapsed((v) => !v)}
+                aria-expanded={!doneCollapsed}
+                aria-label={`Completadas: ${doneGoals.length}`}
+                title="Completadas"
+                className="flex h-8 items-center gap-2 rounded-md px-2 text-xs font-medium text-fog hover:text-paper transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+              >
+                {doneCollapsed ? (
+                  <ChevronRight className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronDown className="h-3.5 w-3.5" />
+                )}
+                <Check className="h-3.5 w-3.5" />
+                <span className="tabular-nums">{doneGoals.length}</span>
+              </button>
+              {!doneCollapsed && <div className="mt-1 space-y-2.5">{renderGoals(doneGoals)}</div>}
+            </div>
+          )}
 
           {plan && plan.counts.all === 0 && plan.loose_tasks.length === 0 && (
             <div className="flex flex-col items-center gap-2 px-6 py-16 text-center">
@@ -600,14 +592,7 @@ export function PlanTab({ project, refreshKey, onError, onChanged }: PlanTabProp
                 <Target className="h-5 w-5" />
               </div>
               <h2 className="text-sm font-semibold text-bone">Sin metas</h2>
-              <p className="max-w-xs break-words text-xs leading-5 text-fog">
-                Escribe una meta arriba y pulsa Enter.
-              </p>
             </div>
-          )}
-
-          {plan && plan.goals.length === 0 && plan.counts.all > 0 && (
-            <p className="px-3 py-10 text-center text-sm text-fog">No hay metas en este filtro.</p>
           )}
 
           {!plan && loading && (
