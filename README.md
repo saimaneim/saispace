@@ -111,7 +111,7 @@ Or in a JSON client config:
 }
 ```
 
-Tools include `save_memory`, `search_memory`, `memory_context`, `get_memory`, `link_memories`, `consolidate_memories`, `delete_memory`, `list_projects`, `get_project_context`, `list_tasks`, `create_task`, `update_task`, `get_active_plan`, `create_goal`, `update_goal`, `complete_task`, `list_secrets` and `request_secret_access`. Example `save_memory` call:
+Tools include `save_memory`, `search_memory`, `memory_context`, `get_memory`, `link_memories`, `consolidate_memories`, `delete_memory`, `list_projects`, `get_project_context` (re-detects the stack), `create_task`, `update_task`, `get_active_plan`, `create_goal`, `update_goal`, `complete_task`, `list_secrets` and `request_secret_access`. Example `save_memory` call:
 
 ```json
 {

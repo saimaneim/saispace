@@ -34,7 +34,6 @@ interface ProjectIconProps {
   status: ProjectStatus;
 }
 
-/** The project's favicon (or its initial) with the status as a corner dot. */
 export function ProjectIcon({ projectId, name, status }: ProjectIconProps) {
   const [src, setSrc] = useState<string | null>(null);
 
@@ -48,19 +47,23 @@ export function ProjectIcon({ projectId, name, status }: ProjectIconProps) {
     };
   }, [projectId]);
 
+  const initial = (name.trim().charAt(0) || "?").toUpperCase();
+
   return (
     <span className="relative w-5 h-5 flex-shrink-0" title={STATUS_LABEL[status]}>
       {src ? (
         <img
           src={src}
           alt=""
+          width={20}
+          height={20}
           draggable={false}
           className="w-5 h-5 rounded object-contain"
           onError={() => setSrc(null)}
         />
       ) : (
-        <span className="w-5 h-5 rounded bg-obsidian text-[10px] font-semibold text-mist flex items-center justify-center uppercase">
-          {name.trim().charAt(0) || "?"}
+        <span className="w-5 h-5 rounded bg-obsidian text-[11px] font-semibold text-mist flex items-center justify-center">
+          {initial}
         </span>
       )}
       <span

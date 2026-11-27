@@ -3,7 +3,7 @@ import { useState } from "react";
 import { formatError } from "../lib/api";
 import type { Memory, StaleReport } from "../lib/types";
 import { formatTimeAgo } from "../lib/utils";
-import { KIND_LABELS } from "./MemoryTab";
+import { MemoryKindBadge } from "./MemoryKindBadge";
 import { Button } from "./ui/button";
 import {
   Dialog,
@@ -37,23 +37,32 @@ function StaleItem({
   onOpen: () => void;
   onDelete: () => void;
 }) {
+  const snippet = preview(memory.content);
   return (
-    <div className="bg-carbon rounded-lg px-4 py-3 flex items-center justify-between gap-3">
-      <div className="min-w-0 flex-1">
-        <h3 className="text-sm font-semibold text-paper truncate">{memory.title}</h3>
-        <p className="text-xs text-mist truncate">{preview(memory.content)}</p>
-        <p className="text-xs text-fog">
-          {KIND_LABELS[memory.kind]} · guardada {formatTimeAgo(memory.updated_at)} · último uso:{" "}
+    <div className="bg-carbon hover:bg-obsidian/80 transition-colors duration-[120ms] rounded-xl px-4 py-3.5 flex items-center justify-between gap-4 min-w-0">
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex items-center gap-2 min-w-0">
+          <MemoryKindBadge kind={memory.kind} compact />
+          <h3 className="text-sm font-semibold text-paper truncate flex-1">{memory.title}</h3>
+        </div>
+        {snippet && <p className="text-xs text-mist truncate">{snippet}</p>}
+        <p className="text-xs text-fog tabular-nums truncate">
+          Guardada {formatTimeAgo(memory.updated_at)} · último uso:{" "}
           {memory.last_used_at ? formatTimeAgo(memory.last_used_at) : "nunca"}
         </p>
       </div>
-      <div className="flex items-center gap-2 flex-shrink-0">
-        <Button variant="secondary" size="sm" onClick={onOpen}>
-          <Eye className="w-3.5 h-3.5 mr-1" />
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        <Button variant="secondary" size="sm" onClick={onOpen} className="h-8 text-xs">
+          <Eye className="w-3.5 h-3.5 mr-1.5" />
           Abrir
         </Button>
-        <Button variant="destructive" size="sm" onClick={onDelete}>
-          <Trash2 className="w-3.5 h-3.5 mr-1" />
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onDelete}
+          className="h-8 text-xs text-fog hover:text-coral-red hover:bg-coral-red/10"
+        >
+          <Trash2 className="w-3.5 h-3.5 mr-1.5" />
           Eliminar
         </Button>
       </div>
@@ -66,8 +75,6 @@ export function StalePanel({ report, onOpenMemory, onDeleteMemory, onClose }: St
   const [error, setError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Old session summaries are not listed: only the latest reaches the agent at
-  // session start, so the rest cost nothing and stay searchable as history.
   const total = report.stale.length;
 
   const confirmDelete = async () => {
@@ -84,24 +91,21 @@ export function StalePanel({ report, onOpenMemory, onDeleteMemory, onClose }: St
   };
 
   return (
-    <section className="flex-1 min-w-0 flex flex-col px-6 pb-6">
-      <div className="h-14 flex items-center justify-between gap-3 flex-shrink-0">
-        <div>
-          <h2 className="text-base font-semibold text-paper">Memorias para revisar</h2>
-          <p className="text-xs text-fog">
-            Sin abrir ni actualizar en 60 días: ningún agente las está usando. Bórralas si ya no
-            valen o fíjalas para conservarlas.
-          </p>
+    <section className="flex-1 min-w-0 flex flex-col px-7 pt-5 pb-6">
+      <div className="flex items-center justify-between gap-3 pb-4 flex-shrink-0">
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold text-paper tracking-tight">Memorias para revisar</h2>
+          <p className="text-xs text-fog tabular-nums">Sin uso en 60 días · {total}</p>
         </div>
-        <Button variant="secondary" onClick={onClose}>
-          <X className="w-4 h-4 mr-2" />
+        <Button variant="secondary" size="sm" onClick={onClose}>
+          <X className="w-3.5 h-3.5 mr-1.5" />
           Cerrar
         </Button>
       </div>
 
       {error && (
         <div
-          className="mb-2 px-3 py-2 rounded-md bg-coral-red/10 text-coral-red text-sm"
+          className="mb-3 px-3 py-2 rounded-md bg-coral-red/10 text-coral-red text-sm"
           role="alert"
         >
           {error}
@@ -109,28 +113,23 @@ export function StalePanel({ report, onOpenMemory, onDeleteMemory, onClose }: St
       )}
 
       {total === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center bg-carbon rounded-lg p-6">
-          <History className="w-8 h-8 text-ash" />
-          <p className="text-sm text-paper">Sin memorias para revisar</p>
-          <p className="text-sm text-fog max-w-sm">
-            Todas las memorias se han usado o actualizado en los últimos 60 días.
-          </p>
-          <Button variant="secondary" onClick={onClose} className="mt-2">
+        <div className="flex-1 flex flex-col items-center justify-center gap-2.5 text-center bg-carbon rounded-xl p-6">
+          <History className="w-7 h-7 text-ash" />
+          <p className="text-sm font-medium text-paper">Sin memorias para revisar</p>
+          <Button variant="secondary" size="sm" onClick={onClose}>
             Volver a memorias
           </Button>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-          <div className="space-y-2">
-            {report.stale.map((m) => (
-              <StaleItem
-                key={m.id}
-                memory={m}
-                onOpen={() => onOpenMemory(m.id)}
-                onDelete={() => setPendingDelete(m)}
-              />
-            ))}
-          </div>
+        <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+          {report.stale.map((m) => (
+            <StaleItem
+              key={m.id}
+              memory={m}
+              onOpen={() => onOpenMemory(m.id)}
+              onDelete={() => setPendingDelete(m)}
+            />
+          ))}
         </div>
       )}
 

@@ -1,4 +1,4 @@
-import { Activity, Check, MoreHorizontal, Trash2 } from "lucide-react";
+import { Activity, Check, Copy, MoreHorizontal, Trash2 } from "lucide-react";
 import { useState } from "react";
 import type { Project, ProjectStatus } from "../lib/types";
 import { cn } from "../lib/utils";
@@ -67,11 +67,15 @@ export function ProjectHeader({
         <button
           type="button"
           onClick={copyPath}
-          title="Copiar ruta"
-          className="pointer-events-auto flex items-center gap-1.5 min-w-0 text-xs text-fog hover:text-mist transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 rounded"
+          title={hasCopiedPath ? "Ruta copiada" : "Copiar ruta"}
+          className="group pointer-events-auto flex items-center gap-1.5 min-w-0 px-1.5 py-0.5 -mx-1.5 rounded-md text-xs text-fog hover:text-mist hover:bg-obsidian/70 transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
         >
-          <span className="truncate">{project.path}</span>
-          {hasCopiedPath && <Check className="w-3.5 h-3.5 text-pulse-green flex-shrink-0" />}
+          <span className="truncate font-mono">{project.path}</span>
+          {hasCopiedPath ? (
+            <Check className="w-3.5 h-3.5 text-pulse-green flex-shrink-0" />
+          ) : (
+            <Copy className="w-3 h-3 text-ash opacity-0 group-hover:opacity-100 transition-opacity duration-[120ms] flex-shrink-0" />
+          )}
         </button>
       </div>
 
@@ -84,7 +88,7 @@ export function ProjectHeader({
         >
           <SelectTrigger
             aria-label="Estado del proyecto"
-            className="w-auto gap-2 h-8 bg-transparent rounded-md text-sm text-mist hover:text-paper hover:bg-obsidian focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+            className="w-auto gap-2 h-8 px-2.5 bg-obsidian/70 rounded-md text-xs font-medium text-mist hover:text-paper hover:bg-obsidian focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
           >
             <SelectValue />
           </SelectTrigger>

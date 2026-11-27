@@ -92,29 +92,33 @@ async fn assert_expected_tools(
     client: &rmcp::service::RunningService<rmcp::RoleClient, TestClientHandler>,
 ) {
     let tools_list = client.list_tools(None).await.expect("list_tools failed");
+    // Every session loads this list: keep it within budget.
+    let listed = serde_json::to_string(&tools_list.tools).expect("serialize tools");
+    assert!(
+        listed.len() <= 8_600,
+        "tools/list grew to {} bytes",
+        listed.len()
+    );
+    assert!(!listed.contains("$schema"));
     let tool_names: Vec<String> = tools_list
         .tools
         .into_iter()
         .map(|t| t.name.to_string())
         .collect();
 
-    assert!(
-        !tool_names
-            .iter()
-            .any(|name| name == "update_project_context")
-    );
+    for removed in ["update_project_context", "list_tasks", "sync_project_stack"] {
+        assert!(!tool_names.iter().any(|name| name == removed), "{removed}");
+    }
     for expected in [
         "list_projects",
         "register_project",
         "get_project_context",
-        "list_tasks",
         "create_task",
         "update_task",
         "get_active_plan",
         "create_goal",
         "update_goal",
         "complete_task",
-        "sync_project_stack",
         "upsert_tech_rule",
         "search_memory",
         "save_memory",
@@ -349,16 +353,17 @@ async fn test_stack_detection_rules_and_search_flow() {
     assert_eq!(rules.len(), 1);
     assert_eq!(rules[0]["rule"], "Permissions live in capabilities files.");
 
+    // The context re-detects the stack: no separate sync call.
     std::fs::write(dir.join("package.json"), r#"{"dependencies":{}}"#).expect("rewrite manifest");
     let synced = call(
         &client,
-        "sync_project_stack",
+        "get_project_context",
         json!({ "project_id": project_id }),
     )
     .await;
     assert_eq!(synced.is_error, Some(false));
     assert!(
-        text_json(&synced)
+        text_json(&synced)["stack"]
             .as_array()
             .expect("array")
             .iter()
@@ -674,89 +679,6 @@ async fn test_list_projects_contract() {
 }
 
 #[tokio::test]
-async fn test_list_tasks_project_and_status_filtering() {
-    let server = setup_test_server().await;
-    let (client, server_task) = connect(server).await;
-
-    let proj_a = register_test_project(&client, "Tasks Project A", "/dev/tasks-a").await;
-    let proj_b = register_test_project(&client, "Tasks Project B", "/dev/tasks-b").await;
-
-    let task_todo = create_test_task(&client, &proj_a, "Task Todo", Some("medium")).await;
-    let task_prog = create_test_task(&client, &proj_a, "Task Prog", Some("high")).await;
-    let task_done = create_test_task(&client, &proj_a, "Task Done", Some("low")).await;
-    let _task_other = create_test_task(&client, &proj_b, "Task B", None).await;
-
-    call(
-        &client,
-        "update_task",
-        json!({ "task_id": task_prog, "status": "in_progress" }),
-    )
-    .await;
-    call(
-        &client,
-        "update_task",
-        json!({ "task_id": task_done, "status": "done" }),
-    )
-    .await;
-
-    let all_a = text_json(&call(&client, "list_tasks", json!({ "project_id": proj_a })).await);
-    let all_a_array = all_a.as_array().expect("array");
-    assert_eq!(all_a_array.len(), 3);
-    assert!(all_a_array.iter().all(|t| t["project_id"] == proj_a));
-
-    let by_path = text_json(&call(&client, "list_tasks", json!({ "path": "/dev/tasks-a" })).await);
-    assert_eq!(by_path.as_array().expect("array").len(), 3);
-
-    let filtered_todo = text_json(
-        &call(
-            &client,
-            "list_tasks",
-            json!({ "project_id": proj_a, "status": "todo" }),
-        )
-        .await,
-    );
-    let todo_tasks = filtered_todo.as_array().expect("array");
-    assert_eq!(todo_tasks.len(), 1);
-    assert_eq!(todo_tasks[0]["id"], task_todo);
-
-    let filtered_prog = text_json(
-        &call(
-            &client,
-            "list_tasks",
-            json!({ "project_id": proj_a, "status": "in_progress" }),
-        )
-        .await,
-    );
-    let prog_tasks = filtered_prog.as_array().expect("array");
-    assert_eq!(prog_tasks.len(), 1);
-    assert_eq!(prog_tasks[0]["id"], task_prog);
-    assert_eq!(prog_tasks[0]["status"], "in_progress");
-
-    let filtered_done = text_json(
-        &call(
-            &client,
-            "list_tasks",
-            json!({ "project_id": proj_a, "status": "done" }),
-        )
-        .await,
-    );
-    let done_tasks = filtered_done.as_array().expect("array");
-    assert_eq!(done_tasks.len(), 1);
-    assert_eq!(done_tasks[0]["id"], task_done);
-
-    let bad_project = call(
-        &client,
-        "list_tasks",
-        json!({ "project_id": uuid::Uuid::now_v7().to_string() }),
-    )
-    .await;
-    assert_eq!(bad_project.is_error, Some(true));
-
-    client.cancel().await.expect("cancel client failed");
-    let _ = server_task.await;
-}
-
-#[tokio::test]
 async fn test_update_task_persistence_and_activity() {
     let server = setup_test_server().await;
     let db = server.db.clone();
@@ -782,8 +704,15 @@ async fn test_update_task_persistence_and_activity() {
     assert_eq!(updated_json["status"], "in_progress");
     assert_eq!(updated_json["priority"], "urgent");
 
-    let tasks = text_json(&call(&client, "list_tasks", json!({ "project_id": project_id })).await);
-    let task = tasks
+    let context = text_json(
+        &call(
+            &client,
+            "get_project_context",
+            json!({ "project_id": project_id }),
+        )
+        .await,
+    );
+    let task = context["open_tasks"]
         .as_array()
         .expect("array")
         .iter()

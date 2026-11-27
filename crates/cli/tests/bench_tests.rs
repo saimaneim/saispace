@@ -29,6 +29,7 @@ impl BenchSandbox {
             .args(args)
             .current_dir(&self.root)
             .env("SAISPACE_DB_PATH", &fake_db)
+            .env("SAISPACE_BENCH_SCALE", "50")
             .output()
             .expect("run sai")
     }

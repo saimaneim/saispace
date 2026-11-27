@@ -2,7 +2,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { api, formatError } from "../lib/api";
 import type { Memory, MemoryKind } from "../lib/types";
 import { cn } from "../lib/utils";
-import { KIND_LABELS } from "./MemoryTab";
+import { MEMORY_KIND_LABELS } from "./MemoryKindBadge";
 import { Button } from "./ui/button";
 import {
   Dialog,
@@ -22,7 +22,7 @@ export interface MemoryEditorProps {
 }
 
 const inputClass =
-  "h-9 px-3 text-sm bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40";
+  "h-9 px-3 text-sm bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 transition-colors duration-[120ms]";
 
 export function MemoryEditor({ memory, open, onOpenChange, onSaved }: MemoryEditorProps) {
   const [title, setTitle] = useState("");
@@ -69,21 +69,21 @@ export function MemoryEditor({ memory, open, onOpenChange, onSaved }: MemoryEdit
         <form onSubmit={submit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>Editar memoria</DialogTitle>
-            <DialogDescription>
-              Modifica los detalles y el contenido de esta memoria persistente.
+            <DialogDescription className="sr-only">
+              Edita el título, tipo, tema y contenido de la memoria.
             </DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="memory-title" className="text-xs text-fog">
+              <label htmlFor="memory-title" className="text-xs font-medium text-fog">
                 Título
               </label>
               <input
                 id="memory-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Título de la memoria"
+                placeholder="Título de la memoria…"
                 aria-label="Título"
                 className={inputClass}
                 required
@@ -92,7 +92,7 @@ export function MemoryEditor({ memory, open, onOpenChange, onSaved }: MemoryEdit
 
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="memory-kind" className="text-xs text-fog">
+                <label htmlFor="memory-kind" className="text-xs font-medium text-fog">
                   Tipo
                 </label>
                 <Select value={kind} onValueChange={(val) => setKind(val as MemoryKind)}>
@@ -100,9 +100,9 @@ export function MemoryEditor({ memory, open, onOpenChange, onSaved }: MemoryEdit
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {(Object.keys(KIND_LABELS) as MemoryKind[]).map((k) => (
+                    {(Object.keys(MEMORY_KIND_LABELS) as MemoryKind[]).map((k) => (
                       <SelectItem key={k} value={k}>
-                        {KIND_LABELS[k]}
+                        {MEMORY_KIND_LABELS[k]}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -110,37 +110,42 @@ export function MemoryEditor({ memory, open, onOpenChange, onSaved }: MemoryEdit
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="memory-topic" className="text-xs text-fog">
+                <label htmlFor="memory-topic" className="text-xs font-medium text-fog">
                   Tema (opcional)
                 </label>
                 <input
                   id="memory-topic"
                   value={topic}
                   onChange={(e) => setTopic(e.target.value)}
-                  placeholder="arch/auth"
+                  placeholder="ej. arch/auth"
                   aria-label="Tema"
+                  spellCheck={false}
                   className={cn(inputClass, "font-mono")}
                 />
               </div>
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="memory-content" className="text-xs text-fog">
+              <label htmlFor="memory-content" className="text-xs font-medium text-fog">
                 Contenido
               </label>
               <textarea
                 id="memory-content"
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                placeholder="Contenido en markdown…"
+                placeholder="Contenido en Markdown o What:/Why:/Where:/Learned:…"
                 aria-label="Contenido"
-                className="w-full h-56 p-3 text-sm font-mono bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 resize-y"
+                className="w-full h-60 p-3.5 text-sm font-mono leading-relaxed bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 resize-y transition-colors duration-[120ms]"
                 required
               />
             </div>
           </div>
 
-          {error && <p className="text-sm text-coral-red">{error}</p>}
+          {error && (
+            <p className="text-sm text-coral-red break-words" role="alert">
+              {error}
+            </p>
+          )}
 
           <DialogFooter>
             <Button

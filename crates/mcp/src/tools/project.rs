@@ -65,7 +65,7 @@ impl SaiSpaceServer {
 
     #[tool(
         name = "register_project",
-        description = "Register a local project directory into SaiSpace and detect its stack (Cargo.toml, package.json and other manifests)"
+        description = "Register a project directory and detect its stack"
     )]
     async fn register_project(
         &self,
@@ -112,7 +112,7 @@ impl SaiSpaceServer {
 
     #[tool(
         name = "get_project_context",
-        description = "Get project details, open tasks, the detected stack and the tech rules matching that stack, by project_id or path"
+        description = "Project details, open tasks, the stack (re-detected from manifests) and its tech rules, by project_id or path"
     )]
     async fn get_project_context(
         &self,
@@ -143,9 +143,14 @@ impl SaiSpaceServer {
             .into_iter()
             .filter(|t| t.status != TaskStatus::Done && t.status != TaskStatus::Cancelled)
             .collect();
-        let stack = match self.db.list_technologies(project.id).await {
+        // The stack follows the manifests: re-detect here (writes only on
+        // change) so agents never need a separate sync call.
+        let stack = match self.sync_stack(project.id).await {
             Ok(stack) => stack,
-            Err(err) => return format_error(&err),
+            Err(_) => match self.db.list_technologies(project.id).await {
+                Ok(stack) => stack,
+                Err(err) => return format_error(&err),
+            },
         };
         let tech_rules = match self.db.tech_rules_for_project(project.id).await {
             Ok(rules) => rules,

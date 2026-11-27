@@ -149,7 +149,7 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
             </button>
 
             <span
-              className="font-sans text-sm font-semibold text-paper truncate tracking-tight"
+              className="font-mono text-xs font-medium text-paper truncate"
               title={listing?.current_path}
             >
               {listing?.display_path ?? "~/"}
@@ -203,11 +203,11 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
           ref={listRef}
           role="listbox"
           aria-label="Lista de carpetas"
-          className="flex-1 max-h-80 min-h-56 overflow-y-auto p-2 space-y-0.5"
+          className="flex-1 max-h-80 min-h-56 overflow-y-auto overscroll-contain p-2 space-y-0.5"
         >
           {loading ? (
             <div className="flex items-center justify-center py-16 text-fog gap-2">
-              <Loader2 className="w-4 h-4 animate-spin text-pulse-green" />
+              <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none text-pulse-green" />
               <span className="text-sm font-sans text-fog">Leyendo carpetas…</span>
             </div>
           ) : filteredEntries.length > 0 ? (
@@ -221,12 +221,18 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
                   onClick={() => setSelectedIndex(idx)}
                   onDoubleClick={() => handleEnterDirectory(entry.path)}
                   className={cn(
-                    "group flex items-center justify-between px-3 h-10 rounded-md cursor-pointer text-sm transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+                    "group relative flex items-center justify-between pl-3.5 pr-3 h-10 rounded-md cursor-pointer text-sm transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
                     isSelected
                       ? "bg-elevated text-paper font-medium"
                       : "text-mist hover:bg-obsidian hover:text-paper",
                   )}
                 >
+                  {isSelected && (
+                    <span
+                      className="absolute left-1 top-2.5 bottom-2.5 w-0.5 rounded-full bg-acid-lime"
+                      aria-hidden="true"
+                    />
+                  )}
                   <div className="flex items-center gap-2.5 min-w-0 flex-1">
                     <Folder className="w-4 h-4 text-fog group-hover:text-mist flex-shrink-0" />
                     <span className="truncate tracking-tight font-sans text-sm">{entry.name}</span>
@@ -239,7 +245,7 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
                       handleConfirm(entry.path);
                     }}
                     aria-label={`Añadir ${entry.name}`}
-                    className="opacity-0 group-hover:opacity-100 px-2.5 h-7 rounded-md text-xs font-medium bg-obsidian hover:bg-acid-lime hover:text-void text-pulse-green transition-all duration-[120ms] focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+                    className="opacity-0 group-hover:opacity-100 px-2.5 h-7 rounded-md text-xs font-medium bg-obsidian hover:bg-acid-lime hover:text-void text-pulse-green transition-[opacity,background-color,color] duration-[120ms] focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
                   >
                     + Añadir
                   </button>
@@ -273,7 +279,7 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
               type="button"
               onClick={() => handleConfirm()}
               disabled={isSubmitting || !listing}
-              className="h-9 px-4 rounded-md bg-acid-lime text-void hover:bg-acid-lime/90 text-sm font-medium transition-colors duration-[120ms] disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 flex items-center gap-2"
+              className="h-9 px-4 rounded-md bg-acid-lime text-void hover:brightness-105 text-sm font-medium transition-[filter] duration-[120ms] disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 flex items-center gap-2"
             >
               <FolderPlus className="w-4 h-4 text-void" />
               <span className="truncate max-w-48">Añadir &ldquo;{targetLabel}&rdquo;</span>

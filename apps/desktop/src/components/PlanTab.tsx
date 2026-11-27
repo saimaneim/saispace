@@ -53,16 +53,23 @@ interface TaskRowProps {
 function TaskRow({ task, pending, onToggle }: TaskRowProps) {
   const done = task.status === "done";
   return (
-    <li className="group flex h-10 min-w-0 items-center gap-3 rounded-md px-2 hover:bg-elevated/60 transition-colors duration-[120ms]">
-      <input
-        type="checkbox"
-        checked={done}
-        aria-label={task.title}
-        title={done ? "Marcar como pendiente" : "Marcar como hecha"}
-        disabled={pending}
-        onChange={() => void onToggle(task)}
-        className="h-4 w-4 flex-shrink-0 cursor-pointer rounded-sm accent-pulse-green transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 disabled:cursor-wait"
-      />
+    <li className="group flex h-10 min-w-0 items-center gap-3 rounded-md px-2.5 hover:bg-obsidian transition-colors duration-[120ms]">
+      <span className="relative flex h-4 w-4 flex-shrink-0">
+        <input
+          type="checkbox"
+          checked={done}
+          aria-label={task.title}
+          title={done ? "Marcar como pendiente" : "Marcar como hecha"}
+          disabled={pending}
+          onChange={() => void onToggle(task)}
+          className="peer h-4 w-4 cursor-pointer appearance-none rounded-[5px] border border-smoke bg-obsidian transition-colors duration-[120ms] checked:border-acid-lime checked:bg-acid-lime hover:border-fog focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 disabled:cursor-wait"
+        />
+        <Check
+          aria-hidden="true"
+          strokeWidth={3}
+          className="pointer-events-none absolute inset-0 m-auto h-3 w-3 text-void opacity-0 transition-opacity duration-[120ms] peer-checked:opacity-100"
+        />
+      </span>
       <span
         title={task.title}
         className={cn(
@@ -73,10 +80,14 @@ function TaskRow({ task, pending, onToggle }: TaskRowProps) {
         {task.title}
       </span>
       {task.status === "in_progress" && (
-        <span className="flex-shrink-0 text-xs text-status-amber">En curso</span>
+        <span className="flex-shrink-0 rounded px-1.5 py-0.5 bg-status-amber/12 text-xs font-medium text-status-amber">
+          En curso
+        </span>
       )}
       {task.status === "blocked" && (
-        <span className="flex-shrink-0 text-xs text-coral-red">Bloqueada</span>
+        <span className="flex-shrink-0 rounded px-1.5 py-0.5 bg-coral-red/12 text-xs font-medium text-coral-red">
+          Bloqueada
+        </span>
       )}
     </li>
   );
@@ -123,18 +134,15 @@ function GoalSection({
   };
 
   return (
-    <article
-      aria-label={goal.title}
-      className="group min-w-0 overflow-hidden rounded-lg bg-obsidian/60"
-    >
-      <div className="flex min-w-0 items-start gap-1 px-2 py-2">
+    <article aria-label={goal.title} className="group min-w-0 overflow-hidden rounded-xl bg-carbon">
+      <div className="flex min-w-0 items-start gap-1.5 px-2.5 py-2.5">
         <button
           type="button"
           onClick={onToggleCollapsed}
           aria-label={`${collapsed ? "Expandir" : "Contraer"} ${goal.title}`}
           aria-expanded={!collapsed}
           aria-controls={`goal-${goal.id}-tasks`}
-          className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-fog hover:bg-elevated hover:text-paper transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+          className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-fog hover:bg-obsidian hover:text-paper transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
         >
           {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </button>
@@ -147,7 +155,7 @@ function GoalSection({
           <span
             title={goal.title}
             className={cn(
-              "block truncate text-sm font-medium",
+              "block truncate text-sm font-semibold",
               goal.status === "active" ? "text-paper" : "text-fog",
             )}
           >
@@ -159,10 +167,6 @@ function GoalSection({
             </span>
           )}
         </button>
-
-        <span className="mt-1.5 flex-shrink-0 px-1 text-xs tabular-nums text-fog">
-          {item.done}/{item.total}
-        </span>
 
         <div
           className={cn(
@@ -180,7 +184,7 @@ function GoalSection({
             }
             aria-label={`${goal.status === "active" ? "Completar" : "Reactivar"} ${goal.title}`}
             title={goal.status === "active" ? "Completar meta" : "Reactivar meta"}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-fog hover:bg-elevated hover:text-pulse-green transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 disabled:cursor-wait"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-fog hover:bg-obsidian hover:text-pulse-green transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 disabled:cursor-wait"
           >
             {goal.status === "active" ? (
               <Check className="h-4 w-4" />
@@ -195,7 +199,7 @@ function GoalSection({
               onClick={() => void onUpdate({ status: "archived" })}
               aria-label={`Archivar ${goal.title}`}
               title="Archivar meta"
-              className="flex h-7 w-7 items-center justify-center rounded-md text-fog hover:bg-elevated hover:text-paper transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 disabled:cursor-wait"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-fog hover:bg-obsidian hover:text-paper transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 disabled:cursor-wait"
             >
               <Archive className="h-3.5 w-3.5" />
             </button>
@@ -211,6 +215,10 @@ function GoalSection({
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
+
+        <span className="mt-1.5 flex-shrink-0 pl-1 pr-1.5 text-xs tabular-nums text-fog">
+          {item.done}/{item.total}
+        </span>
       </div>
 
       <div
@@ -219,7 +227,7 @@ function GoalSection({
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={progress}
-        className="mx-3 h-0.5 overflow-hidden rounded-full bg-elevated"
+        className="mx-3.5 h-1 overflow-hidden rounded-full bg-obsidian"
       >
         <div
           className={cn(
@@ -231,14 +239,14 @@ function GoalSection({
       </div>
 
       {confirmingDelete && (
-        <div className="flex min-w-0 flex-wrap items-center gap-2 px-3 py-2 text-xs text-fog">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 px-3.5 py-2.5 text-xs text-fog">
           <span className="min-w-0 flex-1 break-words">
             ¿Eliminar la meta? Sus tareas quedarán en «Sin meta».
           </span>
           <button
             type="button"
             onClick={() => onConfirmDeleteChange(false)}
-            className="h-7 rounded-md px-2 text-mist hover:bg-elevated focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+            className="h-7 rounded-md px-2.5 text-mist hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
           >
             Cancelar
           </button>
@@ -246,7 +254,7 @@ function GoalSection({
             type="button"
             disabled={busy}
             onClick={() => void onDelete()}
-            className="h-7 rounded-md bg-coral-red/10 px-2 text-coral-red hover:bg-coral-red/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-coral-red/40 disabled:cursor-wait"
+            className="h-7 rounded-md bg-coral-red/12 px-2.5 text-coral-red hover:bg-coral-red/20 transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-coral-red/40 disabled:cursor-wait"
           >
             Eliminar
           </button>
@@ -254,7 +262,7 @@ function GoalSection({
       )}
 
       {!collapsed && (
-        <div id={`goal-${goal.id}-tasks`} className="min-w-0 px-2 pb-2 pt-1">
+        <div id={`goal-${goal.id}-tasks`} className="min-w-0 px-2 pb-2.5 pt-1.5">
           {item.tasks.length > 0 && (
             <ul aria-label={`Tareas de ${goal.title}`} className="min-w-0 space-y-0.5">
               {item.tasks.map((task) => (
@@ -269,13 +277,13 @@ function GoalSection({
           )}
 
           {allDone && (
-            <div className="flex min-w-0 flex-wrap items-center gap-2 px-2 py-2 text-xs text-fog">
+            <div className="flex min-w-0 flex-wrap items-center gap-2 px-2.5 py-2 text-xs text-fog">
               <span className="min-w-0 break-words">Todos los pasos están listos.</span>
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => void onUpdate({ status: "completed" })}
-                className="flex-shrink-0 rounded-md px-1.5 py-1 text-pulse-green hover:bg-elevated focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+                className="flex-shrink-0 rounded-md px-2 py-1 text-pulse-green hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
               >
                 Completar meta
               </button>
@@ -283,7 +291,7 @@ function GoalSection({
           )}
 
           {goal.status === "active" && (
-            <div className="flex h-9 min-w-0 items-center gap-2 rounded-md px-2 text-fog focus-within:bg-elevated/50">
+            <div className="mt-0.5 flex h-9 min-w-0 items-center gap-2 rounded-md px-2.5 text-fog focus-within:bg-obsidian transition-colors duration-[120ms]">
               <Plus className="h-3.5 w-3.5 flex-shrink-0" />
               <input
                 value={newTask}
@@ -300,7 +308,7 @@ function GoalSection({
                   }
                 }}
                 aria-label={`Nueva tarea para ${goal.title}`}
-                placeholder="Agregar tarea"
+                placeholder="Agregar tarea…"
                 className="h-8 min-w-0 flex-1 bg-transparent text-sm text-bone outline-none placeholder:text-ash disabled:cursor-wait"
               />
               {addingTask && <span className="flex-shrink-0 text-xs text-ash">Guardando…</span>}
@@ -478,7 +486,7 @@ export function PlanTab({ project, refreshKey, onError, onChanged }: PlanTabProp
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-4 overflow-hidden px-6 pb-4">
       <div className="mx-auto flex w-full max-w-4xl flex-shrink-0 flex-col gap-3">
-        <div className="min-w-0 rounded-lg bg-obsidian/60 p-1.5">
+        <div className="min-w-0 rounded-xl bg-carbon p-1.5">
           <div className="flex h-9 min-w-0 items-center gap-2">
             <Target className="ml-2 h-4 w-4 flex-shrink-0 text-fog" />
             <input
@@ -509,7 +517,7 @@ export function PlanTab({ project, refreshKey, onError, onChanged }: PlanTabProp
                 "mr-1 flex h-7 flex-shrink-0 items-center gap-1.5 rounded-md px-2 text-xs transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
                 showCriteria
                   ? "bg-elevated text-mist"
-                  : "text-fog hover:bg-elevated hover:text-mist",
+                  : "text-fog hover:bg-obsidian hover:text-mist",
               )}
             >
               {showCriteria ? (
@@ -538,7 +546,7 @@ export function PlanTab({ project, refreshKey, onError, onChanged }: PlanTabProp
                   }
                 }}
                 aria-label="Criterio de finalización"
-                placeholder="Describe el resultado observable…"
+                placeholder="Resultado observable…"
                 className="h-8 min-w-0 flex-1 bg-transparent text-sm text-mist outline-none placeholder:text-ash disabled:cursor-wait"
               />
             </div>
@@ -558,7 +566,7 @@ export function PlanTab({ project, refreshKey, onError, onChanged }: PlanTabProp
               aria-selected={filter === id}
               onClick={() => changeFilter(id)}
               className={cn(
-                "flex h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+                "flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
                 filter === id ? "bg-elevated text-paper" : "text-fog hover:text-mist",
               )}
             >
@@ -570,7 +578,7 @@ export function PlanTab({ project, refreshKey, onError, onChanged }: PlanTabProp
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-        <div className="mx-auto w-full max-w-4xl min-w-0 space-y-2">
+        <div className="mx-auto w-full max-w-4xl min-w-0 space-y-2.5">
           {plan?.goals.map((item) => (
             <GoalSection
               key={item.goal.id}
@@ -593,10 +601,12 @@ export function PlanTab({ project, refreshKey, onError, onChanged }: PlanTabProp
 
           {plan && plan.counts.all === 0 && (
             <div className="flex flex-col items-center gap-2 px-6 py-16 text-center">
-              <Target className="mb-1 h-7 w-7 text-ash" />
-              <h2 className="text-sm font-semibold text-bone">Define el primer hito</h2>
-              <p className="max-w-sm break-words text-sm leading-6 text-fog">
-                Escribe una meta concreta arriba y pulsa Enter. Después desglósala en tareas.
+              <div className="w-10 h-10 rounded-xl bg-carbon flex items-center justify-center text-ash mb-1">
+                <Target className="h-5 w-5" />
+              </div>
+              <h2 className="text-sm font-semibold text-bone">Sin metas</h2>
+              <p className="max-w-xs break-words text-xs leading-5 text-fog">
+                Escribe una meta arriba y pulsa Enter.
               </p>
             </div>
           )}
@@ -606,23 +616,26 @@ export function PlanTab({ project, refreshKey, onError, onChanged }: PlanTabProp
           )}
 
           {!plan && loading && (
-            <p className="px-3 py-10 text-center text-sm text-ash">Cargando plan…</p>
+            <div className="space-y-2.5">
+              <div className="h-24 rounded-xl bg-carbon" />
+              <div className="h-24 rounded-xl bg-carbon/70" />
+            </div>
           )}
 
           {plan && plan.loose_tasks.length > 0 && (
-            <section aria-label="Tareas sin meta" className="min-w-0 rounded-lg bg-obsidian/30">
+            <section aria-label="Tareas sin meta" className="min-w-0 rounded-xl bg-carbon/60">
               <button
                 type="button"
                 onClick={() => setLooseCollapsed((collapsed) => !collapsed)}
                 aria-expanded={!looseCollapsed}
-                className="flex h-10 w-full min-w-0 items-center gap-2 rounded-lg px-3 text-left text-fog hover:bg-obsidian/60 hover:text-mist transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+                className="flex h-10 w-full min-w-0 items-center gap-2 rounded-xl px-3 text-left text-fog hover:bg-carbon hover:text-mist transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
               >
                 {looseCollapsed ? (
                   <ChevronRight className="h-4 w-4 flex-shrink-0" />
                 ) : (
                   <ChevronDown className="h-4 w-4 flex-shrink-0" />
                 )}
-                <span className="min-w-0 flex-1 truncate text-sm">Sin meta</span>
+                <span className="min-w-0 flex-1 truncate text-sm font-medium">Sin meta</span>
                 <span className="flex-shrink-0 text-xs tabular-nums">
                   {plan.loose_tasks.length}
                 </span>

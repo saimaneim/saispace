@@ -24,40 +24,43 @@ export function TechRulesSection({ projectId, stackVersion }: TechRulesSectionPr
     load();
   }, [load, stackVersion]);
 
+  if (rules.length === 0 && !error) return null;
+
   return (
-    <section aria-label="Reglas por tecnología">
-      <h3 className="text-xs font-semibold text-fog px-1 mb-2">Reglas · {rules.length}</h3>
+    <section aria-label="Reglas por tecnología" className="space-y-2">
+      <h3 className="text-xs font-semibold text-fog px-1 tabular-nums">Reglas · {rules.length}</h3>
 
       {error && (
         <div
-          className="mx-3 mb-2 px-3 py-2 rounded-md bg-coral-red/10 text-coral-red text-sm"
+          className="mb-2 px-3 py-2 rounded-md bg-coral-red/10 text-coral-red text-sm"
           role="alert"
         >
           {error}
         </div>
       )}
 
-      <ul>
-        {rules.map((rule) => (
-          <li
-            key={rule.id}
-            className="flex items-start gap-3 px-3 py-2 rounded-md hover:bg-obsidian transition-colors duration-[120ms]"
-          >
-            <span className="text-sm font-medium text-paper whitespace-nowrap">
-              {rule.technology}
-              {rule.version_req && (
-                <span className="text-fog tabular-nums font-normal"> {rule.version_req}</span>
-              )}
-            </span>
-            <span className="flex-1 text-sm text-mist leading-relaxed">{rule.rule}</span>
-          </li>
-        ))}
-        {rules.length === 0 && (
-          <li className="px-3 py-2.5 rounded-lg bg-carbon text-xs text-fog">
-            Sin reglas. Pídele a tu IA: «añade una regla para &lt;tecnología&gt;».
-          </li>
-        )}
-      </ul>
+      {rules.length > 0 && (
+        <ul className="bg-carbon rounded-xl p-1.5 space-y-0.5">
+          {rules.map((rule) => (
+            <li
+              key={rule.id}
+              className="flex items-start gap-3 px-3 py-2.5 rounded-lg hover:bg-obsidian transition-colors duration-[120ms] min-w-0"
+            >
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-obsidian text-xs font-medium text-paper whitespace-nowrap flex-shrink-0">
+                <span>{rule.technology}</span>
+                {rule.version_req && (
+                  <span className="text-fog tabular-nums font-mono font-normal">
+                    {rule.version_req}
+                  </span>
+                )}
+              </span>
+              <span className="flex-1 min-w-0 text-sm text-mist leading-relaxed break-words">
+                {rule.rule}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

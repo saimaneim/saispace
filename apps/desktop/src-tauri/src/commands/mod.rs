@@ -3,7 +3,6 @@ pub mod context;
 pub mod favicon;
 pub mod fs;
 pub mod global;
-pub mod kpi;
 pub mod memory;
 pub mod plan;
 pub mod project;

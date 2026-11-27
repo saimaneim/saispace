@@ -7,11 +7,14 @@ import {
   FileText,
   Folder,
   Link2,
+  type LucideIcon,
   Scale,
   Search,
+  ShieldCheck,
   Sparkles,
+  X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, formatError } from "../lib/api";
 import type { ContextFile, Project } from "../lib/types";
 import { cn } from "../lib/utils";
@@ -26,7 +29,6 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 
-/** A file that only points at another one reads as secondary: link icon, dim name, target. */
 function linkHint(file: ContextFile): string {
   if (!file.link) return "";
   return file.link.via === "symlink"
@@ -34,27 +36,77 @@ function linkHint(file: ContextFile): string {
     : `Importa ${file.link.target}`;
 }
 
-function FileLabel({ file, label }: { file: ContextFile; label?: string }) {
-  const name = label ?? file.name;
-  if (!file.link) return <span className="truncate flex-1">{name}</span>;
+function LinkPill({ target, className }: { target: string; className?: string }) {
   return (
-    <span className="flex-1 min-w-0 flex items-center gap-1.5" title={linkHint(file)}>
-      <span className="truncate italic text-fog">{name}</span>
-      <span className="truncate text-[11px] text-ash">→ {file.link.target}</span>
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 max-w-[9rem] h-5 px-1.5 rounded-md bg-obsidian text-[11px] text-ash flex-shrink-0",
+        className,
+      )}
+    >
+      <Link2 className="w-2.5 h-2.5 flex-shrink-0" />
+      <span className="truncate">{target}</span>
     </span>
   );
 }
 
-function FileIcon({ file, icon: Icon }: { file: ContextFile; icon: typeof FileText }) {
-  const Shown = file.link ? Link2 : Icon;
-  return <Shown className="w-3.5 h-3.5 text-fog flex-shrink-0" />;
+function FileLabel({ file, label }: { file: ContextFile; label?: string }) {
+  const name = label ?? file.name;
+  if (!file.link) return <span className="truncate flex-1">{name}</span>;
+  return (
+    <span className="flex-1 min-w-0 flex items-center gap-2" title={linkHint(file)}>
+      <span className="truncate text-fog">{name}</span>
+      <LinkPill target={file.link.target} className="ml-auto" />
+    </span>
+  );
+}
+
+function FileIcon({ file, icon: Icon }: { file: ContextFile; icon: LucideIcon }) {
+  return <Icon className={cn("w-3.5 h-3.5 flex-shrink-0", file.link ? "text-ash" : "text-fog")} />;
+}
+
+function CategorySection({
+  icon: Icon,
+  label,
+  count,
+  open,
+  onToggle,
+  children,
+}: {
+  icon: LucideIcon;
+  label: string;
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="pt-1">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="w-full flex items-center gap-1.5 px-1.5 h-7 rounded-md text-xs font-semibold text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+      >
+        <ChevronRight
+          className={cn(
+            "w-3.5 h-3.5 flex-shrink-0 text-ash transition-transform duration-[120ms]",
+            open && "rotate-90 text-paper",
+          )}
+        />
+        <Icon className="w-3.5 h-3.5 text-fog flex-shrink-0" />
+        <span className="truncate flex-1 text-left">{label}</span>
+        <span className="tabular-nums text-[11px] text-ash font-normal">{count}</span>
+      </button>
+      {open && children}
+    </div>
+  );
 }
 
 interface ContextTabProps {
   project: Project;
 }
 
-/** Markdown opens rendered; data files (json, toml, yaml) open in the editor. */
 const isMarkdown = (path: string) => /\.(md|mdc)$/i.test(path);
 
 interface SkillSubgroup {
@@ -68,12 +120,14 @@ interface CategorizedContext {
   guidelines: ContextFile[];
   skills: SkillSubgroup[];
   rules: ContextFile[];
+  checks: ContextFile[];
   others: ContextFile[];
 }
 
 function categorizeContextFiles(files: ContextFile[]): CategorizedContext {
   const guidelines: ContextFile[] = [];
   const rules: ContextFile[] = [];
+  const checks: ContextFile[] = [];
   const others: ContextFile[] = [];
   const skillsMap = new Map<string, SkillSubgroup>();
 
@@ -111,6 +165,11 @@ function categorizeContextFiles(files: ContextFile[]): CategorizedContext {
       continue;
     }
 
+    if (parts.includes("checks")) {
+      checks.push(file);
+      continue;
+    }
+
     others.push(file);
   }
 
@@ -134,9 +193,10 @@ function categorizeContextFiles(files: ContextFile[]): CategorizedContext {
   }
 
   rules.sort((a, b) => a.name.localeCompare(b.name));
+  checks.sort((a, b) => a.path.localeCompare(b.path));
   others.sort((a, b) => a.path.localeCompare(b.path));
 
-  return { guidelines, skills, rules, others };
+  return { guidelines, skills, rules, checks, others };
 }
 
 const MINIMAL_AGENTS_TEMPLATE = `# Directrices para agentes de IA
@@ -155,11 +215,7 @@ export function ContextTab({ project }: ContextTabProps) {
   const [content, setContent] = useState("");
   const [savedContent, setSavedContent] = useState("");
   const [isLoadingFile, setIsLoadingFile] = useState(false);
-  // Set when the selected file could not be read: editing is blocked so a
-  // save cannot overwrite it with the previous file's text.
   const [loadFailed, setLoadFailed] = useState(false);
-  // Only the latest read may update the editor; an older, slower one would
-  // otherwise show (and later save) another file's content under this key.
   const loadSeq = useRef(0);
   const [isSaving, setIsSaving] = useState(false);
   const [isPreview, setIsPreview] = useState(true);
@@ -207,13 +263,17 @@ export function ContextTab({ project }: ContextTabProps) {
     [project.id],
   );
 
-  // Open the main guideline (AGENTS.md first) as soon as the list arrives.
   const defaultKey = useMemo(() => {
-    const { guidelines, skills, rules, others } = categorizeContextFiles(files);
+    const { guidelines, skills, rules, checks, others } = categorizeContextFiles(files);
     return (
-      guidelines[0]?.path ?? rules[0]?.path ?? skills[0]?.files[0]?.file.path ?? others[0]?.path
+      guidelines[0]?.path ??
+      rules[0]?.path ??
+      skills[0]?.files[0]?.file.path ??
+      checks[0]?.path ??
+      others[0]?.path
     );
   }, [files]);
+
   useEffect(() => {
     if (selectedKey === null && defaultKey) {
       setSelectedKey(defaultKey);
@@ -289,8 +349,6 @@ export function ContextTab({ project }: ContextTabProps) {
     if (pendingSwitchKey) switchTo(pendingSwitchKey);
   };
 
-  // A failed save keeps the dialog closed but stays on the current file, so
-  // the unsaved text is not thrown away.
   const handleSaveAndSwitch = async () => {
     if (!pendingSwitchKey) return;
     const target = pendingSwitchKey;
@@ -321,9 +379,7 @@ export function ContextTab({ project }: ContextTabProps) {
   };
 
   const hasChanges = content !== savedContent;
-
   const rawCategorized = useMemo(() => categorizeContextFiles(files), [files]);
-
   const query = searchFilter.trim().toLowerCase();
 
   const categorized = useMemo(() => {
@@ -334,6 +390,7 @@ export function ContextTab({ project }: ContextTabProps) {
 
     const guidelines = rawCategorized.guidelines.filter(filterFile);
     const rules = rawCategorized.rules.filter(filterFile);
+    const checks = rawCategorized.checks.filter(filterFile);
     const others = rawCategorized.others.filter(filterFile);
 
     const skills: SkillSubgroup[] = [];
@@ -350,7 +407,7 @@ export function ContextTab({ project }: ContextTabProps) {
       }
     }
 
-    return { guidelines, skills, rules, others };
+    return { guidelines, skills, rules, checks, others };
   }, [rawCategorized, query]);
 
   const toggleCategory = (key: string) => {
@@ -371,15 +428,18 @@ export function ContextTab({ project }: ContextTabProps) {
     });
   };
 
-  const isCategoryOpen = (key: string) => {
-    if (query) return true;
-    return openCategories.has(key);
-  };
+  useEffect(() => {
+    if (!selectedKey) return;
+    const owner = rawCategorized.skills.find((skill) =>
+      skill.files.some((f) => f.file.path === selectedKey),
+    );
+    if (!owner) return;
+    setOpenSkills((prev) => (prev.has(owner.id) ? prev : new Set(prev).add(owner.id)));
+    setOpenCategories((prev) => (prev.has("skills") ? prev : new Set(prev).add("skills")));
+  }, [selectedKey, rawCategorized]);
 
-  const isSkillOpen = (key: string) => {
-    if (query) return true;
-    return openSkills.has(key);
-  };
+  const isCategoryOpen = (key: string) => Boolean(query) || openCategories.has(key);
+  const isSkillOpen = (key: string) => Boolean(query) || openSkills.has(key);
 
   const currentLabel = selectedKey
     ? (files.find((f) => f.path === selectedKey)?.name ?? selectedKey)
@@ -390,13 +450,33 @@ export function ContextTab({ project }: ContextTabProps) {
     ? files.find((f) => f.path === selectedFile.link?.target)
     : undefined;
 
-  const rowClass = (selected: boolean) =>
-    cn(
-      "w-full flex items-center gap-2 px-2.5 h-8 rounded-md text-xs text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
-      selected
-        ? "bg-elevated text-paper font-medium"
-        : "text-mist hover:text-paper hover:bg-obsidian",
+  const renderFileButton = (file: ContextFile, icon: LucideIcon, label?: string) => {
+    const selected = selectedKey === file.path;
+    return (
+      <button
+        key={file.path}
+        type="button"
+        onClick={() => selectItem(file.path)}
+        title={file.path}
+        aria-current={selected ? "true" : undefined}
+        className={cn(
+          "relative w-full flex items-center gap-2 pl-3 pr-2.5 h-8 rounded-md text-xs text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+          selected
+            ? "bg-elevated text-paper font-medium"
+            : "text-mist hover:text-paper hover:bg-obsidian",
+        )}
+      >
+        {selected && (
+          <span
+            className="absolute left-1 top-2 bottom-2 w-0.5 rounded-full bg-acid-lime"
+            aria-hidden="true"
+          />
+        )}
+        {label ? null : <FileIcon file={file} icon={icon} />}
+        <FileLabel file={file} label={label} />
+      </button>
     );
+  };
 
   return (
     <div className="flex-1 flex h-full overflow-hidden bg-void select-none">
@@ -410,8 +490,18 @@ export function ContextTab({ project }: ContextTabProps) {
               onChange={(e) => setSearchFilter(e.target.value)}
               placeholder="Filtrar contexto…"
               aria-label="Filtrar contexto"
-              className="w-full h-8 pl-8 pr-2.5 text-xs bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 transition-colors duration-[120ms]"
+              className="w-full h-8 pl-8 pr-7 text-xs bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 transition-colors duration-[120ms]"
             />
+            {searchFilter && (
+              <button
+                type="button"
+                onClick={() => setSearchFilter("")}
+                aria-label="Limpiar filtro"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 rounded flex items-center justify-center text-fog hover:text-paper hover:bg-elevated transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -420,201 +510,113 @@ export function ContextTab({ project }: ContextTabProps) {
           aria-label="Ficheros de contexto"
         >
           {categorized.guidelines.length > 0 && (
-            <div className="pt-1">
-              <button
-                type="button"
-                onClick={() => toggleCategory("guidelines")}
-                aria-expanded={isCategoryOpen("guidelines")}
-                className="w-full flex items-center gap-1.5 px-1.5 h-7 rounded-md text-xs font-semibold text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
-              >
-                <ChevronRight
-                  className={cn(
-                    "w-3.5 h-3.5 flex-shrink-0 text-ash transition-transform duration-[120ms]",
-                    isCategoryOpen("guidelines") && "rotate-90 text-paper",
-                  )}
-                />
-                <Compass className="w-3.5 h-3.5 text-fog flex-shrink-0" />
-                <span className="truncate flex-1 text-left">Directrices</span>
-                <span className="tabular-nums text-[11px] text-ash font-normal">
-                  {categorized.guidelines.length}
-                </span>
-              </button>
-
-              {isCategoryOpen("guidelines") && (
-                <div className="mt-0.5 space-y-0.5 pl-3">
-                  {categorized.guidelines.map((f) => (
-                    <button
-                      key={f.path}
-                      type="button"
-                      onClick={() => selectItem(f.path)}
-                      title={f.path}
-                      className={rowClass(selectedKey === f.path)}
-                    >
-                      <FileIcon file={f} icon={BookOpen} />
-                      <FileLabel file={f} />
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <CategorySection
+              icon={Compass}
+              label="Directrices"
+              count={categorized.guidelines.length}
+              open={isCategoryOpen("guidelines")}
+              onToggle={() => toggleCategory("guidelines")}
+            >
+              <div className="mt-0.5 space-y-0.5 pl-3">
+                {categorized.guidelines.map((f) => renderFileButton(f, BookOpen))}
+              </div>
+            </CategorySection>
           )}
 
           {categorized.skills.length > 0 && (
-            <div className="pt-1">
-              <button
-                type="button"
-                onClick={() => toggleCategory("skills")}
-                aria-expanded={isCategoryOpen("skills")}
-                className="w-full flex items-center gap-1.5 px-1.5 h-7 rounded-md text-xs font-semibold text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
-              >
-                <ChevronRight
-                  className={cn(
-                    "w-3.5 h-3.5 flex-shrink-0 text-ash transition-transform duration-[120ms]",
-                    isCategoryOpen("skills") && "rotate-90 text-paper",
-                  )}
-                />
-                <Sparkles className="w-3.5 h-3.5 text-fog flex-shrink-0" />
-                <span className="truncate flex-1 text-left">Skills</span>
-                <span className="tabular-nums text-[11px] text-ash font-normal">
-                  {categorized.skills.length}
-                </span>
-              </button>
-
-              {isCategoryOpen("skills") && (
-                <div className="mt-0.5 space-y-0.5 pl-2">
-                  {categorized.skills.map((skill) => {
-                    const hasSelected = skill.files.some((f) => f.file.path === selectedKey);
-                    const open = isSkillOpen(skill.id) || hasSelected;
-                    return (
-                      <div key={skill.id} className="space-y-0.5">
-                        <button
-                          type="button"
-                          onClick={() => toggleSkill(skill.id)}
-                          aria-expanded={open}
-                          title={skill.baseDir}
-                          className="w-full flex items-center gap-1.5 px-2 h-7 rounded-md text-xs text-mist hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
-                        >
-                          <ChevronRight
-                            className={cn(
-                              "w-3 h-3 flex-shrink-0 text-ash transition-transform duration-[120ms]",
-                              open && "rotate-90 text-paper",
-                            )}
-                          />
-                          <Folder className="w-3.5 h-3.5 text-fog flex-shrink-0" />
-                          <span className="truncate flex-1 text-left">{skill.name}</span>
-                          {skill.files.length > 1 && (
-                            <span className="tabular-nums text-[11px] text-ash">
-                              {skill.files.length}
-                            </span>
+            <CategorySection
+              icon={Sparkles}
+              label="Skills"
+              count={categorized.skills.length}
+              open={isCategoryOpen("skills")}
+              onToggle={() => toggleCategory("skills")}
+            >
+              <div className="mt-0.5 space-y-0.5 pl-2">
+                {categorized.skills.map((skill) => {
+                  const open = isSkillOpen(skill.id);
+                  return (
+                    <div key={skill.id} className="space-y-0.5">
+                      <button
+                        type="button"
+                        onClick={() => toggleSkill(skill.id)}
+                        aria-expanded={open}
+                        title={skill.baseDir}
+                        className="w-full flex items-center gap-1.5 px-2 h-7 rounded-md text-xs text-mist hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+                      >
+                        <ChevronRight
+                          className={cn(
+                            "w-3 h-3 flex-shrink-0 text-ash transition-transform duration-[120ms]",
+                            open && "rotate-90 text-paper",
                           )}
-                        </button>
-
-                        {open && (
-                          <div className="space-y-0.5 pl-4">
-                            {skill.files.map(({ file, relPath }) => (
-                              <button
-                                key={file.path}
-                                type="button"
-                                onClick={() => selectItem(file.path)}
-                                title={file.path}
-                                className={rowClass(selectedKey === file.path)}
-                              >
-                                <FileLabel file={file} label={relPath} />
-                              </button>
-                            ))}
-                          </div>
+                        />
+                        <Folder className="w-3.5 h-3.5 text-fog flex-shrink-0" />
+                        <span className="truncate flex-1 text-left">{skill.name}</span>
+                        {skill.files.length > 1 && (
+                          <span className="tabular-nums text-[11px] text-ash">
+                            {skill.files.length}
+                          </span>
                         )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+                      </button>
+
+                      {open && (
+                        <div className="space-y-0.5 pl-4">
+                          {skill.files.map(({ file, relPath }) =>
+                            renderFileButton(file, FileText, relPath),
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </CategorySection>
           )}
 
           {categorized.rules.length > 0 && (
-            <div className="pt-1">
-              <button
-                type="button"
-                onClick={() => toggleCategory("rules")}
-                aria-expanded={isCategoryOpen("rules")}
-                className="w-full flex items-center gap-1.5 px-1.5 h-7 rounded-md text-xs font-semibold text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
-              >
-                <ChevronRight
-                  className={cn(
-                    "w-3.5 h-3.5 flex-shrink-0 text-ash transition-transform duration-[120ms]",
-                    isCategoryOpen("rules") && "rotate-90 text-paper",
-                  )}
-                />
-                <Scale className="w-3.5 h-3.5 text-fog flex-shrink-0" />
-                <span className="truncate flex-1 text-left">Reglas</span>
-                <span className="tabular-nums text-[11px] text-ash font-normal">
-                  {categorized.rules.length}
-                </span>
-              </button>
+            <CategorySection
+              icon={Scale}
+              label="Reglas"
+              count={categorized.rules.length}
+              open={isCategoryOpen("rules")}
+              onToggle={() => toggleCategory("rules")}
+            >
+              <div className="mt-0.5 space-y-0.5 pl-3">
+                {categorized.rules.map((f) => renderFileButton(f, FileCode))}
+              </div>
+            </CategorySection>
+          )}
 
-              {isCategoryOpen("rules") && (
-                <div className="mt-0.5 space-y-0.5 pl-3">
-                  {categorized.rules.map((f) => (
-                    <button
-                      key={f.path}
-                      type="button"
-                      onClick={() => selectItem(f.path)}
-                      title={f.path}
-                      className={rowClass(selectedKey === f.path)}
-                    >
-                      <FileIcon file={f} icon={FileCode} />
-                      <FileLabel file={f} />
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+          {categorized.checks.length > 0 && (
+            <CategorySection
+              icon={ShieldCheck}
+              label="Checks"
+              count={categorized.checks.length}
+              open={isCategoryOpen("checks")}
+              onToggle={() => toggleCategory("checks")}
+            >
+              <div className="mt-0.5 space-y-0.5 pl-3">
+                {categorized.checks.map((f) => renderFileButton(f, FileText))}
+              </div>
+            </CategorySection>
           )}
 
           {categorized.others.length > 0 && (
-            <div className="pt-1">
-              <button
-                type="button"
-                onClick={() => toggleCategory("others")}
-                aria-expanded={isCategoryOpen("others")}
-                className="w-full flex items-center gap-1.5 px-1.5 h-7 rounded-md text-xs font-semibold text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
-              >
-                <ChevronRight
-                  className={cn(
-                    "w-3.5 h-3.5 flex-shrink-0 text-ash transition-transform duration-[120ms]",
-                    isCategoryOpen("others") && "rotate-90 text-paper",
-                  )}
-                />
-                <Folder className="w-3.5 h-3.5 text-fog flex-shrink-0" />
-                <span className="truncate flex-1 text-left">Otros</span>
-                <span className="tabular-nums text-[11px] text-ash font-normal">
-                  {categorized.others.length}
-                </span>
-              </button>
-
-              {isCategoryOpen("others") && (
-                <div className="mt-0.5 space-y-0.5 pl-3">
-                  {categorized.others.map((f) => (
-                    <button
-                      key={f.path}
-                      type="button"
-                      onClick={() => selectItem(f.path)}
-                      title={f.path}
-                      className={rowClass(selectedKey === f.path)}
-                    >
-                      <FileIcon file={f} icon={FileText} />
-                      <FileLabel file={f} />
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <CategorySection
+              icon={Folder}
+              label="Otros"
+              count={categorized.others.length}
+              open={isCategoryOpen("others")}
+              onToggle={() => toggleCategory("others")}
+            >
+              <div className="mt-0.5 space-y-0.5 pl-3">
+                {categorized.others.map((f) => renderFileButton(f, FileText))}
+              </div>
+            </CategorySection>
           )}
 
           {files.length === 0 && (
             <div className="py-6 px-1 text-xs text-fog space-y-3">
-              <p>Este proyecto no tiene ficheros de contexto.</p>
+              <p>Sin ficheros de contexto</p>
               <Button
                 variant="secondary"
                 onClick={handleCreateAgentsMd}
@@ -630,10 +632,10 @@ export function ContextTab({ project }: ContextTabProps) {
       </aside>
 
       <section className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-void">
-        <div className="h-14 px-5 flex items-center gap-4 flex-shrink-0">
+        <div className="px-7 pt-5 pb-4 flex items-center gap-4 flex-shrink-0">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-semibold text-paper truncate">{currentLabel}</h2>
+            <div className="flex items-center gap-2 min-w-0">
+              <h2 className="text-base font-semibold text-paper truncate">{currentLabel}</h2>
               {hasChanges && (
                 <span
                   className="w-2 h-2 rounded-full bg-status-amber flex-shrink-0"
@@ -641,28 +643,22 @@ export function ContextTab({ project }: ContextTabProps) {
                 />
               )}
             </div>
-            {selectedFile?.link ? (
-              <p className="text-xs text-fog flex items-center gap-1.5 min-w-0">
-                <Link2 className="w-3 h-3 flex-shrink-0" />
-                <span className="truncate">
-                  {selectedFile.link.via === "symlink" ? "Symlink a" : "Solo importa"}{" "}
-                  {linkTarget ? (
-                    <button
-                      type="button"
-                      onClick={() => selectItem(linkTarget.path)}
-                      className="text-mist underline underline-offset-2 hover:text-paper focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 rounded-sm"
-                    >
-                      {selectedFile.link.target}
-                    </button>
-                  ) : (
-                    <span className="text-mist">{selectedFile.link.target}</span>
-                  )}
-                  {selectedFile.link.via === "symlink" ? ": editar aquí cambia el original" : ""}
-                </span>
-              </p>
-            ) : (
-              <p className="text-xs text-fog truncate">{currentSubtitle}</p>
-            )}
+            <div className="flex items-center gap-2 min-w-0 mt-0.5">
+              <p className="text-xs text-fog font-mono truncate">{currentSubtitle}</p>
+              {selectedFile?.link &&
+                (linkTarget ? (
+                  <button
+                    type="button"
+                    onClick={() => selectItem(linkTarget.path)}
+                    title={linkHint(selectedFile)}
+                    className="rounded-md transition-colors duration-[120ms] hover:[&>span]:text-paper focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+                  >
+                    <LinkPill target={selectedFile.link.target} />
+                  </button>
+                ) : (
+                  <LinkPill target={selectedFile.link.target} />
+                ))}
+            </div>
           </div>
 
           <div
@@ -680,10 +676,8 @@ export function ContextTab({ project }: ContextTabProps) {
                 aria-selected={isPreview === id}
                 onClick={() => setIsPreview(id)}
                 className={cn(
-                  "h-7 px-3 rounded-md text-xs transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
-                  isPreview === id
-                    ? "bg-elevated text-paper font-medium"
-                    : "text-fog hover:text-mist",
+                  "h-7 px-3 rounded-md text-xs font-medium transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+                  isPreview === id ? "bg-elevated text-paper" : "text-fog hover:text-mist",
                 )}
               >
                 {label}
@@ -695,6 +689,7 @@ export function ContextTab({ project }: ContextTabProps) {
             onClick={handleSave}
             disabled={!hasChanges || isSaving || loadFailed}
             variant={hasChanges ? "default" : "secondary"}
+            size="sm"
             title="Guardar (Ctrl+S)"
             className="flex-shrink-0 min-w-24"
           >
@@ -704,28 +699,35 @@ export function ContextTab({ project }: ContextTabProps) {
 
         {errorMessage && (
           <div
-            className="mx-5 mb-2 px-3 py-2 rounded-md text-xs bg-coral-red/10 text-coral-red"
+            className="mx-7 mb-3 px-3 py-2 rounded-md text-xs bg-coral-red/10 text-coral-red"
             role="alert"
           >
             {errorMessage}
           </div>
         )}
 
-        <div className="flex-1 px-5 pb-5 overflow-y-auto">
+        <div className="flex-1 px-7 pb-6 overflow-y-auto">
           {selectedKey === null ? (
             <div className="py-20 text-center text-xs text-fog">
               Sin ficheros de contexto. Crea un AGENTS.md desde la barra lateral.
             </div>
           ) : isLoadingFile ? (
-            <div className="py-20 text-center text-xs text-fog">Cargando…</div>
+            <div className="max-w-[76ch] bg-carbon rounded-xl p-6 space-y-3">
+              <div className="h-5 w-48 rounded bg-obsidian" />
+              <div className="h-4 w-full rounded bg-obsidian/70" />
+              <div className="h-4 w-5/6 rounded bg-obsidian/70" />
+              <div className="h-4 w-2/3 rounded bg-obsidian/50" />
+            </div>
           ) : loadFailed ? (
             <div className="py-20 text-center text-xs text-fog">
               No se pudo leer el fichero. Vuelve a seleccionarlo para reintentar.
             </div>
           ) : isPreview ? (
-            <div className="max-w-3xl space-y-2">
+            <div className="max-w-[76ch]">
               {content.trim() ? (
-                <Markdown content={content} />
+                <div className="bg-carbon rounded-xl px-6 py-5">
+                  <Markdown content={content} />
+                </div>
               ) : (
                 <div className="py-16 text-center text-xs text-fog space-y-2">
                   <FileText className="w-6 h-6 mx-auto text-ash mb-2" />
@@ -741,7 +743,7 @@ export function ContextTab({ project }: ContextTabProps) {
               value={content}
               onChange={(e) => setContent(e.target.value)}
               placeholder="Escribe aquí las directrices y el contexto para los agentes…"
-              className="w-full h-full min-h-96 font-mono text-sm leading-relaxed p-4 bg-carbon rounded-lg text-paper placeholder:text-fog resize-none focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+              className="w-full h-full min-h-96 font-mono text-sm leading-relaxed p-5 bg-carbon rounded-xl text-paper placeholder:text-fog resize-none focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 transition-colors duration-[120ms]"
             />
           )}
         </div>

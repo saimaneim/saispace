@@ -156,7 +156,7 @@ struct ActivePlanView {
 impl SaiSpaceServer {
     #[tool(
         name = "get_active_plan",
-        description = "Read the active plan of the current project (project_id, path, or working directory) in one call: active goals with their progress and pending tasks, open tasks without a goal, and the memory context (latest session summary and recent memories). Call it when starting work in a project"
+        description = "Active plan in one call (project_id, path or working directory): goals with progress and pending tasks, tasks without a goal, latest session summary and recent memory titles. Call it when starting work"
     )]
     async fn get_active_plan(
         &self,
@@ -248,7 +248,7 @@ impl SaiSpaceServer {
 
     #[tool(
         name = "create_goal",
-        description = "Create a milestone of the current project with its task breakdown in one call. Optional criteria is the short \"done when\". Record only milestones and steps that matter across sessions, not ephemeral micro-steps"
+        description = "Create a goal and its tasks in one call; criteria is the short \"done when\". Only milestones that matter across sessions"
     )]
     async fn create_goal(
         &self,
@@ -296,7 +296,7 @@ impl SaiSpaceServer {
 
     #[tool(
         name = "update_goal",
-        description = "Update a goal (full or short id): complete it once every task is done, reactivate it, archive it, rename it or adjust its criteria"
+        description = "Complete, reactivate, archive or rename a goal, or change its criteria (full or short id)"
     )]
     async fn update_goal(
         &self,
@@ -339,7 +339,7 @@ impl SaiSpaceServer {
 
     #[tool(
         name = "complete_task",
-        description = "Mark a task as done (full or short id) and report its goal's new progress; complete the goal with update_goal once every task is done"
+        description = "Mark a task done (full or short id); returns its goal's progress. Complete the goal with update_goal when every task is done"
     )]
     async fn complete_task(&self, Parameters(params): Parameters<TaskIdParams>) -> CallToolResult {
         let task_id = match self.db.resolve_task_id(&params.id).await {

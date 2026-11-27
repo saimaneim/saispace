@@ -1,13 +1,25 @@
-import { Brain, Eye, Pencil, Pin, PinOff, Trash2 } from "lucide-react";
+import {
+  Brain,
+  ChevronRight,
+  Copy,
+  Eye,
+  History,
+  Pencil,
+  Pin,
+  PinOff,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, formatError } from "../lib/api";
-import type { DuplicatePair, Memory, MemoryKind, Project, StaleReport } from "../lib/types";
+import type { DuplicatePair, Memory, Project, StaleReport } from "../lib/types";
 import { cn, formatTimeAgo } from "../lib/utils";
 import { AgentContextDialog } from "./AgentContextDialog";
 import { DuplicatesPanel } from "./DuplicatesPanel";
-import { KpiPanel } from "./KpiPanel";
 import { Markdown } from "./Markdown";
 import { MemoryEditor } from "./MemoryEditor";
+import { MEMORY_KIND_LABELS, MEMORY_KIND_STYLE, MemoryKindBadge } from "./MemoryKindBadge";
 import { MemoryLinks } from "./MemoryLinks";
 import { OrphanMemories } from "./OrphanMemories";
 import { StalePanel } from "./StalePanel";
@@ -27,20 +39,22 @@ export interface MemoryTabProps {
   focusId?: string | null;
 }
 
-export const KIND_LABELS: Record<MemoryKind, string> = {
-  decision: "Decisión",
-  architecture: "Arquitectura",
-  bugfix: "Corrección",
-  pattern: "Patrón",
-  config: "Configuración",
-  discovery: "Hallazgo",
-  preference: "Preferencia",
-  session_summary: "Resumen de sesión",
-  note: "Nota",
-};
+export const KIND_LABELS = MEMORY_KIND_LABELS;
+
+function formatFullDate(isoString: string): string {
+  try {
+    return new Intl.DateTimeFormat("es", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(isoString));
+  } catch {
+    return isoString;
+  }
+}
 
 export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
   const [memories, setMemories] = useState<Memory[]>([]);
+  const [loading, setLoading] = useState(refreshKey !== undefined);
   const [duplicates, setDuplicates] = useState<DuplicatePair[]>([]);
   const [dismissedPairKeys, setDismissedPairKeys] = useState<Set<string>>(new Set());
   const [showDuplicates, setShowDuplicates] = useState(false);
@@ -66,6 +80,8 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
       setStaleReport(stale);
     } catch (err) {
       setError(formatError(err));
+    } finally {
+      setLoading(false);
     }
   }, [project?.id]);
 
@@ -77,8 +93,6 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
     if (focusId) setSelectedId(focusId);
   }, [focusId]);
 
-  // A focused memory (e.g. from "Más consultadas") may be older than the 200
-  // loaded rows: fetch it by id and add it to the list.
   useEffect(() => {
     if (!focusId || memories.length === 0 || memories.some((m) => m.id === focusId)) return;
     let cancelled = false;
@@ -95,7 +109,6 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
     };
   }, [focusId, memories]);
 
-  // Review panels belong to one project: close them when switching.
   useEffect(() => {
     setShowStale(false);
     setShowDuplicates(false);
@@ -114,6 +127,7 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
         (m) =>
           m.title.toLowerCase().includes(q) ||
           m.content.toLowerCase().includes(q) ||
+          Boolean(m.topic_key?.toLowerCase().includes(q)) ||
           Boolean(m.project_name?.toLowerCase().includes(q)),
       );
     }
@@ -131,7 +145,6 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
 
   const staleCount = staleReport.stale.length;
 
-  // Stale memories can be older than the 200 loaded ones: the report carries them whole.
   const selected =
     memories.find((m) => m.id === selectedId) ??
     staleReport.stale.find((m) => m.id === selectedId) ??
@@ -139,8 +152,6 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
     visible[0] ??
     null;
 
-  // Links may point at memories outside the loaded 200 (or archived ones):
-  // fetch them by id and add them to the list.
   const openMemory = async (id: string) => {
     if (!memories.some((m) => m.id === id)) {
       try {
@@ -177,33 +188,52 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
     }
   };
 
-  const kpiSection = project ? (
-    <div className="pt-1 flex-shrink-0">
-      <KpiPanel scope={project.id} refreshKey={refreshKey} defaultCollapsed />
-    </div>
-  ) : null;
+  if (loading && memories.length === 0) {
+    return (
+      <div className="flex-1 flex min-h-0">
+        <aside className="w-80 flex-shrink-0 bg-carbon flex flex-col min-h-0 p-3 gap-2">
+          <div className="h-7 flex items-center justify-between px-1">
+            <div className="h-3 w-16 rounded bg-obsidian" />
+            <div className="h-6 w-24 rounded-md bg-obsidian" />
+          </div>
+          <div className="h-9 rounded-md bg-obsidian" />
+          <div className="space-y-1.5 pt-1">
+            <div className="h-14 rounded-md bg-obsidian/70" />
+            <div className="h-14 rounded-md bg-obsidian/50" />
+            <div className="h-14 rounded-md bg-obsidian/40" />
+          </div>
+        </aside>
+        <section className="flex-1 min-w-0 px-7 pt-5 pb-7 space-y-4">
+          <div className="h-6 w-28 rounded-md bg-carbon" />
+          <div className="h-7 w-72 rounded-md bg-carbon" />
+          <div className="h-44 max-w-[76ch] rounded-xl bg-carbon" />
+        </section>
+      </div>
+    );
+  }
 
   if (memories.length === 0) {
     return (
       <div className="flex-1 flex flex-col min-h-0">
-        {kpiSection}
-        <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-6">
-          <Brain className="w-8 h-8 text-ash" />
-          <p className="text-sm text-paper">Sin memorias todavía</p>
-          <p className="text-sm text-fog max-w-sm">
-            Los agentes guardan aquí decisiones y hallazgos con la tool save_memory o con sai memory
-            save.
+        <div className="flex-1 flex flex-col items-center justify-center gap-2.5 text-center px-6">
+          <div className="w-10 h-10 rounded-xl bg-carbon flex items-center justify-center text-ash">
+            <Brain className="w-5 h-5" />
+          </div>
+          <p className="text-sm font-medium text-paper">Sin memorias</p>
+          <p className="text-xs text-fog max-w-xs leading-relaxed">
+            Se guardan con <code className="font-mono text-mist">save_memory</code> o{" "}
+            <code className="font-mono text-mist">sai memory save</code>.
           </p>
           <Button
             variant="secondary"
             size="sm"
             onClick={() => setAgentDialogOpen(true)}
-            className="mt-2 flex items-center gap-2 text-xs"
+            className="mt-1 gap-1.5 text-xs"
           >
-            <Eye className="w-4 h-4" />
+            <Eye className="w-3.5 h-3.5" />
             Vista del agente
           </Button>
-          {error && <p className="text-sm text-coral-red">{error}</p>}
+          {error && <p className="text-xs text-coral-red">{error}</p>}
           <AgentContextDialog
             open={agentDialogOpen}
             onOpenChange={setAgentDialogOpen}
@@ -216,130 +246,216 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      {kpiSection}
       <div className="flex-1 flex min-h-0">
-        <aside className="w-80 flex-shrink-0 bg-carbon flex flex-col min-h-0 p-3 gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setAgentDialogOpen(true)}
-            className="w-full flex items-center justify-center gap-2 text-xs"
-          >
-            <Eye className="w-4 h-4" />
-            Vista del agente
-          </Button>
-
-          {scopeFilter !== "orphans" && (
-            <input
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              placeholder="Filtrar memorias…"
-              aria-label="Filtrar memorias"
-              className="h-9 px-3 text-sm bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
-            />
-          )}
-
-          {!project && (
-            <div className="flex items-center gap-1 bg-obsidian p-1 rounded-md flex-shrink-0 select-none">
-              <button
-                type="button"
-                onClick={() => setScopeFilter("all")}
-                className={cn(
-                  "flex-1 h-7 text-xs rounded transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
-                  scopeFilter === "all"
-                    ? "bg-elevated text-paper font-medium"
-                    : "text-fog hover:text-mist",
-                )}
-              >
-                Todas
-              </button>
-              <button
-                type="button"
-                onClick={() => setScopeFilter("global")}
-                className={cn(
-                  "flex-1 h-7 text-xs rounded transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
-                  scopeFilter === "global"
-                    ? "bg-elevated text-paper font-medium"
-                    : "text-fog hover:text-mist",
-                )}
-              >
-                Globales
-              </button>
-              <button
-                type="button"
-                onClick={() => setScopeFilter("orphans")}
-                className={cn(
-                  "flex-1 h-7 text-xs rounded transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
-                  scopeFilter === "orphans"
-                    ? "bg-elevated text-paper font-medium"
-                    : "text-fog hover:text-mist",
-                )}
-              >
-                Sin proyecto
-              </button>
-            </div>
-          )}
-
-          {scopeFilter !== "orphans" && activeDuplicates.length > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                setShowDuplicates(true);
-                setShowStale(false);
-              }}
-              className="flex items-center justify-between px-3 py-2 text-xs font-medium rounded-md bg-status-amber/10 text-status-amber hover:bg-status-amber/20 transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
-            >
-              <span>
-                {activeDuplicates.length === 1
-                  ? "1 posible duplicado"
-                  : `${activeDuplicates.length} posibles duplicados`}
+        <aside className="w-80 flex-shrink-0 bg-carbon flex flex-col min-h-0">
+          <div className="px-3 pt-3 pb-2 space-y-2 flex-shrink-0">
+            <div className="flex items-center justify-between gap-2 px-1 h-7">
+              <span className="text-xs font-medium text-fog tabular-nums">
+                {visible.length} {visible.length === 1 ? "memoria" : "memorias"}
               </span>
-            </button>
-          )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setAgentDialogOpen(true)}
+                className="h-7 px-2 text-xs gap-1.5 text-fog hover:text-paper hover:bg-obsidian"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                Vista del agente
+              </Button>
+            </div>
 
-          {scopeFilter !== "orphans" && staleCount > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                setShowStale(true);
-                setShowDuplicates(false);
-              }}
-              className="flex items-center justify-between px-3 py-2 text-xs font-medium rounded-md bg-status-amber/10 text-status-amber hover:bg-status-amber/20 transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
-            >
-              <span>{staleCount === 1 ? "1 para revisar" : `${staleCount} para revisar`}</span>
-            </button>
-          )}
+            {scopeFilter !== "orphans" && (
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-fog pointer-events-none" />
+                <input
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  placeholder="Filtrar memorias…"
+                  aria-label="Filtrar memorias"
+                  className="w-full h-9 pl-8 pr-8 text-sm bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 transition-colors duration-[120ms]"
+                />
+                {filter && (
+                  <button
+                    type="button"
+                    onClick={() => setFilter("")}
+                    aria-label="Limpiar filtro"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 h-6 w-6 rounded flex items-center justify-center text-fog hover:text-paper hover:bg-elevated transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
 
-          {scopeFilter !== "orphans" && (
-            <ul className="flex-1 overflow-y-auto space-y-0.5">
-              {visible.map((m) => (
-                <li key={m.id}>
+            {!project && (
+              <div className="flex items-center gap-1 bg-obsidian p-1 rounded-lg flex-shrink-0 select-none">
+                <button
+                  type="button"
+                  onClick={() => setScopeFilter("all")}
+                  className={cn(
+                    "flex-1 h-7 text-xs rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+                    scopeFilter === "all"
+                      ? "bg-elevated text-paper font-medium"
+                      : "text-fog hover:text-mist",
+                  )}
+                >
+                  Todas
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScopeFilter("global")}
+                  className={cn(
+                    "flex-1 h-7 text-xs rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+                    scopeFilter === "global"
+                      ? "bg-elevated text-paper font-medium"
+                      : "text-fog hover:text-mist",
+                  )}
+                >
+                  Globales
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScopeFilter("orphans")}
+                  className={cn(
+                    "flex-1 h-7 text-xs rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+                    scopeFilter === "orphans"
+                      ? "bg-elevated text-paper font-medium"
+                      : "text-fog hover:text-mist",
+                  )}
+                >
+                  Sin proyecto
+                </button>
+              </div>
+            )}
+
+            {scopeFilter !== "orphans" && (activeDuplicates.length > 0 || staleCount > 0) && (
+              <div className="space-y-1">
+                {activeDuplicates.length > 0 && (
                   <button
                     type="button"
                     onClick={() => {
-                      setSelectedId(m.id);
-                      setShowDuplicates(false);
+                      setShowDuplicates(true);
                       setShowStale(false);
                     }}
                     className={cn(
-                      "w-full text-left px-3 py-2 rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
-                      selected?.id === m.id ? "bg-elevated" : "hover:bg-obsidian",
+                      "w-full flex items-center gap-2 px-2.5 h-8 text-xs font-medium rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+                      showDuplicates
+                        ? "bg-status-amber/20 text-status-amber"
+                        : "bg-status-amber/10 text-status-amber hover:bg-status-amber/15",
                     )}
                   >
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      {m.pinned && <Pin className="w-3.5 h-3.5 text-acid-lime flex-shrink-0" />}
-                      <span className="block text-sm text-paper truncate font-medium">
-                        {m.title}
-                      </span>
-                    </div>
-                    <span className="block text-xs text-fog">
-                      {KIND_LABELS[m.kind]}
-                      {!project && ` · ${m.project_name || "Global"}`} ·{" "}
-                      {formatTimeAgo(m.updated_at)}
+                    <Copy className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span className="truncate flex-1 text-left">
+                      {activeDuplicates.length === 1
+                        ? "1 posible duplicado"
+                        : `${activeDuplicates.length} posibles duplicados`}
                     </span>
+                    <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 opacity-75" />
                   </button>
+                )}
+
+                {staleCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowStale(true);
+                      setShowDuplicates(false);
+                    }}
+                    className={cn(
+                      "w-full flex items-center gap-2 px-2.5 h-8 text-xs font-medium rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+                      showStale
+                        ? "bg-status-amber/20 text-status-amber"
+                        : "bg-status-amber/10 text-status-amber hover:bg-status-amber/15",
+                    )}
+                  >
+                    <History className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span className="truncate flex-1 text-left">
+                      {staleCount === 1 ? "1 para revisar" : `${staleCount} para revisar`}
+                    </span>
+                    <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 opacity-75" />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {scopeFilter !== "orphans" && (
+            <ul className="flex-1 overflow-y-auto px-2 pb-3 space-y-0.5">
+              {visible.map((m) => {
+                const isSelected = !showDuplicates && !showStale && selected?.id === m.id;
+                return (
+                  <li key={m.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedId(m.id);
+                        setShowDuplicates(false);
+                        setShowStale(false);
+                      }}
+                      aria-current={isSelected ? "true" : undefined}
+                      className={cn(
+                        "group relative w-full text-left pl-3 pr-2.5 py-2.5 rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+                        isSelected ? "bg-elevated" : "hover:bg-obsidian",
+                      )}
+                    >
+                      {isSelected && (
+                        <span
+                          className="absolute left-1 top-2.5 bottom-2.5 w-0.5 rounded-full bg-acid-lime"
+                          aria-hidden="true"
+                        />
+                      )}
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {m.pinned && <Pin className="w-3.5 h-3.5 text-acid-lime flex-shrink-0" />}
+                        <span
+                          className={cn(
+                            "block text-sm truncate font-medium flex-1 min-w-0",
+                            isSelected ? "text-paper" : "text-bone group-hover:text-paper",
+                          )}
+                        >
+                          {m.title}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex items-center justify-between gap-2 min-w-0">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          <span
+                            className={cn(
+                              "w-1.5 h-1.5 rounded-full flex-shrink-0",
+                              (MEMORY_KIND_STYLE[m.kind] ?? MEMORY_KIND_STYLE.note).dot,
+                            )}
+                            aria-hidden="true"
+                          />
+                          <span className="truncate text-xs text-fog tabular-nums">
+                            {KIND_LABELS[m.kind]}
+                            {!project ? ` · ${m.project_name || "Global"}` : ""}
+                            {` · ${formatTimeAgo(m.updated_at)}`}
+                          </span>
+                        </div>
+                        {project && m.topic_key && (
+                          <span className="truncate font-mono text-[11px] text-ash max-w-[110px] flex-shrink-0">
+                            {m.topic_key}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+
+              {visible.length === 0 && (
+                <li className="px-3 py-8 text-center text-xs text-fog space-y-2">
+                  <p>Sin coincidencias</p>
+                  {filter && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setFilter("")}
+                      className="h-7 text-xs"
+                    >
+                      Limpiar filtro
+                    </Button>
+                  )}
                 </li>
-              ))}
+              )}
             </ul>
           )}
         </aside>
@@ -376,55 +492,122 @@ export function MemoryTab({ project, refreshKey, focusId }: MemoryTabProps) {
             onClose={() => setShowDuplicates(false)}
           />
         ) : selected ? (
-          <section className="flex-1 min-w-0 flex flex-col px-6 pb-6">
-            <div className="h-14 flex items-center gap-3 flex-shrink-0">
-              <div className="flex-1 min-w-0">
-                <h2 className="text-base font-semibold text-paper truncate">{selected.title}</h2>
-                <p className="text-xs text-fog truncate">
-                  {KIND_LABELS[selected.kind]}
-                  {selected.topic_key ? ` · ${selected.topic_key}` : ""}
-                  {!project && selected.project_name ? ` · ${selected.project_name}` : ""}
-                  {` · ${formatTimeAgo(selected.updated_at)}`}
-                </p>
+          <section className="flex-1 min-w-0 flex flex-col bg-void">
+            <header className="px-7 pt-5 pb-4 flex-shrink-0 space-y-2.5 max-w-[82ch]">
+              <div className="flex flex-wrap items-center justify-between gap-3 min-w-0">
+                <div className="flex flex-wrap items-center gap-1.5 text-xs text-fog min-w-0">
+                  <MemoryKindBadge kind={selected.kind} />
+                  {selected.topic_key && (
+                    <>
+                      <span aria-hidden="true" className="text-ash">
+                        {" · "}
+                      </span>
+                      <span
+                        className="font-mono text-[11.5px] text-mist bg-obsidian px-2 py-0.5 rounded-md truncate max-w-[240px]"
+                        title={selected.topic_key}
+                      >
+                        {selected.topic_key}
+                      </span>
+                    </>
+                  )}
+                  {!project && selected.project_name && (
+                    <>
+                      <span aria-hidden="true" className="text-ash">
+                        {" · "}
+                      </span>
+                      <span className="text-mist truncate max-w-[180px]">
+                        {selected.project_name}
+                      </span>
+                    </>
+                  )}
+                  <span aria-hidden="true" className="text-ash">
+                    {" · "}
+                  </span>
+                  <span
+                    className="tabular-nums text-fog"
+                    title={formatFullDate(selected.updated_at)}
+                  >
+                    {formatTimeAgo(selected.updated_at)}
+                  </span>
+                  {selected.use_count > 0 && (
+                    <>
+                      <span aria-hidden="true" className="text-ash">
+                        {" · "}
+                      </span>
+                      <span className="tabular-nums text-fog">
+                        {selected.use_count} {selected.use_count === 1 ? "consulta" : "consultas"}
+                      </span>
+                    </>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <Button variant="secondary" size="sm" onClick={() => setEditingMemory(selected)}>
+                    <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                    Editar
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={() => togglePin(selected)}>
+                    {selected.pinned ? (
+                      <>
+                        <PinOff className="w-3.5 h-3.5 mr-1.5 text-acid-lime" />
+                        Desfijar
+                      </>
+                    ) : (
+                      <>
+                        <Pin className="w-3.5 h-3.5 mr-1.5" />
+                        Fijar
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setPendingDelete(selected)}
+                    className="text-fog hover:text-coral-red hover:bg-coral-red/10"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                    Eliminar
+                  </Button>
+                </div>
               </div>
-              <Button variant="secondary" onClick={() => setEditingMemory(selected)}>
-                <Pencil className="w-4 h-4 mr-2" />
-                Editar
-              </Button>
-              <Button variant="secondary" onClick={() => togglePin(selected)}>
-                {selected.pinned ? (
-                  <>
-                    <PinOff className="w-4 h-4 mr-2" />
-                    Desfijar
-                  </>
-                ) : (
-                  <>
-                    <Pin className="w-4 h-4 mr-2" />
-                    Fijar
-                  </>
-                )}
-              </Button>
-              <Button variant="secondary" onClick={() => setPendingDelete(selected)}>
-                <Trash2 className="w-4 h-4 mr-2" />
-                Eliminar
-              </Button>
-            </div>
+
+              <h2 className="text-lg font-semibold text-paper tracking-tight leading-snug break-words text-pretty">
+                {selected.title}
+              </h2>
+            </header>
+
             {error && (
               <div
-                className="mb-2 px-3 py-2 rounded-md bg-coral-red/10 text-coral-red text-sm"
+                className="mx-7 mb-3 max-w-[76ch] px-3 py-2 rounded-md bg-coral-red/10 text-coral-red text-sm"
                 role="alert"
               >
                 {error}
               </div>
             )}
-            <div className="flex-1 overflow-y-auto">
-              <div className="bg-carbon rounded-lg p-6">
-                <Markdown content={selected.content} className="max-w-[70ch]" />
+
+            <div className="flex-1 min-h-0 overflow-y-auto px-7 pb-7">
+              <div className="max-w-[76ch] space-y-3">
+                <div className="bg-carbon rounded-xl px-6 py-5 min-w-0">
+                  {selected.content.trim() ? (
+                    <Markdown content={selected.content} />
+                  ) : (
+                    <p className="text-xs text-ash">Sin contenido</p>
+                  )}
+                </div>
+                <MemoryLinks memory={selected} onOpen={openMemory} />
               </div>
-              <MemoryLinks memory={selected} onOpen={openMemory} />
             </div>
           </section>
-        ) : null}
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-6">
+            <p className="text-sm text-fog">Ninguna memoria coincide con el filtro</p>
+            {filter && (
+              <Button variant="secondary" size="sm" onClick={() => setFilter("")}>
+                Limpiar filtro
+              </Button>
+            )}
+          </div>
+        )}
 
         <Dialog
           open={Boolean(pendingDelete)}

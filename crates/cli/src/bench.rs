@@ -20,6 +20,17 @@ use uuid::Uuid;
 const BENCH_VERSION: u32 = 1;
 const CONTEXT_LIMIT: i64 = 12;
 const SCALE_MEMORIES: usize = 1_000;
+
+/// Memories seeded for the latency measurements. Tests lower it with
+/// `SAISPACE_BENCH_SCALE`: the quality metrics do not depend on it, and the
+/// full 1,000 take most of the run in debug builds.
+fn scale_memories() -> usize {
+    std::env::var("SAISPACE_BENCH_SCALE")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|n| *n > 0)
+        .map_or(SCALE_MEMORIES, |n| n.min(SCALE_MEMORIES))
+}
 const SCALE_CONTEXT_ITERS: usize = 7;
 const SCALE_SAVE_ITERS: usize = 15;
 const RATIO_REGRESSION_THRESHOLD: f64 = 0.01;
@@ -629,7 +640,7 @@ async fn measure_index_size(db: &Db, project_id: Uuid) -> CliResult<(usize, usiz
 
 async fn measure_scaled_latencies(fixtures: &Fixtures) -> CliResult<(f64, f64, f64)> {
     let (db, project_id) = setup_bench_db("novapay-api-scale", "/bench/novapay-api-scale").await?;
-    for i in 0..SCALE_MEMORIES {
+    for i in 0..scale_memories() {
         let base = &fixtures.memories[i % fixtures.memories.len()];
         let batch = i / fixtures.memories.len();
         let kind = MemoryKind::parse(&base.kind).ok_or_else(|| {

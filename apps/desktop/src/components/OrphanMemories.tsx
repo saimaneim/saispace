@@ -4,6 +4,7 @@ import { api, formatError } from "../lib/api";
 import type { OrphanGroup, Project } from "../lib/types";
 import { formatTimeAgo } from "../lib/utils";
 import { Button } from "./ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 export interface OrphanMemoriesProps {
   onLinked?: () => void;
@@ -55,46 +56,42 @@ export function OrphanMemories({ onLinked }: OrphanMemoriesProps) {
 
   if (loading && groups.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center p-6 text-sm text-fog">Cargando…</div>
+      <section className="flex-1 min-w-0 flex flex-col px-7 pt-5 pb-6 space-y-3">
+        <div className="h-6 w-48 rounded-md bg-carbon" />
+        <div className="h-16 rounded-xl bg-carbon" />
+        <div className="h-16 rounded-xl bg-carbon" />
+      </section>
     );
   }
 
   if (groups.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center p-6">
-        <FolderCheck className="w-8 h-8 text-ash" />
+        <FolderCheck className="w-7 h-7 text-ash" />
         <p className="text-sm font-medium text-paper">Todas las memorias tienen proyecto</p>
-        <p className="text-xs text-fog max-w-sm">
-          No hay memorias huérfanas pendientes de asignación.
-        </p>
       </div>
     );
   }
 
   return (
-    <section className="flex-1 min-w-0 flex flex-col p-6 overflow-y-auto">
-      <div className="flex items-center justify-between pb-3 border-b border-obsidian">
-        <div>
-          <h2 className="text-base font-semibold text-paper">Memorias sin proyecto</h2>
-          <p className="text-xs text-fog">
-            Memorias importadas o creadas sin vincular a un proyecto registrado.
-          </p>
-        </div>
-        <span className="text-xs text-fog">
+    <section className="flex-1 min-w-0 flex flex-col px-7 pt-5 pb-6 overflow-y-auto">
+      <div className="flex items-center justify-between pb-4">
+        <h2 className="text-lg font-semibold text-paper tracking-tight">Memorias sin proyecto</h2>
+        <span className="text-xs text-fog tabular-nums">
           {groups.length} {groups.length === 1 ? "grupo" : "grupos"}
         </span>
       </div>
 
       {error && (
         <div
-          className="mt-3 px-3 py-2 rounded-md bg-coral-red/10 text-coral-red text-sm"
+          className="mb-3 px-3 py-2 rounded-md bg-coral-red/10 text-coral-red text-sm"
           role="alert"
         >
           {error}
         </div>
       )}
 
-      <ul className="space-y-2 mt-4">
+      <ul className="space-y-2">
         {groups.map((group) => {
           const isLinking = Boolean(linking[group.project_name]);
           const currentProjectId = selectedProject[group.project_name] ?? "";
@@ -102,43 +99,47 @@ export function OrphanMemories({ onLinked }: OrphanMemoriesProps) {
           return (
             <li
               key={group.project_name}
-              className="bg-carbon rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+              className="bg-carbon rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
             >
               <div className="min-w-0 flex-1">
                 <span className="block text-sm font-medium text-paper truncate">
                   {group.project_name}
                 </span>
-                <span className="block text-xs text-fog mt-0.5">
+                <span className="block text-xs text-fog mt-0.5 tabular-nums">
                   {group.count} {group.count === 1 ? "memoria" : "memorias"} ·{" "}
                   {formatTimeAgo(group.last_updated)}
                 </span>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                <select
+                <Select
                   value={currentProjectId}
-                  onChange={(e) =>
+                  onValueChange={(value) =>
                     setSelectedProject((prev) => ({
                       ...prev,
-                      [group.project_name]: e.target.value,
+                      [group.project_name]: value,
                     }))
                   }
-                  aria-label={`Vincular ${group.project_name} a un proyecto`}
-                  className="h-8 px-2 text-xs bg-obsidian text-paper rounded border-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
                 >
-                  <option value="" disabled>
-                    Vincular a…
-                  </option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger
+                    aria-label={`Vincular ${group.project_name} a un proyecto`}
+                    className="h-8 w-44 text-xs"
+                  >
+                    <SelectValue placeholder="Vincular a…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projects.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Button
                   variant="default"
                   size="sm"
                   disabled={!currentProjectId || isLinking}
                   onClick={() => handleLink(group.project_name)}
+                  className="h-8 text-xs"
                 >
                   {isLinking ? "Vinculando…" : "Vincular"}
                 </Button>

@@ -29,7 +29,7 @@ const USAGE: &str = "Run commands with: sai secret run -s NAME[=ENV_VAR] -- <com
 impl SaiSpaceServer {
     #[tool(
         name = "list_secrets",
-        description = "List the user's stored secrets by name (never values) and this agent's access: approved, pending, denied or null. Use approved secrets through the sai CLI: sai secret run -s NAME[=ENV_VAR] -- <command>"
+        description = "Stored secret names (never values) and this agent's access. Use approved ones with: sai secret run -s NAME[=ENV_VAR] -- <command>"
     )]
     async fn list_secrets(&self, Parameters(_): Parameters<EmptyParams>) -> CallToolResult {
         let secrets = match self.db.list_secrets().await {
@@ -58,7 +58,7 @@ impl SaiSpaceServer {
 
     #[tool(
         name = "request_secret_access",
-        description = "Ask the user for permission to use a stored secret. The user approves it once in the saispace app (Global > Claves); after that, use it with sai secret run without seeing the value"
+        description = "Ask the user to approve a stored secret (once, in the app); then use it with sai secret run without seeing its value"
     )]
     async fn request_secret_access(
         &self,

@@ -35,7 +35,7 @@ export function MemoryUsagePanel({ refreshKey, onSelectMemory }: MemoryUsagePane
 
   return (
     <section aria-label="Uso de memoria" className="px-6 pb-3 flex-shrink-0">
-      <div className="bg-carbon rounded-lg px-4 py-3 space-y-3">
+      <div className="bg-carbon rounded-xl px-4 py-3 space-y-3">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-2 min-w-0">
             <BarChart3 className="w-4 h-4 text-fog flex-shrink-0" />
@@ -83,10 +83,14 @@ export function MemoryUsagePanel({ refreshKey, onSelectMemory }: MemoryUsagePane
 
         {!collapsed &&
           (loading && !stats ? (
-            <p className="text-xs text-fog py-2">Cargando estadísticas…</p>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+              <div className="bg-obsidian/70 rounded-lg h-28" />
+              <div className="bg-obsidian/70 rounded-lg h-28" />
+              <div className="bg-obsidian/70 rounded-lg h-28" />
+            </div>
           ) : stats ? (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-              <div className="bg-obsidian rounded-md p-3 flex flex-col gap-2 min-w-0">
+              <div className="bg-obsidian rounded-lg p-3 flex flex-col gap-2 min-w-0">
                 <div className="flex items-center justify-between text-xs text-fog">
                   <h3 className="font-semibold text-mist">Guardados por agente</h3>
                   <div className="flex items-center gap-3 tabular-nums">
@@ -95,7 +99,7 @@ export function MemoryUsagePanel({ refreshKey, onSelectMemory }: MemoryUsagePane
                   </div>
                 </div>
                 {stats.saves_by_agent.length === 0 ? (
-                  <p className="text-xs text-fog py-2">Sin guardados recientes de agentes.</p>
+                  <p className="text-xs text-fog py-2">Sin guardados recientes.</p>
                 ) : (
                   <ul className="space-y-1 max-h-36 overflow-y-auto">
                     {stats.saves_by_agent.map((agent) => (
@@ -114,10 +118,10 @@ export function MemoryUsagePanel({ refreshKey, onSelectMemory }: MemoryUsagePane
                 )}
               </div>
 
-              <div className="bg-obsidian rounded-md p-3 flex flex-col gap-2 min-w-0">
+              <div className="bg-obsidian rounded-lg p-3 flex flex-col gap-2 min-w-0">
                 <h3 className="text-xs font-semibold text-mist">Más consultadas</h3>
                 {stats.most_used.length === 0 ? (
-                  <p className="text-xs text-fog py-2">Ninguna memoria consultada todavía.</p>
+                  <p className="text-xs text-fog py-2">Sin consultas todavía.</p>
                 ) : (
                   <ul className="space-y-1 max-h-36 overflow-y-auto">
                     {stats.most_used.map((item) => (
@@ -126,7 +130,7 @@ export function MemoryUsagePanel({ refreshKey, onSelectMemory }: MemoryUsagePane
                           type="button"
                           onClick={() => onSelectMemory?.(item.id)}
                           disabled={!onSelectMemory}
-                          className="w-full flex items-center justify-between gap-2 px-1.5 py-1 -mx-1.5 rounded text-left hover:bg-elevated disabled:hover:bg-transparent disabled:cursor-default transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+                          className="w-full flex items-center justify-between gap-2 px-1.5 py-1 -mx-1.5 rounded-md text-left hover:bg-elevated disabled:hover:bg-transparent disabled:cursor-default transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
                           title={
                             item.last_used_at
                               ? `Última consulta ${formatTimeAgo(item.last_used_at)}`
@@ -147,10 +151,10 @@ export function MemoryUsagePanel({ refreshKey, onSelectMemory }: MemoryUsagePane
                 )}
               </div>
 
-              <div className="bg-obsidian rounded-md p-3 flex flex-col gap-2 min-w-0">
+              <div className="bg-obsidian rounded-lg p-3 flex flex-col gap-2 min-w-0">
                 <h3 className="text-xs font-semibold text-mist">Uso por proyecto</h3>
                 {stats.by_project.length === 0 ? (
-                  <p className="text-xs text-fog py-2">Sin memorias registradas todavía.</p>
+                  <p className="text-xs text-fog py-2">Sin memorias por proyecto.</p>
                 ) : (
                   <ul className="space-y-2 max-h-36 overflow-y-auto pr-0.5">
                     {stats.by_project.map((proj) => {

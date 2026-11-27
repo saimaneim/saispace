@@ -26,7 +26,7 @@ pub struct SaveMemoryParams {
     pub global: Option<bool>,
     pub pinned: Option<bool>,
     /// Text that brings this lesson back on its own: an error line ("exit code
-    /// 144", "permission denied (publickey)"), a command fragment, or
+    /// 144", "permission denied (publickey)") or
     /// `env:t3code` / `env:opencode` for a host. Replaces the current list.
     pub triggers: Option<Vec<String>>,
 }
@@ -298,7 +298,7 @@ impl SaiSpaceServer {
 impl SaiSpaceServer {
     #[tool(
         name = "save_memory",
-        description = "Save durable knowledge (decision, architecture, bugfix, pattern, config, discovery, preference, session_summary, note). Save lessons right away: user correction -> kind preference; own mistake with non-obvious cause -> kind bugfix with the cause, plus triggers (the error line) so it comes back when that error repeats. Reusing topic_key in the same scope updates instead of duplicating. Scope: project_id, path, or the working directory; global=true for cross-project knowledge"
+        description = "Save durable knowledge as What/Why/Where/Learned. kind: decision, architecture, bugfix, pattern, config, discovery, preference, session_summary, note. User correction -> preference; own mistake -> bugfix with its cause and triggers (exact error line, or env:<host>). Same topic_key in the same scope updates. global=true for cross-project knowledge"
     )]
     async fn save_memory(
         &self,
@@ -419,7 +419,7 @@ impl SaiSpaceServer {
 
     #[tool(
         name = "memory_context",
-        description = "Read the session-start memory index for the current project (project_id, path, or working directory): preferences, pinned memories, the latest session summary, recent titles and duplicate pairs under consolidate. Open items with get_memory"
+        description = "Session-start memory index (project_id, path or working directory): preferences, host lessons, pinned, latest session summary, recent titles, duplicate pairs. Open items with get_memory"
     )]
     async fn memory_context(
         &self,
@@ -485,7 +485,7 @@ impl SaiSpaceServer {
 
     #[tool(
         name = "get_memory",
-        description = "Full content of one memory by id (full or 8-digit short id), with its links: follow them instead of searching again"
+        description = "Full memory by id (full or 8-digit short id) with its links and triggers: follow links instead of searching again"
     )]
     async fn get_memory(&self, Parameters(params): Parameters<MemoryIdParams>) -> CallToolResult {
         let id = match self.db.resolve_memory_id(&params.id).await {
@@ -505,7 +505,7 @@ impl SaiSpaceServer {
 
     #[tool(
         name = "link_memories",
-        description = "Connect two memories so whoever opens one sees the other: relation related (default) or depends_on (from needs to). Saving already links memories whose id or topic_key the content mentions"
+        description = "Link two memories: related (default) or depends_on (from needs to). Saving already links ids and topic_keys mentioned in the content"
     )]
     async fn link_memories(
         &self,
@@ -541,7 +541,7 @@ impl SaiSpaceServer {
 
     #[tool(
         name = "consolidate_memories",
-        description = "Merge 2+ memories of one project (or all global) that hold the same knowledge into one: the survivor gets your merged title/content and their links; the rest are archived (kept, readable by id, out of the index and search). Use it when memory_context lists pairs under consolidate"
+        description = "Merge 2+ memories of one project (or all global) that hold the same knowledge: the survivor gets your merged title/content, their links and triggers; the rest are archived (still readable by id)"
     )]
     async fn consolidate_memories(
         &self,

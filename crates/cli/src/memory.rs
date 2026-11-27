@@ -32,7 +32,7 @@ pub enum MemoryCommand {
         #[arg(help = "Memoria global, no ligada al proyecto", long)]
         global: bool,
         #[arg(
-            help = "Disparador que la recuerda sola: texto del error (\"exit code 144\"), fragmento de comando, o env:t3code / env:opencode. Repetible",
+            help = "Disparador que la recuerda sola: texto del error (\"exit code 144\") o env:t3code / env:opencode. Repetible",
             long = "trigger"
         )]
         triggers: Vec<String>,
@@ -68,7 +68,7 @@ pub enum MemoryCommand {
         #[arg(long)]
         topic: Option<String>,
         #[arg(
-            help = "Reemplaza los disparadores (texto de error, comando o env:<host>). Repetible",
+            help = "Reemplaza los disparadores (texto de error o env:<host>). Repetible",
             long = "trigger"
         )]
         triggers: Vec<String>,

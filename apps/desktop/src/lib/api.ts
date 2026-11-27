@@ -11,7 +11,6 @@ import type {
   DuplicatePair,
   Goal,
   GoalWithTasks,
-  KpiHistory,
   Memory,
   MemoryLink,
   MemoryUsageStats,
@@ -169,8 +168,6 @@ export const api = {
       { projectId: projectId ?? null, days },
       { stale: [], surplus_sessions: [] },
     ),
-  kpiHistory: (days?: number, scope?: string) =>
-    invokeOrFallback<KpiHistory>("kpi_history", { days, scope }, { metrics: [] }),
 
   getMemory: (id: string) => invokeOrFallback<Memory>("get_memory", { id }),
   memoryLinks: (id: string) => invokeOrFallback<MemoryLink[]>("memory_links", { id }, []),

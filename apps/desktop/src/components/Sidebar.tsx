@@ -1,4 +1,4 @@
-import { FolderOpen, Globe, Pin, PinOff, Plus, Search } from "lucide-react";
+import { FolderOpen, Globe, Pin, PinOff, Plus, Search, X } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Project } from "../lib/types";
 import { cn } from "../lib/utils";
@@ -11,7 +11,6 @@ interface SidebarProps {
   onOpenDirectoryPicker: () => void;
   taskCounts: Record<string, number>;
   onTogglePin: (id: string, pinned: boolean) => void;
-  /** Drop result: the project, whether it ends up pinned, and the full new order. */
   onMove: (id: string, pinned: boolean, ids: string[]) => void;
   isOpen: boolean;
   isGlobalSelected: boolean;
@@ -25,7 +24,6 @@ interface DragState {
   id: string;
   startY: number;
   pointerY: number;
-  /** Pointer offset inside the grabbed row, so the card does not jump. */
   grabOffset: number;
   left: number;
   width: number;
@@ -66,7 +64,7 @@ function ProjectRow({
         onPointerDown={onPointerDown}
         aria-current={isSelected ? "page" : undefined}
         className={cn(
-          "w-full flex items-center gap-2.5 pl-2.5 pr-9 h-10 rounded-md text-sm text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+          "relative w-full flex items-center gap-2.5 pl-3 pr-9 h-10 rounded-md text-sm text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
           isSelected || floating
             ? "bg-elevated text-paper font-medium"
             : "text-mist hover:text-paper hover:bg-obsidian",
@@ -74,10 +72,16 @@ function ProjectRow({
           floating && "cursor-grabbing",
         )}
       >
+        {isSelected && !floating && (
+          <span
+            className="absolute left-1 top-2.5 bottom-2.5 w-0.5 rounded-full bg-acid-lime"
+            aria-hidden="true"
+          />
+        )}
         <ProjectIcon projectId={p.id} name={p.name} status={p.status} />
         <span className="truncate flex-1">{p.name}</span>
         {openTasks > 0 && (
-          <span className="text-xs text-fog tabular-nums flex-shrink-0 group-hover:opacity-0">
+          <span className="text-xs text-fog tabular-nums flex-shrink-0 transition-opacity duration-[120ms] group-hover:opacity-0">
             {openTasks}
           </span>
         )}
@@ -97,8 +101,6 @@ function ProjectRow({
   );
 }
 
-/** Animates rows from their previous position to the new one (FLIP), so the
- * list opens a gap for the dragged card the way a kanban column does. */
 function useFlip(order: string) {
   const nodes = useRef(new Map<string, HTMLElement>());
   const last = useRef(new Map<string, number>());
@@ -113,7 +115,7 @@ function useFlip(order: string) {
       el.style.transition = "none";
       el.style.transform = `translateY(${prev - top}px)`;
       el.getBoundingClientRect();
-      el.style.transition = "transform 160ms cubic-bezier(0.2, 0, 0, 1)";
+      el.style.transition = "transform 150ms cubic-bezier(0.2, 0, 0, 1)";
       el.style.transform = "";
     }
     last.current = next;
@@ -152,8 +154,6 @@ export function Sidebar({
   const byId = new Map(projects.map((p) => [p.id, p]));
   const dragging = drag?.active ? drag : null;
 
-  // Ids per group as shown: the dragged card leaves its slot and a gap
-  // (placeholder) opens where it would land.
   const columns = (group: Group): string[] => {
     const ids = filteredProjects
       .filter((p) => p.pinned === (group === "pinned") && p.id !== dragging?.id)
@@ -326,7 +326,7 @@ export function Sidebar({
       aria-hidden={!isOpen}
       inert={!isOpen}
       className={cn(
-        "flex-shrink-0 bg-carbon overflow-hidden transition-[width] duration-200 ease-out select-none",
+        "flex-shrink-0 bg-carbon overflow-hidden transition-[width] duration-[150ms] ease-out select-none",
         isOpen ? "w-64" : "w-0",
       )}
     >
@@ -362,13 +362,21 @@ export function Sidebar({
             onClick={onSelectGlobal}
             aria-current={isGlobalSelected ? "page" : undefined}
             className={cn(
-              "w-full flex items-center gap-2.5 px-2.5 h-10 rounded-md text-sm text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
+              "relative w-full flex items-center gap-2.5 px-3 h-10 rounded-md text-sm text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40",
               isGlobalSelected
                 ? "bg-elevated text-paper font-medium"
                 : "text-mist hover:text-paper hover:bg-obsidian",
             )}
           >
-            <Globe className="w-4 h-4 flex-shrink-0 text-fog" />
+            {isGlobalSelected && (
+              <span
+                className="absolute left-1 top-2.5 bottom-2.5 w-0.5 rounded-full bg-acid-lime"
+                aria-hidden="true"
+              />
+            )}
+            <Globe
+              className={cn("w-4 h-4 flex-shrink-0", isGlobalSelected ? "text-paper" : "text-fog")}
+            />
             <span className="flex-1">Global</span>
             {pendingRequests > 0 && (
               <span
@@ -391,8 +399,18 @@ export function Sidebar({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Buscar proyectos…"
                 aria-label="Buscar proyectos"
-                className="w-full h-8 pl-8 pr-2.5 text-xs bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 transition-colors duration-[120ms]"
+                className="w-full h-8 pl-8 pr-7 text-xs bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 transition-colors duration-[120ms]"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  aria-label="Limpiar búsqueda de proyectos"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 rounded flex items-center justify-center text-fog hover:text-paper hover:bg-elevated transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
             </div>
           </div>
         )}

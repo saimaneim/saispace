@@ -8,7 +8,6 @@ use commands::{
     favicon::project_favicon,
     fs::list_directory,
     global::{global_ai_inventory, tech_icon},
-    kpi::kpi_history,
     memory::{
         agent_memory_context, delete_memory, get_memory, link_orphan_memories, list_memories,
         list_orphan_memory_groups, memory_duplicates, memory_links, memory_stale, memory_triggers,
@@ -129,7 +128,6 @@ pub fn run() {
             memory_duplicates,
             memory_usage_stats,
             memory_stale,
-            kpi_history,
             global_ai_inventory,
             tech_icon,
             list_secrets,

@@ -330,21 +330,3 @@ export interface SecretGrant {
   created_at: string;
   decided_at: string | null;
 }
-
-export interface KpiPoint {
-  day: string;
-  value: number;
-}
-
-export interface KpiSeries {
-  name: string;
-  label: string;
-  unit: string;
-  /** null: a volume, neither better nor worse when it moves. */
-  higher_is_better: boolean | null;
-  points: KpiPoint[];
-}
-
-export interface KpiHistory {
-  metrics: KpiSeries[];
-}

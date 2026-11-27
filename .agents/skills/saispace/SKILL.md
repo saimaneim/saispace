@@ -51,7 +51,7 @@ Hooks remind you. `sai setup claude` installs `sai memory context` on SessionSta
 | Item | Tool |
 |---|---|
 | Plan | `get_active_plan` when starting work. Goals (`create_goal`, `update_goal`) are milestones with a short "done when" `criteria`; tasks (`create_task` with `goal_id`, `update_task`/`complete_task`) are their executable steps. Record only milestones and steps that matter across sessions, not ephemeral micro-steps. Complete a goal with `update_goal` once every task is done. |
-| Stack | `sync_project_stack` after dependencies change. Never type versions by hand. |
+| Stack | `get_project_context` re-detects it from the manifests on every call. Never type versions by hand. |
 | Rules about a technology | `upsert_tech_rule`: one short sentence per dependency name and optional version prefix (`tauri`, `2`). |
 
 ## Secrets

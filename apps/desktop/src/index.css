@@ -26,6 +26,10 @@
     "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
 }
 
+html {
+  color-scheme: dark;
+}
+
 html,
 body,
 #root {
@@ -65,7 +69,7 @@ button:disabled {
 }
 
 ::selection {
-  background-color: rgba(226, 249, 40, 0.28);
+  background-color: color-mix(in srgb, var(--color-acid-lime) 28%, transparent);
   color: var(--color-paper);
 }
 
@@ -79,10 +83,40 @@ button:disabled {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--color-paper) 10%, transparent);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: color-mix(in srgb, var(--color-paper) 20%, transparent);
+}
+
+@keyframes surface-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-state="open"].ui-surface-motion {
+    animation: surface-in 120ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  [data-state="open"].ui-overlay-motion {
+    animation: overlay-in 120ms ease-out;
+  }
 }

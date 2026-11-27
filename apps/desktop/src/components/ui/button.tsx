@@ -13,7 +13,7 @@ const buttonVariants = cva(
         ghost: "text-fog hover:text-mist hover:bg-obsidian/60",
         outline: "bg-transparent text-mist hover:text-paper hover:bg-obsidian",
         destructive: "bg-coral-red text-paper hover:brightness-110",
-        pill: "rounded-full bg-white/[0.05] text-mist hover:text-paper hover:bg-white/[0.08]",
+        pill: "rounded-full bg-obsidian text-mist hover:text-paper hover:bg-graphite",
       },
       size: {
         default: "h-9 px-4 text-sm",
