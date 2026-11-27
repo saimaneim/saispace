@@ -199,7 +199,7 @@ CREATE UNIQUE INDEX idx_drift_open ON drift_alerts(project_id, COALESCE(note_id,
 
 - Triggers FTS como los de `memories`: `static_notes` y `ai_notes` en `search_index`.
 - Migración de datos: cada `projects.context_notes` no vacío pasa a `static_notes` (`title = 'Contexto'`, `origin = 'manual'`).
-- Retención: por checker se guardan los últimos 20 snapshots más cualquiera referenciado por `ai_notes`, `drift_alerts`, propuestas o `project_state_head`. GC al final de cada refresh, nunca en segundo plano, en este orden: 1) borrar `project_states` no protegidos (ni head ni citados por síntesis, alertas o propuestas) y sus filas de `project_state_snapshots`; 2) borrar snapshots que ya no cita ningún estado.
+- Retención: por checker se guardan los últimos 20 snapshots más cualquiera referenciado por `ai_notes`, `drift_alerts`, propuestas o `project_state_head`. GC al final de cada refresh, nunca en segundo plano, en este orden: 1) borrar `project_states` no protegidos (ni head ni citados por síntesis, alertas o propuestas) y sus filas de `project_state_snapshots`; 2) borrar snapshots que ya no cita ningún estado y que además estén fuera de los últimos 20 de su checker.
 - La capa 2 no tiene tabla de "notas": su texto se renderiza en lectura desde `facts`, siempre igual para el mismo hash.
 
 ## 3. Contrato de checker
@@ -276,8 +276,8 @@ refresh_facts(project)
  2. RepoView una sola vez: git ls-files -s -z (+ untracked no ignorados), git status --porcelain=v2 -z.
  3. Por checker:
     a. fp = blake3(version ‖ (path, blob) de los ficheros que casan con inputs()); para los modificados
-       o sin seguimiento según `git status`, el blob se sustituye por el hash de su contenido en disco
-       (el índice no ve cambios sin `git add`).
+       o sin seguimiento según `git status`, el blob se sustituye por el hash de su contenido en disco,
+       y los borrados sin stage entran como (path, "deleted") (el índice no ve cambios sin `git add`).
     b. fp == checker_state.input_fingerprint → reutiliza snapshot, no ejecuta.
     c. si no: run → canonicaliza → hash.
        hash == hash del snapshot actual → solo actualiza fp, checked_at y sources.

@@ -5,6 +5,7 @@
 
 use crate::{CliError, CliResult};
 use std::fs;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 const START: &str = "<!-- saispace:rules:start (edita el origen y ejecuta `sai setup rules`) -->";
@@ -140,17 +141,18 @@ fn write_atomic(path: &Path, content: &str) -> CliResult<()> {
         .parent()
         .ok_or_else(|| CliError::Usage(format!("ruta sin directorio: {}", real.display())))?;
     fs::create_dir_all(parent)?;
-    let tmp = parent.join(format!(".saispace-rules.{}.tmp", std::process::id()));
-    let result = fs::write(&tmp, content)
-        .and_then(|()| match fs::metadata(&real) {
-            Ok(meta) => fs::set_permissions(&tmp, meta.permissions()),
-            Err(_) => Ok(()),
-        })
-        .and_then(|()| fs::rename(&tmp, &real));
-    if result.is_err() {
-        let _ = fs::remove_file(&tmp);
+    // Random name, created exclusively with owner-only access (no clobbering
+    // or reading through a pre-planted path).
+    let mut tmp = tempfile::Builder::new()
+        .prefix(".saispace-rules.")
+        .tempfile_in(parent)?;
+    tmp.write_all(content.as_bytes())?;
+    tmp.as_file().sync_all()?;
+    if let Ok(meta) = fs::metadata(&real) {
+        tmp.as_file().set_permissions(meta.permissions())?;
     }
-    Ok(result?)
+    tmp.persist(&real).map_err(|err| err.error)?;
+    Ok(())
 }
 
 /// Writes (or with `rules = None` removes) the block in one target's file.
