@@ -715,7 +715,10 @@ mod tests {
         std::os::unix::fs::symlink(&real, &via).expect("symlink root");
 
         let files = scan_project(&via);
-        let claude = files.iter().find(|f| f.path == "CLAUDE.md").expect("listed");
+        let claude = files
+            .iter()
+            .find(|f| f.path == "CLAUDE.md")
+            .expect("listed");
         assert_eq!(
             claude.link,
             Some(ContextLink {
