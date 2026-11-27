@@ -1,0 +1,3 @@
+{"type":"user","message":{"content":"¿Por qué borraste ese test de regresión?"}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"tests/api.rs"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"sai memory save --kind preference --title 'No borrar tests' --content 'Mantener tests'"}}]}}

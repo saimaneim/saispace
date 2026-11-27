@@ -1,0 +1,5 @@
+{"type":"user","message":{"content":"Revisa los tests de integración"}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"cargo test"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"failed once"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"failed twice"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","is_error":false,"content":"Error: printed in stdout test, exit 0"}]}}

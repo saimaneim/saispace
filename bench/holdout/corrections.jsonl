@@ -1,0 +1,160 @@
+{"prompt": "te dije que no tocaras el archivo de configuración, reviértelo ya", "correction": true}
+{"prompt": "mal, otra vez... deja de inventarte métodos en UserService", "correction": true}
+{"prompt": "a partir de ahora siempre corre pnpm test antes de decir que terminaste", "correction": true}
+{"prompt": "no manches, rompiste todo el layout de la navbar con ese flexbox chafa", "correction": true}
+{"prompt": "eso no fue lo que te pedi, lee bien el prompt por favor", "correction": true}
+{"prompt": "pero tio que haces borrando la base de datos de test, estas loco?", "correction": true}
+{"prompt": "pará un poco, te pedí un endpoint GET y me hiciste un mutation GraphQL", "correction": true}
+{"prompt": "deja de meter 'any' en TypeScript, ya te lo he repetido tres veces", "correction": true}
+{"prompt": "regla fija para este repo: nunca jamás uses moment.js, solo dayjs o date-fns", "correction": true}
+{"prompt": "otra vez el mismo error de imports circulares... no aprendes mas eh", "correction": true}
+{"prompt": "revertí todo lo que hiciste en auth.rs, no compila nada", "correction": true}
+{"prompt": "te has colao pero bien, esa función ya existía en utils/format.ts", "correction": true}
+{"prompt": "no chabón, no toques el docker-compose sin consultarme antes", "correction": true}
+{"prompt": "cuántas veces te tengo que decir que aquí usamos camelCase para las variables?", "correction": true}
+{"prompt": "deja de disculparte y haz lo que te pedí sin cambiar cosas que funcionaban", "correction": true}
+{"prompt": "fatal, quitaste el middleware de permisos y ahora cualquiera entra como admin", "correction": true}
+{"prompt": "en este proyecto todos los componentes deben ser Server Components por defecto salvo que lleven interactividad", "correction": true}
+{"prompt": "parale a tu alucinada, esa librería ni existe en npm", "correction": true}
+{"prompt": "no no no, no metas Tailwind, el proyecto usa CSS Modules puro", "correction": true}
+{"prompt": "ya la cagaste otra vez con las dependencias circulares en index.ts", "correction": true}
+{"prompt": "a ver, presta atencion: jamas agregues librerias nuevas sin preguntarme primero", "correction": true}
+{"prompt": "eso esta pesimo, el return está antes de cerrar la conexión sql", "correction": true}
+{"prompt": "revertí ese refactor gigante, solo te pedí cambiar un string en el banner", "correction": true}
+{"prompt": "deja de borrar los comentarios en español que dejó el equipo anterior", "correction": true}
+{"prompt": "sos un desastre, pisaste los cambios de main con un stash viejo", "correction": true}
+{"prompt": "desde hoy en adelante: todos los endpoints nuevos llevan rate limiter obligatorio", "correction": true}
+{"prompt": "no tío, no me metas axios cuando ya tenemos fetch nativo configurado", "correction": true}
+{"prompt": "te dije clarito que no tocaras el schema de prisma sin generar la migración", "correction": true}
+{"prompt": "oye pero qué terquedad la tuya, que no quiero clases, usa funciones puras", "correction": true}
+{"prompt": "malisimo, ahora el CI tarda el triple porque quitaste el cache de cargo", "correction": true}
+{"prompt": "deja de inventar flags en el CLI que saispace no soporta", "correction": true}
+{"prompt": "no vuelvas a commitear tokens o llaves dummy en el código", "correction": true}
+{"prompt": "reverti eso, pusiste el useEffect en un loop infinito", "correction": true}
+{"prompt": "te pedí eliminar el botón rojo y eliminaste todo el modal, concéntrate", "correction": true}
+{"prompt": "regla: ningun archivo puede tener mas de 300 lineas en src/controllers", "correction": true}
+{"prompt": "dale con lo mismo... que NO uses require(), estamos en ESM puro", "correction": true}
+{"prompt": "pará la mano con meter Zustand en todos lados, esto se resuelve con simple useState", "correction": true}
+{"prompt": "pesimo refactor, rompiste la compatibilidad con Safari viejo", "correction": true}
+{"prompt": "recuerda siempre: en este repositorio los commits van en ingles y formato conventional", "correction": true}
+{"prompt": "no me cambies el tipado de id a number, la base usa UUIDs en string, te lo avise antes", "correction": true}
+{"prompt": "revisa por qué el linter marca warning en la línea 45 de billing.ts", "correction": false}
+{"prompt": "agrega un botón de 'no volver a mostrar este aviso' en el modal de bienvenida", "correction": false}
+{"prompt": "¿por qué nunca entra al bloque catch cuando falla el fetch?", "correction": false}
+{"prompt": "corre otra vez el script de seed para poblar usuarios de prueba", "correction": false}
+{"prompt": "arregla el error de compilación: cannot borrow `*self` as mutable more than once", "correction": false}
+{"prompt": "implementa el modo 'no molestar' en los settings de notificaciones", "correction": false}
+{"prompt": "explica qué está mal en este query sql que tarda 4 segundos", "correction": false}
+{"prompt": "necesitamos revertir la transacción bancaria si el webhook retorna status 400", "correction": false}
+{"prompt": "ayúdame a reproducir el bug donde la app se congela al subir un archivo pesado", "correction": false}
+{"prompt": "este test falla intermitentemente en GitHub Actions, échale un ojo al log", "correction": false}
+{"prompt": "agrega validación para rechazar emails con dominios temporales", "correction": false}
+{"prompt": "mira este stacktrace que nos llegó de Sentry: NullPointerException en OrderService", "correction": false}
+{"prompt": "el botón de cancelar no hace nada en dispositivos móviles, revísalo", "correction": false}
+{"prompt": "¿cómo configuro bun test para que ignore la carpeta e2e?", "correction": false}
+{"prompt": "hay una errata en el copy de la landing: dice 'bienbenido' en vez de 'bienvenido'", "correction": false}
+{"prompt": "crea un endpoint que permita al usuario deshacer la última acción", "correction": false}
+{"prompt": "haz que el input de búsqueda limpie el texto al presionar la tecla Escape", "correction": false}
+{"prompt": "si la respuesta del servidor es nula, muestra un banner de error genérico", "correction": false}
+{"prompt": "documenta el flujo de autenticación OAuth en el archivo ARCHITECTURE.md", "correction": false}
+{"prompt": "optimiza la función calculateTotal en cart.ts para evitar re-cálculos innecesarios", "correction": false}
+{"prompt": "¿cuál es la diferencia entre useMemo y useCallback en React 19?", "correction": false}
+{"prompt": "agrega soporte para internacionalización i18n en la página de checkout", "correction": false}
+{"prompt": "revisa si el token JWT expira después de 15 minutos o si dura 24 horas", "correction": false}
+{"prompt": "crea un script bash que limpie los contenedores docker huerfanos", "correction": false}
+{"prompt": "el reporte semanal no se envía los domingos a las 12am, averigua por qué", "correction": false}
+{"prompt": "muestra un spinner de carga mientras se resuelve la promesa de carga de datos", "correction": false}
+{"prompt": "analiza la complejidad temporal de esta búsqueda binaria en arrays ordenados", "correction": false}
+{"prompt": "habilita compresión gzip en la configuración de nginx", "correction": false}
+{"prompt": "cuando el websocket se desconecte, intenta reconectar cada 3 segundos", "correction": false}
+{"prompt": "agrega tests unitarios para cubrir el caso límite de saldo negativo", "correction": false}
+{"prompt": "migra este componente antiguo de clase a un functional component con hooks", "correction": false}
+{"prompt": "extrae las constantes de colores de theme.ts a variables CSS", "correction": false}
+{"prompt": "configura un timeout de 5 segundos para las llamadas al microservicio de pagos", "correction": false}
+{"prompt": "¿por qué el bundler incluye moment-timezone si solo importé el core?", "correction": false}
+{"prompt": "crea una directiva en blade para formatear precios con la moneda del usuario", "correction": false}
+{"prompt": "agrega un tooltip explicativo cuando el usuario pone el cursor sobre el badge", "correction": false}
+{"prompt": "el healthcheck de k8s marca fallo continuo en el pod de background-worker", "correction": false}
+{"prompt": "escribe una migración sql para agregar la columna avatar_url a la tabla users", "correction": false}
+{"prompt": "haz que el toggle de tema oscuro guarde la preferencia en localStorage", "correction": false}
+{"prompt": "monitorea el uso de memoria en el worker de procesamiento de video", "correction": false}
+{"prompt": "stop hallucinating library methods that don't exist in zod v3", "correction": true}
+{"prompt": "revert that commit immediately, I did not ask you to refactor the entire state machine", "correction": true}
+{"prompt": "from now on, always run `bun check` before telling me you're done", "correction": true}
+{"prompt": "no, that is completely wrong, you broke backward compatibility for existing clients", "correction": true}
+{"prompt": "I have told you multiple times: we do not use styled-components in this repo", "correction": true}
+{"prompt": "stop adding lodash, JavaScript has native methods for this now", "correction": true}
+{"prompt": "you did it again... you forgot to handle the error case in the async handler", "correction": true}
+{"prompt": "permanent rule: never export default from component files, only named exports", "correction": true}
+{"prompt": "revert what you changed in schema.sql, you dropped an index without migrating", "correction": true}
+{"prompt": "bad, very bad. You just introduced an N+1 query problem in getOrganizationUsers", "correction": true}
+{"prompt": "stop apologizing and just follow the instructions I gave you", "correction": true}
+{"prompt": "why do you keep touching files outside the package I specified?", "correction": true}
+{"prompt": "that's not what I asked for at all, read the specification again carefully", "correction": true}
+{"prompt": "don't ever use `any` in this TypeScript project, create proper interfaces", "correction": true}
+{"prompt": "you broke the build again... did you even run cargo check before replying?", "correction": true}
+{"prompt": "rule for all future tasks: write unit tests alongside every new utility function", "correction": true}
+{"prompt": "nope, that's wrong. You inverted the condition on line 82 of auth.go", "correction": true}
+{"prompt": "stop creating new config files when `.env.example` already documents those keys", "correction": true}
+{"prompt": "revert that change in package.json, we lock dependencies with exact versions here", "correction": true}
+{"prompt": "terrible solution, you bypassed the authentication middleware completely", "correction": true}
+{"prompt": "I explicitly said NO external dependencies, remove axios and use fetch", "correction": true}
+{"prompt": "you keep removing my comments, leave existing documentation intact", "correction": true}
+{"prompt": "again, do not touch tailwind.config.js without asking first", "correction": true}
+{"prompt": "that's a sloppy fix, you just masked the type error with `as unknown as User`", "correction": true}
+{"prompt": "from this point forward, all PR descriptions must adhere to the semantic-release standard", "correction": true}
+{"prompt": "no no no, you put secrets into a client-side environment variable", "correction": true}
+{"prompt": "stop overcomplicating things, I asked for a simple 3-line shell script", "correction": true}
+{"prompt": "wrong, you used Array.find when you needed Array.filter to get all matches", "correction": true}
+{"prompt": "mandatory rule: always sanitize SVG uploads with DOMPurify before storing them", "correction": true}
+{"prompt": "revert this right now, you destroyed the responsive layout on mobile screens", "correction": true}
+{"prompt": "you keep ignoring my constraints: this function must be thread-safe", "correction": true}
+{"prompt": "why are you generating mock data in the production database seed script? revert that", "correction": true}
+{"prompt": "don't ever use inline styles in React components in this codebase", "correction": true}
+{"prompt": "you've made this mistake twice now: prisma transactions require the tx client argument", "correction": true}
+{"prompt": "stop rewriting working code just because you prefer a different syntax", "correction": true}
+{"prompt": "rule: every public API endpoint must have a corresponding OpenAPI docstring", "correction": true}
+{"prompt": "completely wrong approach, you're polling every 100ms instead of listening to the event", "correction": true}
+{"prompt": "revert that file immediately, you overwrote my uncommitted local edits", "correction": true}
+{"prompt": "didn't I tell you we strictly use bun instead of npm in this directory?", "correction": true}
+{"prompt": "you failed to close the file handle in the error branch, fix your sloppy resource cleanup", "correction": true}
+{"prompt": "fix the wrong import path for the Button component in header.tsx", "correction": false}
+{"prompt": "why does this background worker never exit after completing its job queue?", "correction": false}
+{"prompt": "add an option to revert user account changes within a 30-day grace period", "correction": false}
+{"prompt": "run the test suite again with coverage reporting enabled", "correction": false}
+{"prompt": "here is the error trace from our staging server: Connection reset by peer at TCP.read", "correction": false}
+{"prompt": "reproduce the bug where submitting an empty comment field triggers a crash", "correction": false}
+{"prompt": "implement a 'Do Not Disturb' toggle in the user profile notifications tab", "correction": false}
+{"prompt": "explain what is wrong with this regular expression: it fails to match international phone numbers", "correction": false}
+{"prompt": "add error handling for when the third-party payment gateway returns HTTP 503", "correction": false}
+{"prompt": "the search bar does not return results when querying terms with special characters", "correction": false}
+{"prompt": "can you check why this GitHub Actions workflow is failing on the lint step?", "correction": false}
+{"prompt": "write a script to delete expired session cookies from the Redis cluster", "correction": false}
+{"prompt": "create a fallback UI component for when image loading fails", "correction": false}
+{"prompt": "how do I configure ESLint to ignore generated files in the dist directory?", "correction": false}
+{"prompt": "investigate the memory leak in the WebSocket connection pool under high concurrency", "correction": false}
+{"prompt": "add a unit test ensuring that invalid email addresses are properly rejected", "correction": false}
+{"prompt": "the date picker displays the wrong day when the user's timezone is UTC-8", "correction": false}
+{"prompt": "re-run the database migrations on the test database", "correction": false}
+{"prompt": "optimize this PostgreSQL query that is doing a full sequential scan on the orders table", "correction": false}
+{"prompt": "what is causing the hydration mismatch warning on the initial render of page.tsx?", "correction": false}
+{"prompt": "implement exponential backoff when retrying failed webhook deliveries", "correction": false}
+{"prompt": "display a friendly error message when the uploaded PDF exceeds 10MB", "correction": false}
+{"prompt": "set up a dead letter queue in RabbitMQ for messages that cannot be processed", "correction": false}
+{"prompt": "why is the Docker build failing on step 4 when downloading alpine packages?", "correction": false}
+{"prompt": "allow users to revert their workspace to a previous checkpoint", "correction": false}
+{"prompt": "check whether the session token expires automatically after 2 hours of inactivity", "correction": false}
+{"prompt": "refactor the legacy payment controller to use dependency injection", "correction": false}
+{"prompt": "the tooltip does not disappear when the user scrolls the page on mobile devices", "correction": false}
+{"prompt": "write an integration test checking that unauthorized requests return HTTP 401", "correction": false}
+{"prompt": "generate a flamegraph to profile CPU bottlenecks during image compression", "correction": false}
+{"prompt": "how should we handle graceful shutdown when receiving a SIGTERM signal in Node.js?", "correction": false}
+{"prompt": "sanitize query parameters to prevent SQL injection vulnerabilities in raw queries", "correction": false}
+{"prompt": "create a custom hook useDebounce to avoid firing API calls on every keystroke", "correction": false}
+{"prompt": "the pagination component shows the wrong total page count when filters are active", "correction": false}
+{"prompt": "configure Prometheus metrics endpoint for tracking HTTP request latencies", "correction": false}
+{"prompt": "add an alert dialog asking the user to confirm before permanently deleting a project", "correction": false}
+{"prompt": "why does Vite fail to resolve this monorepo package in development mode?", "correction": false}
+{"prompt": "implement optimistic UI updates when users like a post", "correction": false}
+{"prompt": "inspect this crash report from iOS TestFlight builds: EXC_BAD_ACCESS in CoreData", "correction": false}
+{"prompt": "ensure that CORS headers allow requests coming from localhost during local development", "correction": false}

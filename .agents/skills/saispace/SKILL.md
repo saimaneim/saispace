@@ -1,6 +1,6 @@
 ---
 name: saispace
-description: Use in any project registered in saispace. Defines how to read and store project memory (replaces engram), tasks, stack and tech rules through the saispace MCP, and how to add and run verifiable code rules with the `sai` CLI.
+description: Use in any project registered in saispace. Defines how to read and store project memory (replaces engram), the plan (goals and tasks), stack and tech rules through the saispace MCP, and how to add and run verifiable code rules with the `sai` CLI.
 ---
 
 # saispace
@@ -44,11 +44,11 @@ Save the lesson when it happens, not at the end:
 
 Hooks remind you. `sai setup claude` installs `sai memory context` on SessionStart and `sai memory nudge` on UserPromptSubmit (a reminder when the prompt looks like a correction) and Stop (blocks once per session if there was a correction or 3+ failed tools and nothing was saved). The OpenCode plugin (`sai setup opencode`) adds the same reminder on each user message.
 
-## Tasks and stack
+## Plan and stack
 
 | Item | Tool |
 |---|---|
-| Work to do | `create_task`, then `update_task` to `in_progress` and to `done` only when verified. |
+| Plan | `get_active_plan` when starting work. Goals (`create_goal`, `update_goal`) are milestones with a short "done when" `criteria`; tasks (`create_task` with `goal_id`, `update_task`/`complete_task`) are their executable steps. Record only milestones and steps that matter across sessions, not ephemeral micro-steps. Complete a goal with `update_goal` once every task is done. |
 | Stack | `sync_project_stack` after dependencies change. Never type versions by hand. |
 | Rules about a technology | `upsert_tech_rule`: one short sentence per dependency name and optional version prefix (`tauri`, `2`). |
 

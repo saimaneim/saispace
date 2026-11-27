@@ -27,6 +27,11 @@ pub fn vault_key_path_for(db_path: &Path) -> PathBuf {
 }
 
 #[must_use]
+pub fn kpi_events_path_for(db_path: &Path) -> PathBuf {
+    db_path.with_file_name("kpi-events.jsonl")
+}
+
+#[must_use]
 pub fn detect_agent_name(fallback: &str) -> String {
     let var = |key: &str| std::env::var(key).ok().filter(|v| !v.trim().is_empty());
     if let Some(name) = var("SAISPACE_AGENT_NAME") {

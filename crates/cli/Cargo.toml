@@ -10,6 +10,7 @@ path = "src/main.rs"
 [dependencies]
 saispace-core = { path = "../core" }
 saispace-rules = { path = "../rules" }
+chrono = { workspace = true }
 clap = { version = "4.6", features = ["derive"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -18,7 +19,6 @@ thiserror = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
-chrono = { workspace = true }
 tempfile = "3"
 
 [lints]

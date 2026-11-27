@@ -24,6 +24,7 @@ pub enum ActionKind {
 #[sqlx(type_name = "TEXT", rename_all = "snake_case")]
 pub enum EntityKind {
     Project,
+    Goal,
     Task,
     ContextNotes,
     TechRule,

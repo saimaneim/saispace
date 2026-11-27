@@ -109,6 +109,10 @@ async fn assert_expected_tools(
         "list_tasks",
         "create_task",
         "update_task",
+        "get_active_plan",
+        "create_goal",
+        "update_goal",
+        "complete_task",
         "sync_project_stack",
         "upsert_tech_rule",
         "search_memory",
@@ -812,6 +816,172 @@ async fn test_update_task_persistence_and_activity() {
             && a.entity == saispace_core::models::EntityKind::Task
             && a.entity_id == Some(parsed_task_id)
     }));
+
+    client.cancel().await.expect("cancel client failed");
+    let _ = server_task.await;
+}
+
+struct PlanFixture {
+    goal_id: String,
+    task_ids: Vec<String>,
+}
+
+async fn create_plan_fixture(
+    client: &rmcp::service::RunningService<rmcp::RoleClient, TestClientHandler>,
+    project_id: &str,
+) -> PlanFixture {
+    // create_goal: milestone with its breakdown, in one call.
+    let created = call(
+        client,
+        "create_goal",
+        json!({
+            "project_id": project_id,
+            "title": "Publicar la v0",
+            "criteria": "Desplegada y anunciada",
+            "tasks": ["Preparar release", "Anunciar"]
+        }),
+    )
+    .await;
+    assert_eq!(created.is_error, Some(false));
+    let created = text_json(&created);
+    assert_eq!(created["title"], "Publicar la v0");
+    assert_eq!(created["criteria"], "Desplegada y anunciada");
+    assert_eq!(created["status"], "active");
+    assert_eq!(created["tasks"].as_array().expect("tasks").len(), 2);
+    let goal_id = created["id"].as_str().expect("goal id").to_string();
+    assert_eq!(goal_id.len(), 8, "create_goal returns the short id");
+    let mut task_ids: Vec<String> = created["tasks"]
+        .as_array()
+        .expect("tasks")
+        .iter()
+        .map(|t| t["id"].as_str().expect("task id").to_string())
+        .collect();
+
+    // A task with a goal_id only (no project_id): the goal supplies it.
+    let extra = call(
+        client,
+        "create_task",
+        json!({ "goal_id": goal_id, "title": "Repasar README" }),
+    )
+    .await;
+    assert_eq!(extra.is_error, Some(false));
+    task_ids.push(
+        text_json(&extra)["id"]
+            .as_str()
+            .expect("task id")
+            .to_string(),
+    );
+
+    // A loose task, no goal.
+    let loose = call(
+        client,
+        "create_task",
+        json!({ "project_id": project_id, "title": "Avisar a clientes" }),
+    )
+    .await;
+    assert_eq!(loose.is_error, Some(false));
+
+    PlanFixture { goal_id, task_ids }
+}
+
+#[tokio::test]
+async fn test_plan_goal_task_flow() {
+    let server = setup_test_server().await;
+    let db = server.db.clone();
+    let (client, server_task) = connect(server).await;
+
+    let project_id = register_test_project(&client, "Plan Flow", "/dev/plan-flow").await;
+    let fixture = create_plan_fixture(&client, &project_id).await;
+    let goal_id = fixture.goal_id;
+    let task_ids = fixture.task_ids;
+
+    // update_task to done reports the goal's progress.
+    let updated = call(
+        &client,
+        "update_task",
+        json!({ "task_id": task_ids[0], "status": "done" }),
+    )
+    .await;
+    assert_eq!(updated.is_error, Some(false));
+    let updated = text_json(&updated);
+    assert_eq!(updated["status"], "done");
+    assert_eq!(updated["goal"]["done"], 1);
+    assert_eq!(updated["goal"]["total"], 3);
+    assert_eq!(updated["goal"]["goal_done"], false);
+    assert!(
+        updated.get("hint").is_none(),
+        "goal not done yet: {updated}"
+    );
+
+    // complete_task for the remaining goal tasks; the last one hints.
+    call(&client, "complete_task", json!({ "id": task_ids[1] })).await;
+    let missing = call(&client, "complete_task", json!({ "id": "no-such-task" })).await;
+    assert_eq!(missing.is_error, Some(true), "unknown short id errors");
+
+    // Complete the extra task by short id (resolve works).
+    let last = call(&client, "complete_task", json!({ "id": task_ids[2] })).await;
+    assert_eq!(last.is_error, Some(false));
+    let last = text_json(&last);
+    assert_eq!(last["goal"]["goal_done"], true);
+    assert!(
+        last["hint"].as_str().expect("hint").contains("update_goal"),
+        "{last}"
+    );
+
+    // get_active_plan: goal done/total, no pending tasks, loose task.
+    let plan = text_json(
+        &call(
+            &client,
+            "get_active_plan",
+            json!({ "project_id": project_id }),
+        )
+        .await,
+    );
+    assert_eq!(plan["project"]["id"], project_id);
+    assert_eq!(plan["goals"].as_array().expect("goals").len(), 1);
+    let goal = &plan["goals"][0];
+    assert_eq!(goal["id"], goal_id);
+    assert_eq!(goal["done"], 3);
+    assert_eq!(goal["total"], 3);
+    assert_eq!(list(goal, "tasks").len(), 0, "no pending tasks: {goal}");
+    let loose_tasks = plan["loose_tasks"].as_array().expect("loose tasks");
+    assert_eq!(loose_tasks.len(), 1);
+    assert_eq!(loose_tasks[0]["title"], "Avisar a clientes");
+    // The plan carries the memory context (skipped entirely while empty).
+    assert!(plan.get("memory").is_none(), "{plan}");
+
+    // Complete the goal and it leaves the active plan.
+    let completed = call(
+        &client,
+        "update_goal",
+        json!({ "id": goal_id, "status": "completed" }),
+    )
+    .await;
+    assert_eq!(completed.is_error, Some(false));
+    let completed = text_json(&completed);
+    assert_eq!(completed["status"], "completed");
+    let plan = text_json(
+        &call(
+            &client,
+            "get_active_plan",
+            json!({ "project_id": project_id }),
+        )
+        .await,
+    );
+    assert_eq!(list(&plan, "goals").len(), 0, "{plan}");
+    assert_eq!(plan["loose_tasks"].as_array().expect("loose").len(), 1);
+
+    // Activity: goal created and completed are logged.
+    let entities: Vec<String> = db
+        .list_activity(50)
+        .await
+        .expect("activity")
+        .into_iter()
+        .map(|a| format!("{:?}:{:?}", a.action, a.entity))
+        .collect();
+    assert!(entities.iter().any(|e| e == "Create:Goal"), "{entities:?}");
+    assert!(entities.iter().any(|e| e == "Update:Goal"), "{entities:?}");
+    assert!(entities.iter().any(|e| e == "Update:Task"), "{entities:?}");
 
     client.cancel().await.expect("cancel client failed");
     let _ = server_task.await;

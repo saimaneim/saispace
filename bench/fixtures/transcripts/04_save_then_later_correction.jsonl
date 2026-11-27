@@ -1,0 +1,4 @@
+{"type":"user","message":{"content":"Guarda la decisión sobre el pool"}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__saispace__save_memory","input":{"kind":"decision","title":"Pool config"}}]}}
+{"type":"user","message":{"content":"Eso está mal, faltó validar el token antes de abrir transacción"}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"src/auth.rs"}}]}}

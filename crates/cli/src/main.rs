@@ -10,8 +10,11 @@ macro_rules! out {
     }};
 }
 
+mod bench;
+mod kpi;
 mod memory;
 mod nudge;
+mod plan;
 mod rules;
 mod secret;
 mod setup;
@@ -59,6 +62,11 @@ enum Command {
     #[command(about = "Memoria persistente compartida con el MCP y la app")]
     #[command(subcommand)]
     Memory(memory::MemoryCommand),
+    #[command(about = "Plan del proyecto en dos niveles: objetivos y tareas")]
+    Plan {
+        #[command(subcommand)]
+        command: Option<plan::PlanCommand>,
+    },
     #[command(about = "Claves guardadas: los agentes las usan con permiso, sin ver su valor")]
     #[command(subcommand)]
     Secret(secret::SecretCommand),
@@ -68,6 +76,10 @@ enum Command {
     #[command(about = "Instala la integración de saispace en un agente")]
     #[command(subcommand)]
     Setup(setup::SetupCommand),
+    #[command(about = "Mide calidad y eficiencia de memoria sobre fixtures deterministas")]
+    Bench(bench::BenchArgs),
+    #[command(about = "Muestra los KPIs diarios de memoria y aprendizaje")]
+    Kpi(kpi::KpiArgs),
 }
 
 #[derive(Subcommand)]
@@ -85,9 +97,12 @@ fn main() -> ExitCode {
         Command::Rule(cmd) => rules::rule(cmd).map(|()| ExitCode::SUCCESS),
         Command::Context(args) => rules::context(&args).map(|()| ExitCode::SUCCESS),
         Command::Memory(cmd) => memory::run(cmd).map(|()| ExitCode::SUCCESS),
+        Command::Plan { command } => plan::run(command.as_ref()).map(|()| ExitCode::SUCCESS),
         Command::Secret(cmd) => secret::run(cmd),
         Command::Skills(SkillsCommand::Sync(args)) => skills::run(&args),
         Command::Setup(cmd) => setup::run(&cmd),
+        Command::Bench(args) => bench::run(&args),
+        Command::Kpi(args) => kpi::run(&args).map(|()| ExitCode::SUCCESS),
     };
     match result {
         Ok(code) => code,

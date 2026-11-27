@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, formatError } from "../lib/api";
 import type { AiInventory } from "../lib/types";
 import { cn } from "../lib/utils";
+import { KpiPanel } from "./KpiPanel";
 import { Markdown } from "./Markdown";
 import { MemoryTab } from "./MemoryTab";
 import { MemoryUsagePanel } from "./MemoryUsagePanel";
@@ -270,6 +271,7 @@ export function GlobalView({ refreshKey, pendingRequests, onSecretsChanged }: Gl
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {tab === "memory" && (
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            <KpiPanel scope="global" refreshKey={refreshKey} />
             <MemoryUsagePanel refreshKey={refreshKey} onSelectMemory={setFocusMemoryId} />
             <MemoryTab project={null} refreshKey={refreshKey} focusId={focusMemoryId} />
           </div>

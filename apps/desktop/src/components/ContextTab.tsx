@@ -6,6 +6,7 @@ import {
   FilePlus,
   FileText,
   Folder,
+  Link2,
   Scale,
   Search,
   Sparkles,
@@ -24,6 +25,30 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
+
+/** A file that only points at another one reads as secondary: link icon, dim name, target. */
+function linkHint(file: ContextFile): string {
+  if (!file.link) return "";
+  return file.link.via === "symlink"
+    ? `Symlink a ${file.link.target}`
+    : `Importa ${file.link.target}`;
+}
+
+function FileLabel({ file, label }: { file: ContextFile; label?: string }) {
+  const name = label ?? file.name;
+  if (!file.link) return <span className="truncate flex-1">{name}</span>;
+  return (
+    <span className="flex-1 min-w-0 flex items-center gap-1.5" title={linkHint(file)}>
+      <span className="truncate italic text-fog">{name}</span>
+      <span className="truncate text-[11px] text-ash">→ {file.link.target}</span>
+    </span>
+  );
+}
+
+function FileIcon({ file, icon: Icon }: { file: ContextFile; icon: typeof FileText }) {
+  const Shown = file.link ? Link2 : Icon;
+  return <Shown className="w-3.5 h-3.5 text-fog flex-shrink-0" />;
+}
 
 interface ContextTabProps {
   project: Project;
@@ -359,7 +384,11 @@ export function ContextTab({ project }: ContextTabProps) {
   const currentLabel = selectedKey
     ? (files.find((f) => f.path === selectedKey)?.name ?? selectedKey)
     : "Contexto";
+  const selectedFile = files.find((f) => f.path === selectedKey);
   const currentSubtitle = selectedKey ?? "Sin ficheros de contexto";
+  const linkTarget = selectedFile?.link
+    ? files.find((f) => f.path === selectedFile.link?.target)
+    : undefined;
 
   const rowClass = (selected: boolean) =>
     cn(
@@ -421,8 +450,8 @@ export function ContextTab({ project }: ContextTabProps) {
                       title={f.path}
                       className={rowClass(selectedKey === f.path)}
                     >
-                      <BookOpen className="w-3.5 h-3.5 text-fog flex-shrink-0" />
-                      <span className="truncate flex-1">{f.name}</span>
+                      <FileIcon file={f} icon={BookOpen} />
+                      <FileLabel file={f} />
                     </button>
                   ))}
                 </div>
@@ -490,7 +519,7 @@ export function ContextTab({ project }: ContextTabProps) {
                                 title={file.path}
                                 className={rowClass(selectedKey === file.path)}
                               >
-                                <span className="truncate flex-1">{relPath}</span>
+                                <FileLabel file={file} label={relPath} />
                               </button>
                             ))}
                           </div>
@@ -534,8 +563,8 @@ export function ContextTab({ project }: ContextTabProps) {
                       title={f.path}
                       className={rowClass(selectedKey === f.path)}
                     >
-                      <FileCode className="w-3.5 h-3.5 text-fog flex-shrink-0" />
-                      <span className="truncate flex-1">{f.name}</span>
+                      <FileIcon file={f} icon={FileCode} />
+                      <FileLabel file={f} />
                     </button>
                   ))}
                 </div>
@@ -574,8 +603,8 @@ export function ContextTab({ project }: ContextTabProps) {
                       title={f.path}
                       className={rowClass(selectedKey === f.path)}
                     >
-                      <FileText className="w-3.5 h-3.5 text-fog flex-shrink-0" />
-                      <span className="truncate flex-1">{f.name}</span>
+                      <FileIcon file={f} icon={FileText} />
+                      <FileLabel file={f} />
                     </button>
                   ))}
                 </div>
@@ -612,7 +641,28 @@ export function ContextTab({ project }: ContextTabProps) {
                 />
               )}
             </div>
-            <p className="text-xs text-fog truncate">{currentSubtitle}</p>
+            {selectedFile?.link ? (
+              <p className="text-xs text-fog flex items-center gap-1.5 min-w-0">
+                <Link2 className="w-3 h-3 flex-shrink-0" />
+                <span className="truncate">
+                  {selectedFile.link.via === "symlink" ? "Symlink a" : "Solo importa"}{" "}
+                  {linkTarget ? (
+                    <button
+                      type="button"
+                      onClick={() => selectItem(linkTarget.path)}
+                      className="text-mist underline underline-offset-2 hover:text-paper focus:outline-none focus-visible:ring-2 focus-visible:ring-acid-lime/40 rounded-sm"
+                    >
+                      {selectedFile.link.target}
+                    </button>
+                  ) : (
+                    <span className="text-mist">{selectedFile.link.target}</span>
+                  )}
+                  {selectedFile.link.via === "symlink" ? ": editar aquí cambia el original" : ""}
+                </span>
+              </p>
+            ) : (
+              <p className="text-xs text-fog truncate">{currentSubtitle}</p>
+            )}
           </div>
 
           <div

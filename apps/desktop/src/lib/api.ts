@@ -9,10 +9,15 @@ import type {
   CreateTaskInput,
   DirectoryListing,
   DuplicatePair,
+  Goal,
+  GoalWithTasks,
+  KpiHistory,
   Memory,
   MemoryLink,
   MemoryUsageStats,
   OrphanGroup,
+  Plan,
+  PlanFilter,
   Project,
   SearchHit,
   SecretGrant,
@@ -21,6 +26,7 @@ import type {
   Task,
   Technology,
   TechRule,
+  UpdateGoalInput,
   UpdateMemoryInput,
   UpdateProjectInput,
   UpdateTaskInput,
@@ -82,6 +88,21 @@ export const api = {
 
   reorderProjects: (ids: string[]) =>
     invokeOrFallback<void>("reorder_projects", { ids }, undefined),
+
+  getPlan: (projectId: string, filter: PlanFilter) =>
+    invokeOrFallback<Plan>(
+      "plan_get",
+      { projectId, filter },
+      { goals: [], loose_tasks: [], counts: { active: 0, completed: 0, all: 0 } },
+    ),
+
+  createGoal: (projectId: string, title: string, criteria: string | null, tasks: string[]) =>
+    invokeOrFallback<GoalWithTasks>("goal_create", { projectId, title, criteria, tasks }),
+
+  updateGoal: (id: string, input: UpdateGoalInput) =>
+    invokeOrFallback<Goal>("goal_update", { id, input }),
+
+  deleteGoal: (id: string) => invokeOrFallback<void>("goal_delete", { id }),
 
   listTasks: (projectId: string) => invokeOrFallback<Task[]>("list_tasks", { projectId }, []),
 
@@ -148,6 +169,8 @@ export const api = {
       { projectId: projectId ?? null, days },
       { stale: [], surplus_sessions: [] },
     ),
+  kpiHistory: (days?: number, scope?: string) =>
+    invokeOrFallback<KpiHistory>("kpi_history", { days, scope }, { metrics: [] }),
 
   getMemory: (id: string) => invokeOrFallback<Memory>("get_memory", { id }),
   memoryLinks: (id: string) => invokeOrFallback<MemoryLink[]>("memory_links", { id }, []),

@@ -16,6 +16,8 @@ pub struct StaleReport {
     pub surplus_sessions: Vec<Memory>,
 }
 
+pub const DEFAULT_STALE_DAYS: i64 = 60;
+
 /// Cap so an absurd `--days` value cannot overflow the cutoff arithmetic.
 const MAX_STALE_DAYS: i64 = 36_500;
 
@@ -47,7 +49,19 @@ impl Db {
     ///
     /// Returns an error if the memories cannot be loaded.
     pub async fn stale_memories(&self, scope: MemoryScope, days: i64) -> CoreResult<Vec<Memory>> {
-        let cutoff = Utc::now() - Duration::days(days.clamp(0, MAX_STALE_DAYS));
+        self.stale_memories_at(scope, days, Utc::now()).await
+    }
+
+    /// # Errors
+    ///
+    /// Returns an error if the memories cannot be loaded.
+    pub async fn stale_memories_at(
+        &self,
+        scope: MemoryScope,
+        days: i64,
+        now: chrono::DateTime<Utc>,
+    ) -> CoreResult<Vec<Memory>> {
+        let cutoff = now - Duration::days(days.clamp(0, MAX_STALE_DAYS));
         let (mode, project_id) = scope_parts(scope);
         // Timestamps are stored as sqlx-formatted UTC text, so plain string
         // comparison orders them chronologically.

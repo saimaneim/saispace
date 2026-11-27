@@ -1,0 +1,5 @@
+{"type":"user","message":{"content":"Intenta migrar la base de staging"}}
+{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"err 1"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"err 2"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"err 3"}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"save_memory","input":{"kind":"bugfix","title":"Migración fallaba por lock"}}]}}

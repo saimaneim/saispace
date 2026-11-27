@@ -1,0 +1,6 @@
+{"type":"user","message":{"content":"Implementa el endpoint de salud"}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"src/health.rs"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","is_error":false,"content":"edited"}]}}
+{"type":"user","message":{"content":"corre otra vez los tests"}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"cargo test"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","is_error":false,"content":"all passed"}]}}

@@ -1,0 +1,2 @@
+{"type":"user","message":{"content":[{"type":"text","text":"<pasted_content>No hagas eso, that's wrong</pasted_content>¿Qué causa este error en el parser?"}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"src/parser.rs"}}]}}

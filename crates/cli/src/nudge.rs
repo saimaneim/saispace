@@ -1,17 +1,21 @@
-use saispace_core::default_db_path;
+use chrono::{SecondsFormat, Utc};
 use saispace_core::learning::{
     CORRECTION_REMINDER, STOP_REMINDER, analyze_transcript, is_correction,
 };
+use saispace_core::{default_db_path, kpi_events_path_for};
 use serde::Deserialize;
 use std::fs;
-use std::io::{IsTerminal, Read};
+use std::io::{IsTerminal, Read, Write};
 use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const STDIN_MAX_BYTES: u64 = 4 * 1024 * 1024;
-/// Stop runs after every turn: read only the recent end of long transcripts
-/// (a 30 MB one took over a second in full). Older corrections already got
-/// their reminder when the prompt was sent.
 const TRANSCRIPT_TAIL_BYTES: u64 = 4 * 1024 * 1024;
+const KPI_EVENTS_MAX_BYTES: u64 = 5 * 1024 * 1024;
+const KPI_EVENTS_RETENTION_SECS: u64 = 35 * 86_400;
+
+static ROTATE_SEQ: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Deserialize)]
 struct HookPayload {
@@ -60,7 +64,6 @@ fn session_marker_path(session_id: Option<&str>) -> Option<PathBuf> {
     Some(db_path.with_file_name("nudged").join(session_id))
 }
 
-/// The last `max` bytes of a file, starting at a line boundary.
 fn read_tail(path: &Path, max: u64) -> Option<String> {
     use std::io::{Seek, SeekFrom};
     let mut file = fs::File::open(path).ok()?;
@@ -73,32 +76,159 @@ fn read_tail(path: &Path, max: u64) -> Option<String> {
     if start == 0 {
         return Some(text);
     }
-    // Drop the partial first line.
     Some(
         text.split_once('\n')
             .map_or_else(String::new, |(_, rest)| rest.to_string()),
     )
 }
 
-fn handle_user_prompt(prompt: Option<&str>) {
-    let Some(prompt) = prompt else {
+fn now_rfc3339() -> String {
+    Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
+}
+
+fn is_rotated_kpi_log(name: &str) -> bool {
+    if name == "kpi-events.jsonl" {
+        return false;
+    }
+    let has_jsonl_ext = Path::new(name)
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("jsonl"));
+    (name.starts_with("kpi-events.") && has_jsonl_ext) || name == "kpi-events.jsonl.1"
+}
+
+fn parse_rotated_unix_ms(name: &str) -> Option<u128> {
+    let rest = name.strip_prefix("kpi-events.")?.strip_suffix(".jsonl")?;
+    rest.split('.').next()?.parse::<u128>().ok()
+}
+
+fn unique_rotated_path(log_path: &Path, now_ms: u128) -> PathBuf {
+    let pid = std::process::id();
+    let seq = ROTATE_SEQ.fetch_add(1, Ordering::Relaxed);
+    let first = if seq == 0 {
+        log_path.with_file_name(format!("kpi-events.{now_ms}.{pid}.jsonl"))
+    } else {
+        log_path.with_file_name(format!("kpi-events.{now_ms}.{pid}.{seq}.jsonl"))
+    };
+    if !first.exists() {
+        return first;
+    }
+    for attempt in 1_u64..1_000 {
+        let candidate =
+            log_path.with_file_name(format!("kpi-events.{now_ms}.{pid}.{seq}.{attempt}.jsonl"));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    log_path.with_file_name(format!("kpi-events.{now_ms}.{pid}.{seq}.extra.jsonl"))
+}
+
+fn cleanup_old_rotated_logs(dir: &Path, now_sys: SystemTime, now_ms: u128) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    let retention = Duration::from_secs(KPI_EVENTS_RETENTION_SECS);
+    let retention_ms = u128::from(KPI_EVENTS_RETENTION_SECS) * 1_000;
+    for entry in entries {
+        let Ok(entry) = entry else { continue };
+        let Ok(name) = entry.file_name().into_string() else {
+            continue;
+        };
+        if !is_rotated_kpi_log(&name) {
+            continue;
+        }
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let expired_by_name =
+            parse_rotated_unix_ms(&name).is_some_and(|ms| now_ms.saturating_sub(ms) > retention_ms);
+        let expired_by_mtime = entry
+            .metadata()
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|mtime| now_sys.duration_since(mtime).ok())
+            .is_some_and(|age| age > retention);
+        if expired_by_name || expired_by_mtime {
+            let _ = fs::remove_file(path);
+        }
+    }
+}
+
+fn append_kpi_event(event: &serde_json::Value) {
+    let Ok(db_path) = default_db_path() else {
+        return;
+    };
+    let log_path = kpi_events_path_for(&db_path);
+    let Some(parent) = log_path.parent() else {
+        return;
+    };
+    if fs::create_dir_all(parent).is_err() {
+        return;
+    }
+    let now_sys = SystemTime::now();
+    let now_ms = now_sys
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis());
+    cleanup_old_rotated_logs(parent, now_sys, now_ms);
+    if let Ok(meta) = fs::metadata(&log_path)
+        && meta.len() > KPI_EVENTS_MAX_BYTES
+    {
+        let rotated = unique_rotated_path(&log_path, now_ms);
+        if !rotated.exists() {
+            let _ = fs::rename(&log_path, rotated);
+        }
+    }
+    let Ok(mut line) = serde_json::to_string(event) else {
+        return;
+    };
+    line.push('\n');
+    if let Ok(mut file) = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+    {
+        let _ = file.write_all(line.as_bytes());
+    }
+}
+
+fn handle_user_prompt(payload: &HookPayload) {
+    let Some(prompt) = payload.prompt.as_deref() else {
         return;
     };
     if is_correction(prompt) {
         crate::out!("{CORRECTION_REMINDER}");
+        let mut event = serde_json::json!({
+            "ts": now_rfc3339(),
+            "event": "correction",
+        });
+        if let Some(session_id) = payload
+            .session_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            && let Some(obj) = event.as_object_mut()
+        {
+            obj.insert(
+                "session_id".to_string(),
+                serde_json::Value::String(session_id.to_string()),
+            );
+        }
+        append_kpi_event(&event);
     }
 }
 
 fn handle_stop(payload: &HookPayload) {
-    if payload.stop_hook_active.unwrap_or(false) {
-        return;
-    }
-    let Some(marker_path) = session_marker_path(payload.session_id.as_deref()) else {
+    let Some(session_id) = payload
+        .session_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| is_single_normal_component(id))
+    else {
         return;
     };
-    if marker_path.exists() {
+    let Some(marker_path) = session_marker_path(Some(session_id)) else {
         return;
-    }
+    };
     let Some(transcript_path) = payload.transcript_path.as_deref().filter(|p| !p.is_empty()) else {
         return;
     };
@@ -106,30 +236,42 @@ fn handle_stop(payload: &HookPayload) {
         return;
     };
     let signals = analyze_transcript(&jsonl);
-    if signals.saved_after_last_correction || (signals.corrections == 0 && signals.failed_tools < 3)
+    let can_block = !payload.stop_hook_active.unwrap_or(false) && !marker_path.exists();
+    let needs_block = !signals.saved_after_last_correction
+        && (signals.corrections > 0 || signals.failed_tools >= 3);
+
+    let mut blocked = false;
+    if can_block
+        && needs_block
+        && marker_path
+            .parent()
+            .is_none_or(|parent| fs::create_dir_all(parent).is_ok())
+        && fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&marker_path)
+            .is_ok()
     {
-        return;
+        let output = serde_json::json!({
+            "decision": "block",
+            "reason": STOP_REMINDER,
+        });
+        if let Ok(line) = serde_json::to_string(&output) {
+            crate::out!("{line}");
+            blocked = true;
+        }
     }
-    if let Some(parent) = marker_path.parent()
-        && fs::create_dir_all(parent).is_err()
-    {
-        return;
-    }
-    if fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&marker_path)
-        .is_err()
-    {
-        return;
-    }
-    let output = serde_json::json!({
-        "decision": "block",
-        "reason": STOP_REMINDER,
+
+    let event = serde_json::json!({
+        "ts": now_rfc3339(),
+        "event": "stop",
+        "session_id": session_id,
+        "corrections": signals.corrections,
+        "failed_tools": signals.failed_tools,
+        "saved": signals.saved_after_last_correction,
+        "blocked": blocked,
     });
-    if let Ok(line) = serde_json::to_string(&output) {
-        crate::out!("{line}");
-    }
+    append_kpi_event(&event);
 }
 
 pub fn run() {
@@ -137,7 +279,7 @@ pub fn run() {
         return;
     };
     match payload.hook_event_name.as_deref() {
-        Some("UserPromptSubmit") => handle_user_prompt(payload.prompt.as_deref()),
+        Some("UserPromptSubmit") => handle_user_prompt(&payload),
         Some("Stop") => handle_stop(&payload),
         _ => {}
     }

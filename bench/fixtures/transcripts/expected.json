@@ -1,0 +1,14 @@
+{
+  "01_correction_unsaved.jsonl": true,
+  "02_correction_then_mcp_save.jsonl": false,
+  "03_correction_then_cli_save.jsonl": false,
+  "04_save_then_later_correction.jsonl": true,
+  "05_three_failed_tools_unsaved.jsonl": true,
+  "06_two_failed_tools_only.jsonl": false,
+  "07_three_failed_tools_then_save.jsonl": false,
+  "08_harness_synthetic_only.jsonl": false,
+  "09_harness_plus_real_correction.jsonl": true,
+  "10_normal_session.jsonl": false,
+  "11_pasted_content_negative.jsonl": false,
+  "12_correction_then_consolidate.jsonl": false
+}

@@ -1,0 +1,9 @@
+{"type":"user","isMeta":true,"message":{"content":"Never do this meta instruction"}}
+{"type":"user","isCompactSummary":true,"message":{"content":"Always check rules and why did you skip?"}}
+{"type":"user","message":{"content":"Delegated task node:9 [completed]: no hagas eso"}}
+{"type":"user","message":{"content":"Used MCP tool: te dije que uses bun"}}
+{"type":"user","message":{"content":"[T3 Code: thread updated] That's wrong"}}
+{"type":"user","message":{"content":"<command-name>wrong</command-name>"}}
+{"type":"user","message":{"content":"<system-reminder>Always use strict mode</system-reminder>Lista los ficheros del módulo"}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"src/lib.rs"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","is_error":false,"content":"ok"}]}}

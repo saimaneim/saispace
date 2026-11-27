@@ -12,11 +12,13 @@ pub mod vault;
 pub use db::Db;
 pub use db::DuplicatePair;
 pub use db::StaleReport;
+pub use db::kpi::{compute_learning_kpis, kpi_catalog, metric_applies_to_scope};
 pub use db::memory_graph::{KEEP_SESSIONS, short_id};
 pub use error::{CoreError, CoreResult};
 pub use models::*;
 pub use paths::{
-    default_db_path, detect_agent_name, detect_project_root, project_key, vault_key_path_for,
+    default_db_path, detect_agent_name, detect_project_root, kpi_events_path_for, project_key,
+    vault_key_path_for,
 };
 pub use topic_key::normalize_topic_key;
 pub use vault::Vault;

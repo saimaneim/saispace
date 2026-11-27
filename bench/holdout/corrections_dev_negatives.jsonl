@@ -1,0 +1,103 @@
+{"prompt": "no existe el archivo de configuración", "correction": false}
+{"prompt": "no aparece el botón de guardar", "correction": false}
+{"prompt": "no responde el servidor de staging", "correction": false}
+{"prompt": "no contiene la clave esperada", "correction": false}
+{"prompt": "no incluye los impuestos", "correction": false}
+{"prompt": "no permite editar ese campo", "correction": false}
+{"prompt": "no devuelve ningún resultado", "correction": false}
+{"prompt": "no coincide con lo esperado", "correction": false}
+{"prompt": "no necesitas instalar nada", "correction": false}
+{"prompt": "no puedes acceder sin permisos", "correction": false}
+{"prompt": "no tienes que hacerlo tú", "correction": false}
+{"prompt": "no sabes lo que pasó ayer", "correction": false}
+{"prompt": "no quieres usar esa librería", "correction": false}
+{"prompt": "no trabajas los domingos", "correction": false}
+{"prompt": "no hablas español", "correction": false}
+{"prompt": "no comes carne", "correction": false}
+{"prompt": "no vives aquí", "correction": false}
+{"prompt": "no duermes bien", "correction": false}
+{"prompt": "no lees los comentarios", "correction": false}
+{"prompt": "no crees en esa teoría", "correction": false}
+{"prompt": "no estudias lo suficiente", "correction": false}
+{"prompt": "no persiste la sesión entre reinicios", "correction": false}
+{"prompt": "no hay problemas con el despliegue", "correction": false}
+{"prompt": "no quedan tareas pendientes", "correction": false}
+{"prompt": "el material resiste altas temperaturas", "correction": false}
+{"prompt": "el cliente insiste en pagar por adelantado", "correction": false}
+{"prompt": "cuéntame un chiste sobre programadores", "correction": false}
+{"prompt": "el contraste de colores es bajo", "correction": false}
+{"prompt": "¿qué comiste ayer?", "correction": false}
+{"prompt": "¿a qué hora llegaste a la oficina?", "correction": false}
+{"prompt": "¿cómo instalaste las dependencias?", "correction": false}
+{"prompt": "¿dónde compraste el teclado?", "correction": false}
+{"prompt": "¿qué leíste en el artículo?", "correction": false}
+{"prompt": "no era posible hacerlo antes", "correction": false}
+{"prompt": "no era tan grave el error", "correction": false}
+{"prompt": "no era para tanto", "correction": false}
+{"prompt": "no era obligatorio el registro", "correction": false}
+{"prompt": "no era culpa tuya", "correction": false}
+{"prompt": "no era cierto lo del rumor", "correction": false}
+{"prompt": "no era gratis la licencia", "correction": false}
+{"prompt": "no era sencillo de configurar", "correction": false}
+{"prompt": "no era la intención del cambio", "correction": false}
+{"prompt": "déjalo así, está bien", "correction": false}
+{"prompt": "déjalo como está", "correction": false}
+{"prompt": "siempre que puedas, revisa el correo", "correction": false}
+{"prompt": "siempre que llueve se inunda el sótano", "correction": false}
+{"prompt": "hazlo siempre que tengas tiempo", "correction": false}
+{"prompt": "deja de lado el formato por ahora", "correction": false}
+{"prompt": "deja de lado los detalles menores", "correction": false}
+{"prompt": "al contrario, me parece buena idea", "correction": false}
+{"prompt": "no es lo que parece", "correction": false}
+{"prompt": "desde ya, muchas gracias por la ayuda", "correction": false}
+{"prompt": "a partir de este archivo genera el índice", "correction": false}
+{"prompt": "a partir de este ejemplo explica el patrón", "correction": false}
+{"prompt": "no es lo que busco pero sirve", "correction": false}
+{"prompt": "don't worry about the warnings", "correction": false}
+{"prompt": "don't forget to run the tests", "correction": false}
+{"prompt": "don't hesitate to ask questions", "correction": false}
+{"prompt": "do not disturb mode is on", "correction": false}
+{"prompt": "don't mind the messy diff", "correction": false}
+{"prompt": "no indexes found in the schema", "correction": false}
+{"prompt": "no instances running in staging", "correction": false}
+{"prompt": "no resources available in the region", "correction": false}
+{"prompt": "no crashes in the logs", "correction": false}
+{"prompt": "no fixes needed for the lint errors", "correction": false}
+{"prompt": "no surprises in the diff", "correction": false}
+{"prompt": "no databases were harmed", "correction": false}
+{"prompt": "no releases scheduled this week", "correction": false}
+{"prompt": "no responses from the API yet", "correction": false}
+{"prompt": "no devices connected", "correction": false}
+{"prompt": "no losses reported", "correction": false}
+{"prompt": "no taxes applied", "correction": false}
+{"prompt": "no boxes left in the warehouse", "correction": false}
+{"prompt": "no viruses detected", "correction": false}
+{"prompt": "no pauses between retries", "correction": false}
+{"prompt": "no matrices involved", "correction": false}
+{"prompt": "no licences expired", "correction": false}
+{"prompt": "no gases released", "correction": false}
+{"prompt": "no lenses scratched", "correction": false}
+{"prompt": "the test that fails on Windows needs a fix", "correction": false}
+{"prompt": "find the line that causes the leak", "correction": false}
+{"prompt": "if this fails, retry with backoff", "correction": false}
+{"prompt": "when this fails we should alert", "correction": false}
+{"prompt": "the change that breaks the build was merged yesterday", "correction": false}
+{"prompt": "the approach that doesn't work is documented", "correction": false}
+{"prompt": "add a guard so this breaks nothing", "correction": false}
+{"prompt": "the client didn't ask for that feature", "correction": false}
+{"prompt": "they didn't ask for a refund", "correction": false}
+{"prompt": "she didn't ask any questions", "correction": false}
+{"prompt": "he didn't ask for help", "correction": false}
+{"prompt": "I want to switch to TypeScript", "correction": false}
+{"prompt": "we should switch to pnpm", "correction": false}
+{"prompt": "help me switch to the staging branch", "correction": false}
+{"prompt": "let's switch to a monorepo", "correction": false}
+{"prompt": "please switch to dark mode", "correction": false}
+{"prompt": "you changed my mind about the design", "correction": false}
+{"prompt": "you removed the duplicates, thanks", "correction": false}
+{"prompt": "you edited the right file this time", "correction": false}
+{"prompt": "you renamed the folder correctly, good job", "correction": false}
+{"prompt": "this is slower than the old version but uses less memory", "correction": false}
+{"prompt": "we decided on Rust last year", "correction": false}
+{"prompt": "they had agreed on the price", "correction": false}
+{"prompt": "why did you choose Rust for this?", "correction": false}
