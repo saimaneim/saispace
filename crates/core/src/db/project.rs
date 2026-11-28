@@ -205,7 +205,6 @@ impl Db {
             };
         }
         if let Some((root, name)) = find_project_marker(path) {
-            let root = std::fs::canonicalize(&root).unwrap_or(root);
             let root_str = root.to_string_lossy().to_string();
             if let Some(project) = self.get_project_by_path(&root_str).await? {
                 return Ok(Some(project));
