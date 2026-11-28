@@ -34,7 +34,7 @@ export function ProjectIcon({ projectId, name }: ProjectIconProps) {
   const initial = (name.trim().charAt(0) || "?").toUpperCase();
 
   return (
-    <span className="relative w-5 h-5 flex-shrink-0">
+    <span className="relative h-5 w-5 flex-shrink-0">
       {src ? (
         <img
           src={src}
@@ -42,11 +42,11 @@ export function ProjectIcon({ projectId, name }: ProjectIconProps) {
           width={20}
           height={20}
           draggable={false}
-          className="w-5 h-5 rounded object-contain"
+          className="h-5 w-5 rounded object-contain"
           onError={() => setSrc(null)}
         />
       ) : (
-        <span className="w-5 h-5 rounded bg-obsidian text-[11px] font-semibold text-mist flex items-center justify-center">
+        <span className="bg-obsidian text-mist flex h-5 w-5 items-center justify-center rounded text-[11px] font-semibold">
           {initial}
         </span>
       )}

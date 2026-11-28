@@ -36,14 +36,14 @@ export function MemoryKindBadge({ kind, compact = false, className }: MemoryKind
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-md font-medium flex-shrink-0",
+        "inline-flex flex-shrink-0 items-center gap-1.5 rounded-md font-medium",
         compact ? "px-1.5 py-0.5 text-[11px] leading-none" : "px-2 py-0.5 text-xs",
         style.badge,
         className,
       )}
     >
       <span
-        className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", style.dot)}
+        className={cn("h-1.5 w-1.5 flex-shrink-0 rounded-full", style.dot)}
         aria-hidden="true"
       />
       <span>{MEMORY_KIND_LABELS[kind]}</span>

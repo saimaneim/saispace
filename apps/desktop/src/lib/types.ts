@@ -115,13 +115,7 @@ export interface DirectoryListing {
 }
 
 export type ContextFileKind =
-  | "agents"
-  | "claude"
-  | "gemini"
-  | "design"
-  | "rules"
-  | "agents_dir"
-  | "other";
+  "agents" | "claude" | "gemini" | "design" | "rules" | "agents_dir" | "other";
 
 export interface ContextFile {
   path: string;

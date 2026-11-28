@@ -62,14 +62,14 @@ export function WindowControls() {
     "h-full w-11 flex items-center justify-center text-fog transition-colors duration-[120ms] focus:outline-none";
 
   return (
-    <div className="flex items-center h-full flex-shrink-0 pointer-events-auto">
+    <div className="pointer-events-auto flex h-full flex-shrink-0 items-center">
       <button
         type="button"
         onClick={handleMinimize}
         aria-label="Minimizar ventana"
         className={`${base} hover:text-paper hover:bg-elevated`}
       >
-        <Minus className="w-4 h-4" />
+        <Minus className="h-4 w-4" />
       </button>
       <button
         type="button"
@@ -78,9 +78,9 @@ export function WindowControls() {
         className={`${base} hover:text-paper hover:bg-elevated`}
       >
         {isMaximized ? (
-          <Copy className="w-3.5 h-3.5 rotate-180" />
+          <Copy className="h-3.5 w-3.5 rotate-180" />
         ) : (
-          <Square className="w-3.5 h-3.5" />
+          <Square className="h-3.5 w-3.5" />
         )}
       </button>
       <button
@@ -89,7 +89,7 @@ export function WindowControls() {
         aria-label="Cerrar ventana"
         className={`${base} hover:text-paper hover:bg-coral-red`}
       >
-        <X className="w-4 h-4" />
+        <X className="h-4 w-4" />
       </button>
     </div>
   );

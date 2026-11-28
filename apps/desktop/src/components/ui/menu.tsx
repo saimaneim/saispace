@@ -43,7 +43,7 @@ export function Menu({ trigger, items, align = "right" }: MenuProps) {
         <div
           role="menu"
           className={cn(
-            "absolute top-full mt-1 z-40 min-w-52 bg-elevated rounded-lg p-1 shadow-popover",
+            "bg-elevated shadow-popover absolute top-full z-40 mt-1 min-w-52 rounded-lg p-1",
             align === "right" ? "right-0" : "left-0",
           )}
         >
@@ -58,13 +58,13 @@ export function Menu({ trigger, items, align = "right" }: MenuProps) {
                 onSelect();
               }}
               className={cn(
-                "w-full flex items-center gap-2.5 text-left px-3 h-9 text-sm rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-40",
+                "focus-visible:ring-accent/40 flex h-9 w-full items-center gap-2.5 rounded-md px-3 text-left text-sm transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 disabled:opacity-40",
                 danger
                   ? "text-coral-red hover:bg-coral-red/10"
                   : "text-mist hover:text-paper hover:bg-obsidian",
               )}
             >
-              {Icon && <Icon className="w-4 h-4 flex-shrink-0" />}
+              {Icon && <Icon className="h-4 w-4 flex-shrink-0" />}
               <span>{label}</span>
             </button>
           ))}

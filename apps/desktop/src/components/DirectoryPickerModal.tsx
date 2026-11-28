@@ -150,45 +150,45 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-xl p-0 gap-0 overflow-hidden bg-carbon select-none">
+      <DialogContent className="bg-carbon max-w-xl gap-0 overflow-hidden p-0 select-none">
         <DialogTitle className="sr-only">Seleccionar carpeta</DialogTitle>
         <DialogDescription className="sr-only">
           Explora carpetas locales para añadir un proyecto a saispace.
         </DialogDescription>
 
-        <div className="flex items-center justify-between px-4 py-3.5 bg-obsidian">
-          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+        <div className="bg-obsidian flex items-center justify-between px-4 py-3.5">
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
             <button
               type="button"
               onClick={handleGoBack}
               disabled={!listing?.parent_path}
               aria-label="Volver al directorio anterior"
               title="Subir una carpeta"
-              className="p-1.5 rounded-md text-fog hover:text-paper hover:bg-elevated disabled:opacity-20 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 transition-colors duration-[120ms]"
+              className="text-fog hover:text-paper hover:bg-elevated focus-visible:ring-accent/40 rounded-md p-1.5 transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 disabled:opacity-20"
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft className="h-4 w-4" />
             </button>
 
             <span
-              className="font-mono text-xs font-medium text-paper truncate"
+              className="text-paper truncate font-mono text-xs font-medium"
               title={listing?.current_path}
             >
               {listing?.display_path ?? "~/"}
             </span>
           </div>
 
-          <div className="flex items-center gap-2 flex-shrink-0 mr-9">
+          <div className="mr-9 flex flex-shrink-0 items-center gap-2">
             <button
               type="button"
               onClick={() => setShowHidden((prev) => !prev)}
               aria-label={showHidden ? "Ocultar carpetas ocultas" : "Mostrar carpetas ocultas"}
               title={showHidden ? "Ocultar ocultos" : "Mostrar ocultos"}
               className={cn(
-                "flex items-center gap-1.5 px-2.5 h-7 rounded-md text-xs font-sans transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
+                "focus-visible:ring-accent/40 flex h-7 items-center gap-1.5 rounded-md px-2.5 font-sans text-xs transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2",
                 showHidden ? "bg-accent/15 text-accent" : "bg-elevated text-fog hover:text-paper",
               )}
             >
-              {showHidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+              {showHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
               <span>Ocultos</span>
             </button>
           </div>
@@ -196,7 +196,7 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
 
         {errorMessage && (
           <div
-            className="mx-4 mt-3 p-3 rounded-md bg-coral-red/10 text-coral-red text-xs font-sans"
+            className="bg-coral-red/10 text-coral-red mx-4 mt-3 rounded-md p-3 font-sans text-xs"
             role="alert"
             aria-live="polite"
           >
@@ -204,9 +204,9 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
           </div>
         )}
 
-        <div className="p-3 bg-obsidian/40">
+        <div className="bg-obsidian/40 p-3">
           <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-fog pointer-events-none" />
+            <Search className="text-fog pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
             <input
               ref={searchInputRef}
               type="text"
@@ -217,7 +217,7 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
               }}
               placeholder="Filtrar carpetas…"
               aria-label="Filtrar carpetas"
-              className="w-full h-9 pl-9 pr-3 text-sm bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 transition-colors duration-[120ms]"
+              className="bg-obsidian text-paper placeholder:text-fog focus-visible:ring-accent/40 h-9 w-full rounded-md pr-3 pl-9 text-sm transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2"
             />
           </div>
         </div>
@@ -226,12 +226,12 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
           ref={listRef}
           role="listbox"
           aria-label="Lista de carpetas"
-          className="flex-1 max-h-80 min-h-56 overflow-y-auto overscroll-contain p-2 space-y-0.5"
+          className="max-h-80 min-h-56 flex-1 space-y-0.5 overflow-y-auto overscroll-contain p-2"
         >
           {loading ? (
-            <div className="flex items-center justify-center py-16 text-fog gap-2">
-              <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none text-accent" />
-              <span className="text-sm font-sans text-fog">Leyendo…</span>
+            <div className="text-fog flex items-center justify-center gap-2 py-16">
+              <Loader2 className="text-accent h-4 w-4 animate-spin motion-reduce:animate-none" />
+              <span className="text-fog font-sans text-sm">Leyendo…</span>
             </div>
           ) : filteredEntries.length > 0 ? (
             filteredEntries.map((entry, idx) => {
@@ -244,15 +244,15 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
                   onClick={() => setSelectedIndex(idx)}
                   onDoubleClick={() => handleEnterDirectory(entry.path)}
                   className={cn(
-                    "group relative flex items-center justify-between pl-3.5 pr-3 h-10 rounded-md cursor-pointer text-sm transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
+                    "group focus-visible:ring-accent/40 relative flex h-10 cursor-pointer items-center justify-between rounded-md pr-3 pl-3.5 text-sm transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2",
                     isSelected
                       ? "bg-elevated text-paper font-medium"
                       : "text-mist hover:bg-obsidian hover:text-paper",
                   )}
                 >
-                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <Folder className="w-4 h-4 text-fog group-hover:text-mist flex-shrink-0" />
-                    <span className="truncate tracking-tight font-sans text-sm">{entry.name}</span>
+                  <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                    <Folder className="text-fog group-hover:text-mist h-4 w-4 flex-shrink-0" />
+                    <span className="truncate font-sans text-sm tracking-tight">{entry.name}</span>
                   </div>
 
                   <button
@@ -262,7 +262,7 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
                       void handleConfirm(entry.path);
                     }}
                     aria-label={`Añadir ${entry.name}`}
-                    className="opacity-0 group-hover:opacity-100 px-2.5 h-7 rounded-md text-xs font-medium bg-obsidian hover:bg-accent hover:text-accent-ink text-accent transition-[opacity,background-color,color] duration-[120ms] focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                    className="bg-obsidian hover:bg-accent hover:text-accent-ink text-accent focus-visible:ring-accent/40 h-7 rounded-md px-2.5 text-xs font-medium opacity-0 transition-[opacity,background-color,color] duration-[120ms] group-hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2"
                   >
                     + Añadir
                   </button>
@@ -270,12 +270,12 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
               );
             })
           ) : (
-            <div className="py-16 text-center text-sm text-fog font-sans">Sin carpetas</div>
+            <div className="text-fog py-16 text-center font-sans text-sm">Sin carpetas</div>
           )}
         </div>
 
-        <div className="p-3 bg-obsidian flex items-center justify-between text-xs text-fog">
-          <span className="text-xs text-ash font-sans">↑↓ navegar · Enter entrar · Esc cerrar</span>
+        <div className="bg-obsidian text-fog flex items-center justify-between p-3 text-xs">
+          <span className="text-ash font-sans text-xs">↑↓ navegar · Enter entrar · Esc cerrar</span>
 
           <div className="flex items-center gap-2">
             {selectedEntry && (
@@ -283,7 +283,7 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
                 type="button"
                 onClick={() => void handleConfirm(listing?.current_path)}
                 disabled={isSubmitting || !listing}
-                className="text-xs text-fog hover:text-paper transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 rounded-md px-2.5 py-1.5"
+                className="text-fog hover:text-paper focus-visible:ring-accent/40 rounded-md px-2.5 py-1.5 text-xs transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2"
                 title="Añadir la carpeta abierta actualmente"
               >
                 Añadir actual
@@ -294,10 +294,10 @@ export function DirectoryPickerModal({ isOpen, onClose, onSelect }: DirectoryPic
               type="button"
               onClick={() => void handleConfirm()}
               disabled={isSubmitting || !listing}
-              className="h-9 px-4 rounded-md bg-accent text-accent-ink hover:brightness-105 text-sm font-medium transition-[filter] duration-[120ms] disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 flex items-center gap-2"
+              className="bg-accent text-accent-ink focus-visible:ring-accent/40 flex h-9 items-center gap-2 rounded-md px-4 text-sm font-medium transition-[filter] duration-[120ms] hover:brightness-105 focus:outline-none focus-visible:ring-2 disabled:opacity-50"
             >
-              <FolderPlus className="w-4 h-4" />
-              <span className="truncate max-w-48">Añadir &ldquo;{targetLabel}&rdquo;</span>
+              <FolderPlus className="h-4 w-4" />
+              <span className="max-w-48 truncate">Añadir &ldquo;{targetLabel}&rdquo;</span>
             </button>
           </div>
         </div>

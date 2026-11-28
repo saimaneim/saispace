@@ -62,9 +62,9 @@ export function AgentContextDialog({ open, onOpenChange, projectId }: AgentConte
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl p-6 bg-elevated">
+      <DialogContent className="bg-elevated max-w-2xl p-6">
         <DialogHeader>
-          <DialogTitle className="text-base font-semibold text-paper">
+          <DialogTitle className="text-paper text-base font-semibold">
             Contexto del agente
           </DialogTitle>
           <DialogDescription className="sr-only">
@@ -73,32 +73,32 @@ export function AgentContextDialog({ open, onOpenChange, projectId }: AgentConte
         </DialogHeader>
 
         {loading && (
-          <div className="flex items-center justify-center min-h-48 py-12 text-fog gap-2 text-sm">
-            <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none text-accent" />
+          <div className="text-fog flex min-h-48 items-center justify-center gap-2 py-12 text-sm">
+            <Loader2 className="text-accent h-4 w-4 animate-spin motion-reduce:animate-none" />
             <span>Cargando contexto…</span>
           </div>
         )}
 
         {error && (
-          <div className="p-3 bg-coral-red/10 text-coral-red rounded-md text-sm" role="alert">
+          <div className="bg-coral-red/10 text-coral-red rounded-md p-3 text-sm" role="alert">
             {error}
           </div>
         )}
 
         {!loading && !error && context && (
           <div className="relative min-w-0">
-            <pre className="font-mono text-xs text-paper bg-carbon p-4 rounded-lg overflow-y-auto overscroll-contain max-h-[60vh] whitespace-pre-wrap break-words select-text leading-relaxed">
+            <pre className="text-paper bg-carbon max-h-[60vh] overflow-y-auto overscroll-contain rounded-lg p-4 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap select-text">
               {context.text}
             </pre>
           </div>
         )}
 
         <div className="flex items-center justify-between pt-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <span className="text-xs text-fog tabular-nums">{sizeKb} KB</span>
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="text-fog text-xs tabular-nums">{sizeKb} KB</span>
             {isNearBudget && (
-              <span className="text-xs text-status-amber flex items-center gap-1 min-w-0 truncate">
-                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="text-status-amber flex min-w-0 items-center gap-1 truncate text-xs">
+                <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
                 <span className="truncate">Cerca del límite</span>
               </span>
             )}
@@ -108,16 +108,16 @@ export function AgentContextDialog({ open, onOpenChange, projectId }: AgentConte
             size="sm"
             onClick={handleCopy}
             disabled={!context || loading}
-            className="flex items-center gap-1.5 text-xs flex-shrink-0"
+            className="flex flex-shrink-0 items-center gap-1.5 text-xs"
           >
             {copied ? (
               <>
-                <Check className="w-3.5 h-3.5 text-pulse-green" />
+                <Check className="text-pulse-green h-3.5 w-3.5" />
                 <span>Copiado</span>
               </>
             ) : (
               <>
-                <Copy className="w-3.5 h-3.5" />
+                <Copy className="h-3.5 w-3.5" />
                 <span>Copiar</span>
               </>
             )}

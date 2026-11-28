@@ -69,30 +69,30 @@ export function MemoryLinks({ memory, onOpen }: MemoryLinksProps) {
         <button
           type="button"
           onClick={() => memory.superseded_by && onOpen(memory.superseded_by)}
-          className="w-full flex items-center justify-between gap-2 px-4 h-10 rounded-lg bg-status-amber/10 text-xs font-medium text-status-amber hover:bg-status-amber/15 transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 min-w-0"
+          className="bg-status-amber/10 text-status-amber hover:bg-status-amber/15 focus-visible:ring-accent/40 flex h-10 w-full min-w-0 items-center justify-between gap-2 rounded-lg px-4 text-xs font-medium transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2"
         >
-          <span className="flex items-center gap-2 min-w-0">
-            <Archive className="w-3.5 h-3.5 flex-shrink-0" />
+          <span className="flex min-w-0 items-center gap-2">
+            <Archive className="h-3.5 w-3.5 flex-shrink-0" />
             <span className="truncate">Consolidada · abrir vigente</span>
           </span>
-          <ArrowUpRight className="w-3.5 h-3.5 flex-shrink-0" />
+          <ArrowUpRight className="h-3.5 w-3.5 flex-shrink-0" />
         </button>
       )}
 
       {triggers.length > 0 && (
-        <div className="border-t border-obsidian pt-4 min-w-0 space-y-2.5">
+        <div className="border-obsidian min-w-0 space-y-2.5 border-t pt-4">
           <p
-            className="flex items-center gap-1.5 text-xs font-semibold text-fog tabular-nums"
+            className="text-fog flex items-center gap-1.5 text-xs font-semibold tabular-nums"
             title="El agente recibe esta memoria sola cuando un comando muestra este texto, o al empezar en ese entorno"
           >
-            <Zap className="w-3.5 h-3.5 text-accent flex-shrink-0" />
+            <Zap className="text-accent h-3.5 w-3.5 flex-shrink-0" />
             <span>Activadores · {triggers.length}</span>
           </p>
           <ul className="flex flex-wrap gap-1.5">
             {triggers.map((pattern) => (
               <li
                 key={pattern}
-                className="max-w-full px-2.5 py-1 rounded-md bg-obsidian text-xs text-mist font-mono break-all select-text"
+                className="bg-obsidian text-mist max-w-full rounded-md px-2.5 py-1 font-mono text-xs break-all select-text"
               >
                 {triggerLabel(pattern)}
               </li>
@@ -102,9 +102,9 @@ export function MemoryLinks({ memory, onOpen }: MemoryLinksProps) {
       )}
 
       {links.length > 0 && (
-        <div className="border-t border-obsidian pt-4 min-w-0 space-y-2">
-          <p className="flex items-center gap-1.5 text-xs font-semibold text-fog tabular-nums">
-            <Link2 className="w-3.5 h-3.5 flex-shrink-0" />
+        <div className="border-obsidian min-w-0 space-y-2 border-t pt-4">
+          <p className="text-fog flex items-center gap-1.5 text-xs font-semibold tabular-nums">
+            <Link2 className="h-3.5 w-3.5 flex-shrink-0" />
             <span>Enlaces · {links.length}</span>
           </p>
           <ul className="space-y-0.5">
@@ -113,14 +113,14 @@ export function MemoryLinks({ memory, onOpen }: MemoryLinksProps) {
                 <button
                   type="button"
                   onClick={() => onOpen(link.id)}
-                  className="w-full flex items-center gap-2.5 px-2.5 h-9 rounded-md text-left text-sm text-mist hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 min-w-0"
+                  className="text-mist hover:text-paper hover:bg-obsidian focus-visible:ring-accent/40 flex h-9 w-full min-w-0 items-center gap-2.5 rounded-md px-2.5 text-left text-sm transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2"
                 >
-                  <span className="text-xs text-fog w-24 flex-shrink-0 truncate">
+                  <span className="text-fog w-24 flex-shrink-0 truncate text-xs">
                     {RELATION_LABEL[`${link.relation}:${link.direction}`]}
                   </span>
-                  <span className="truncate flex-1 min-w-0 text-bone">{link.title}</span>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    {link.archived && <span className="text-[11px] text-ash">archivada</span>}
+                  <span className="text-bone min-w-0 flex-1 truncate">{link.title}</span>
+                  <div className="flex flex-shrink-0 items-center gap-1.5">
+                    {link.archived && <span className="text-ash text-[11px]">archivada</span>}
                     <MemoryKindBadge kind={link.kind} compact />
                   </div>
                 </button>

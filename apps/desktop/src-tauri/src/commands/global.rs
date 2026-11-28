@@ -123,7 +123,7 @@ async fn from_svgl(client: &reqwest::Client, query: &str) -> CommandResult<Optio
         return Ok(None);
     };
     let text = String::from_utf8_lossy(&bytes).into_owned();
-    Ok(text.contains("<svg").then_some(text))
+    Ok((text.contains("<svg") && is_compact(&text)).then_some(text))
 }
 
 /// Simple Icons slugs differ from package names in a few known ways.
@@ -132,8 +132,38 @@ fn simple_icons_slug(query: &str) -> String {
     match slug.as_str() {
         "nodejs" | "node" => "nodedotjs".to_string(),
         "nextjs" | "next" => "nextdotjs".to_string(),
+        "vue" | "vuejs" => "vuedotjs".to_string(),
+        "three" | "threejs" => "threedotjs".to_string(),
+        "rollup" => "rollupdotjs".to_string(),
+        "chartjs" => "chartdotjs".to_string(),
+        "socketio" => "socketdotio".to_string(),
+        "shadcn" => "shadcnui".to_string(),
+        "sklearn" => "scikitlearn".to_string(),
+        "torch" => "pytorch".to_string(),
         _ => slug,
     }
+}
+
+/// Whether the SVG is roughly square. Wordmarks (`SQLite` on svgl is 512x228)
+/// shrink to an unreadable smudge in a 20px slot, so they are skipped.
+fn is_compact(svg: &str) -> bool {
+    let attr = |name: &str| -> Option<&str> {
+        let start = svg.find(&format!("{name}=\""))? + name.len() + 2;
+        svg[start..].split('"').next()
+    };
+    let size = attr("viewBox")
+        .and_then(|vb| {
+            let n: Vec<f64> = vb
+                .split([' ', ','])
+                .filter_map(|v| v.parse().ok())
+                .collect();
+            (n.len() == 4).then(|| (n[2], n[3]))
+        })
+        .or_else(|| {
+            let num = |v: &str| v.trim_end_matches("px").parse::<f64>().ok();
+            Some((num(attr("width")?)?, num(attr("height")?)?))
+        });
+    size.is_none_or(|(w, h)| w > 0.0 && h > 0.0 && w.max(h) / w.min(h) <= 1.6)
 }
 
 /// Simple Icons ships each logo in its brand color; near-black brands would
@@ -255,7 +285,11 @@ pub async fn tech_icon(name: String, package: Option<String>) -> CommandResult<O
     // against the new sources.
     let miss = dir.join(format!("{key}.miss"));
     if let Ok(text) = tokio::fs::read_to_string(&svg).await {
-        return Ok(Some(svg_data_url(&text)));
+        if is_compact(&text) {
+            return Ok(Some(svg_data_url(&text)));
+        }
+        // Cached before wordmarks were rejected: look it up again.
+        tokio::fs::remove_file(&svg).await.ok();
     }
     if let Ok(bytes) = tokio::fs::read(&png).await {
         return Ok(Some(png_data_url(&bytes)));
@@ -292,7 +326,16 @@ pub async fn tech_icon(name: String, package: Option<String>) -> CommandResult<O
 
 #[cfg(test)]
 mod tests {
-    use super::{readable_on_dark, simple_icons_slug};
+    use super::{is_compact, readable_on_dark, simple_icons_slug};
+
+    #[test]
+    fn rejects_wordmarks() {
+        assert!(!is_compact(r#"<svg viewBox="0 0 512 228"></svg>"#));
+        assert!(is_compact(r#"<svg viewBox="0 0 256 256"></svg>"#));
+        assert!(is_compact(r#"<svg width="24px" height="20px"></svg>"#));
+        assert!(!is_compact(r#"<svg width="300" height="100"></svg>"#));
+        assert!(is_compact("<svg></svg>"));
+    }
 
     #[test]
     fn slugs_follow_simple_icons_names() {

@@ -83,7 +83,7 @@ function AddSecretDialog({
           </DialogHeader>
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="secret-name" className="text-xs font-medium text-fog">
+              <label htmlFor="secret-name" className="text-fog text-xs font-medium">
                 Nombre
               </label>
               <input
@@ -97,7 +97,7 @@ function AddSecretDialog({
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="secret-value" className="text-xs font-medium text-fog">
+              <label htmlFor="secret-value" className="text-fog text-xs font-medium">
                 Valor
               </label>
               <input
@@ -112,7 +112,7 @@ function AddSecretDialog({
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="secret-desc" className="text-xs font-medium text-fog">
+              <label htmlFor="secret-desc" className="text-fog text-xs font-medium">
                 Descripción (opcional)
               </label>
               <input
@@ -126,12 +126,12 @@ function AddSecretDialog({
             </div>
           </div>
           {replaces && (
-            <p className="text-xs text-status-amber break-words">
+            <p className="text-status-amber text-xs break-words">
               Ya existe {name.trim()}: se sustituirá su valor.
             </p>
           )}
           {error && (
-            <p className="text-sm text-coral-red break-words" role="alert">
+            <p className="text-coral-red text-sm break-words" role="alert">
               {error}
             </p>
           )}
@@ -186,29 +186,29 @@ export function SecretsPanel({ onChanged }: SecretsPanelProps) {
   const pending = grants.filter((g) => g.status === "pending");
 
   return (
-    <div className="flex-1 overflow-y-auto px-6 pb-6 pt-2">
+    <div className="flex-1 overflow-y-auto px-6 pt-2 pb-6">
       <div className="max-w-3xl space-y-6">
         {pending.length > 0 && (
           <section className="space-y-2">
-            <h3 className="text-xs font-semibold text-accent px-1">Solicitudes de acceso</h3>
+            <h3 className="text-accent px-1 text-xs font-semibold">Solicitudes de acceso</h3>
             {pending.map((grant) => (
               <div
                 key={grant.id}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl bg-elevated min-w-0"
+                className="bg-elevated flex min-w-0 items-center gap-3 rounded-xl px-4 py-3"
               >
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-paper break-words">
+                <div className="min-w-0 flex-1">
+                  <p className="text-paper text-sm break-words">
                     <span className="font-medium">{grant.agent}</span> quiere usar{" "}
                     <span className="font-mono">{grant.secret_name}</span>
                   </p>
-                  {grant.reason && <p className="text-xs text-fog truncate">{grant.reason}</p>}
+                  {grant.reason && <p className="text-fog truncate text-xs">{grant.reason}</p>}
                 </div>
                 <Button
                   size="sm"
                   variant="secondary"
                   onClick={() => act(() => api.decideSecretGrant(grant.id, false))}
                 >
-                  <X className="w-4 h-4 mr-1" />
+                  <X className="mr-1 h-4 w-4" />
                   Denegar
                 </Button>
                 <Button
@@ -216,7 +216,7 @@ export function SecretsPanel({ onChanged }: SecretsPanelProps) {
                   variant="default"
                   onClick={() => act(() => api.decideSecretGrant(grant.id, true))}
                 >
-                  <Check className="w-4 h-4 mr-1" />
+                  <Check className="mr-1 h-4 w-4" />
                   Permitir
                 </Button>
               </div>
@@ -226,21 +226,21 @@ export function SecretsPanel({ onChanged }: SecretsPanelProps) {
 
         <section className="space-y-2">
           <div className="flex items-center justify-between px-1">
-            <h3 className="text-xs font-semibold text-fog">Claves guardadas</h3>
+            <h3 className="text-fog text-xs font-semibold">Claves guardadas</h3>
             <Button size="sm" variant="secondary" onClick={() => setIsAddOpen(true)}>
-              <Plus className="w-3.5 h-3.5 mr-1.5" />
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
               Añadir
             </Button>
           </div>
 
           {secrets.length === 0 && (
             <div className="flex flex-col items-center gap-2 py-12 text-center">
-              <div className="w-10 h-10 rounded-xl bg-carbon flex items-center justify-center text-ash mb-1">
-                <KeyRound className="w-5 h-5" />
+              <div className="bg-carbon text-ash mb-1 flex h-10 w-10 items-center justify-center rounded-xl">
+                <KeyRound className="h-5 w-5" />
               </div>
-              <p className="text-sm font-medium text-paper">Sin claves</p>
-              <p className="text-xs text-fog max-w-xs leading-relaxed">
-                Los agentes las usan con <code className="font-mono text-mist">sai secret run</code>{" "}
+              <p className="text-paper text-sm font-medium">Sin claves</p>
+              <p className="text-fog max-w-xs text-xs leading-relaxed">
+                Los agentes las usan con <code className="text-mist font-mono">sai secret run</code>{" "}
                 sin leer su valor.
               </p>
             </div>
@@ -253,18 +253,18 @@ export function SecretsPanel({ onChanged }: SecretsPanelProps) {
             return (
               <div
                 key={secret.id}
-                className="group px-4 py-3 rounded-xl bg-carbon hover:bg-obsidian/80 transition-colors duration-[120ms] min-w-0"
+                className="group bg-carbon hover:bg-obsidian/80 min-w-0 rounded-xl px-4 py-3 transition-colors duration-[120ms]"
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  <KeyRound className="w-4 h-4 text-fog flex-shrink-0" />
-                  <span className="font-mono text-sm font-medium text-paper truncate">
+                <div className="flex min-w-0 items-center gap-3">
+                  <KeyRound className="text-fog h-4 w-4 flex-shrink-0" />
+                  <span className="text-paper truncate font-mono text-sm font-medium">
                     {secret.name}
                   </span>
-                  <span className="text-xs text-fog truncate flex-1 min-w-0">
+                  <span className="text-fog min-w-0 flex-1 truncate text-xs">
                     {secret.description}
                   </span>
                   <span
-                    className="text-xs text-fog tabular-nums flex-shrink-0"
+                    className="text-fog flex-shrink-0 text-xs tabular-nums"
                     title="Cuenta solo cuando un agente la usa con sai secret run"
                   >
                     {secret.last_used_at
@@ -275,18 +275,18 @@ export function SecretsPanel({ onChanged }: SecretsPanelProps) {
                     type="button"
                     onClick={() => setPendingDelete(secret)}
                     aria-label={`Eliminar ${secret.name}`}
-                    className="h-7 w-7 rounded-md flex items-center justify-center text-fog opacity-0 group-hover:opacity-100 hover:text-coral-red hover:bg-coral-red/10 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 transition-opacity duration-[120ms] flex-shrink-0"
+                    className="text-fog hover:text-coral-red hover:bg-coral-red/10 focus-visible:ring-accent/40 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md opacity-0 transition-opacity duration-[120ms] group-hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
                 {agents.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-2 pl-7">
+                  <div className="mt-2 flex flex-wrap gap-1.5 pl-7">
                     {agents.map((grant) => (
                       <span
                         key={grant.id}
                         className={cn(
-                          "inline-flex items-center gap-1 h-6 pl-2 pr-1 rounded-full text-xs",
+                          "inline-flex h-6 items-center gap-1 rounded-full pr-1 pl-2 text-xs",
                           grant.status === "approved"
                             ? "bg-pulse-green/10 text-pulse-green"
                             : "bg-coral-red/10 text-coral-red",
@@ -298,9 +298,9 @@ export function SecretsPanel({ onChanged }: SecretsPanelProps) {
                           onClick={() => act(() => api.revokeSecretGrant(grant.id))}
                           aria-label={`Quitar permiso de ${grant.agent}`}
                           title="Quitar"
-                          className="h-4 w-4 rounded-full flex items-center justify-center hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                          className="hover:bg-obsidian focus-visible:ring-accent/40 flex h-4 w-4 items-center justify-center rounded-full transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2"
                         >
-                          <X className="w-3 h-3" />
+                          <X className="h-3 w-3" />
                         </button>
                       </span>
                     ))}
@@ -311,7 +311,7 @@ export function SecretsPanel({ onChanged }: SecretsPanelProps) {
           })}
         </section>
 
-        {error && <p className="text-sm text-coral-red">{error}</p>}
+        {error && <p className="text-coral-red text-sm">{error}</p>}
       </div>
 
       <AddSecretDialog

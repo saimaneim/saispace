@@ -96,10 +96,15 @@ describe("flujo: Historial", () => {
     });
 
     const older = within(sections[2]);
-    expect(older.getAllByRole("button").map((row) => row.textContent)).toEqual([
-      "Versiónv0.1.0",
-      "ArregloRedondear los totales",
-    ]);
+    // The trailing time depends on the machine's time zone.
+    const olderRows = older
+      .getAllByRole("button")
+      .map((row) => row.textContent?.replace(/\d\d:\d\d$/, ""));
+    expect(olderRows).toEqual(["v0.1.0", "ArregloRedondear los totales"]);
+    await user.click(older.getByRole("button", { name: "Versión v0.1.0" }));
+    expect(backend.callsTo("open_url").at(-1)?.args).toEqual({
+      url: "https://github.com/acme/facturas/releases/tag/v0.1.0",
+    });
 
     await user.click(screen.getByRole("button", { name: "Código" }));
     expect(screen.queryByRole("region", { name: "Hoy" })).not.toBeInTheDocument();

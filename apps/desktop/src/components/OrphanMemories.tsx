@@ -56,35 +56,35 @@ export function OrphanMemories({ onLinked }: OrphanMemoriesProps) {
 
   if (loading && groups.length === 0) {
     return (
-      <section className="flex-1 min-w-0 flex flex-col px-7 pt-5 pb-6 space-y-3">
-        <div className="h-6 w-48 rounded-md bg-carbon" />
-        <div className="h-16 rounded-xl bg-carbon" />
-        <div className="h-16 rounded-xl bg-carbon" />
+      <section className="flex min-w-0 flex-1 flex-col space-y-3 px-7 pt-5 pb-6">
+        <div className="bg-carbon h-6 w-48 rounded-md" />
+        <div className="bg-carbon h-16 rounded-xl" />
+        <div className="bg-carbon h-16 rounded-xl" />
       </section>
     );
   }
 
   if (groups.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center p-6">
-        <FolderCheck className="w-7 h-7 text-ash" />
-        <p className="text-sm font-medium text-paper">Todas las memorias tienen proyecto</p>
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+        <FolderCheck className="text-ash h-7 w-7" />
+        <p className="text-paper text-sm font-medium">Todas las memorias tienen proyecto</p>
       </div>
     );
   }
 
   return (
-    <section className="flex-1 min-w-0 flex flex-col px-7 pt-5 pb-6 overflow-y-auto">
+    <section className="flex min-w-0 flex-1 flex-col overflow-y-auto px-7 pt-5 pb-6">
       <div className="flex items-center justify-between pb-4">
-        <h2 className="text-lg font-semibold text-paper tracking-tight">Memorias sin proyecto</h2>
-        <span className="text-xs text-fog tabular-nums">
+        <h2 className="text-paper text-lg font-semibold tracking-tight">Memorias sin proyecto</h2>
+        <span className="text-fog text-xs tabular-nums">
           {groups.length} {groups.length === 1 ? "grupo" : "grupos"}
         </span>
       </div>
 
       {error && (
         <div
-          className="mb-3 px-3 py-2 rounded-md bg-coral-red/10 text-coral-red text-sm"
+          className="bg-coral-red/10 text-coral-red mb-3 rounded-md px-3 py-2 text-sm"
           role="alert"
         >
           {error}
@@ -99,18 +99,18 @@ export function OrphanMemories({ onLinked }: OrphanMemoriesProps) {
           return (
             <li
               key={group.project_name}
-              className="bg-carbon rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+              className="bg-carbon flex flex-col justify-between gap-3 rounded-xl p-4 sm:flex-row sm:items-center"
             >
               <div className="min-w-0 flex-1">
-                <span className="block text-sm font-medium text-paper truncate">
+                <span className="text-paper block truncate text-sm font-medium">
                   {group.project_name}
                 </span>
-                <span className="block text-xs text-fog mt-0.5 tabular-nums">
+                <span className="text-fog mt-0.5 block text-xs tabular-nums">
                   {group.count} {group.count === 1 ? "memoria" : "memorias"} ·{" "}
                   {formatTimeAgo(group.last_updated)}
                 </span>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex flex-shrink-0 items-center gap-2">
                 <Select
                   value={currentProjectId}
                   onValueChange={(value) =>
