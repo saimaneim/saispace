@@ -15,6 +15,8 @@ interface GlobalViewProps {
   refreshKey: string | null;
   pendingRequests: number;
   onSecretsChanged: () => void;
+  focusMemoryId?: string | null;
+  focusSeq?: number;
 }
 
 const EMPTY: AiInventory = {
@@ -366,8 +368,19 @@ function ConnectionsPanel({ inventory }: { inventory: AiInventory }) {
   );
 }
 
-export function GlobalView({ refreshKey, pendingRequests, onSecretsChanged }: GlobalViewProps) {
+export function GlobalView({
+  refreshKey,
+  pendingRequests,
+  onSecretsChanged,
+  focusMemoryId,
+  focusSeq,
+}: GlobalViewProps) {
   const [tab, setTab] = useState<GlobalTab>("memory");
+
+  useEffect(() => {
+    void focusSeq;
+    if (focusMemoryId) setTab("memory");
+  }, [focusMemoryId, focusSeq]);
   const [inventory, setInventory] = useState<AiInventory>(EMPTY);
   const [error, setError] = useState<string | null>(null);
 
@@ -430,7 +443,12 @@ export function GlobalView({ refreshKey, pendingRequests, onSecretsChanged }: Gl
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {tab === "memory" && (
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            <MemoryTab project={null} refreshKey={refreshKey} />
+            <MemoryTab
+              project={null}
+              refreshKey={refreshKey}
+              focusId={focusMemoryId}
+              focusSeq={focusSeq}
+            />
           </div>
         )}
         {tab === "instructions" && <InstructionsPanel inventory={inventory} />}

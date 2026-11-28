@@ -566,7 +566,17 @@ export function installFakeBackend(options: FakeBackendOptions = {}) {
     list_technologies: () => technologies,
     sync_project_stack: () => technologies,
     list_project_tech_rules: () => techRules,
-    search_memory: () => [],
+    search_memory: ({ query }) =>
+      memories
+        .filter((m) => m.title.toLowerCase().includes(String(query).toLowerCase()))
+        .map((m) => ({
+          kind: "memory",
+          id: m.id,
+          project_id: m.project_id,
+          title: m.title,
+          snippet: m.content,
+          rank: 0,
+        })),
     open_url: () => undefined,
     tech_icon: () => null,
     memory_usage_stats: () => ({

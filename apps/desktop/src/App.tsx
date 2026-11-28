@@ -55,6 +55,7 @@ export function App() {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [focusMemoryId, setFocusMemoryId] = useState<string | null>(null);
+  const [focusSeq, setFocusSeq] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isGlobal, setIsGlobal] = useState(false);
   const [pendingRequests, setPendingRequests] = useState(0);
@@ -179,8 +180,14 @@ export function App() {
   }, []);
 
   const handleSelectHit = (hit: SearchHit) => {
-    if (hit.project_id) selectProject(hit.project_id);
     setFocusMemoryId(hit.kind === "memory" ? hit.id : null);
+    setFocusSeq((n) => n + 1);
+    if (hit.project_id) {
+      selectProject(hit.project_id);
+    } else if (isGlobal || !activeProject) {
+      setIsGlobal(true);
+      return;
+    }
     const target: Record<SearchHit["kind"], TabId> = {
       task: "plan",
       tech_rule: "tech",
@@ -324,6 +331,8 @@ export function App() {
                 refreshKey={activities[0]?.id ?? null}
                 pendingRequests={pendingRequests}
                 onSecretsChanged={refreshPending}
+                focusMemoryId={focusMemoryId}
+                focusSeq={focusSeq}
               />
             ) : activeProject ? (
               <>
@@ -386,6 +395,7 @@ export function App() {
                       project={activeProject}
                       refreshKey={activities[0]?.id ?? null}
                       focusId={focusMemoryId}
+                      focusSeq={focusSeq}
                     />
                   )}
                   {activeTab === "tech" && (
