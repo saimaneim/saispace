@@ -59,7 +59,7 @@ bun install
 bunx tauri dev      # or: bunx tauri build
 ```
 
-Each GitHub release (`vX.Y.Z` tags) ships `sai` and `saispace-mcp` for linux-x64, macos-arm64, macos-x64 and windows-x64, with `SHA256SUMS` and `install.sh`. `sai --version` prints the version and commit.
+Every merge to `main` publishes a release (`v0.1.0`, `v0.1.1`, …) with `sai`, `saispace-mcp` and the desktop app (`saispace`) for linux-x64, macos-arm64, macos-x64 and windows-x64, plus `SHA256SUMS` and `install.sh`. `sai update` installs the latest one next to the running `sai`; `sai update --check` only looks. `sai --version` prints the version and commit.
 
 ## Tests
 
@@ -68,7 +68,8 @@ cargo test --workspace
 
 cd apps/desktop
 bun run check   # tsc --noEmit
-bun run lint    # biome
+bun run lint    # biome lint + bun fmt --check
+bun run format  # bun fmt
 ```
 
 ## Benchmark

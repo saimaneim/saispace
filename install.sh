@@ -1,6 +1,6 @@
 #!/bin/sh
-# Installs `sai` and `saispace-mcp` from the latest GitHub release (Linux and
-# macOS). Checks the archive against SHA256SUMS before installing.
+# Installs `sai`, `saispace-mcp` and the desktop app (`saispace`) from the
+# latest GitHub release (Linux and macOS). `sai update` runs it again. Checks the archive against SHA256SUMS before installing.
 #   curl -fsSL https://github.com/saimaneim/saispace/releases/latest/download/install.sh | sh
 # Options: SAISPACE_VERSION=v0.1.0  SAISPACE_BIN_DIR=$HOME/.local/bin
 set -eu
@@ -38,6 +38,12 @@ fi
 
 mkdir -p "$bin_dir"
 tar -xzf "$tmp/$archive" -C "$tmp"
-install -m 755 "$tmp/sai" "$tmp/saispace-mcp" "$bin_dir/"
-echo "Instalado $version en $bin_dir. Siguiente: sai setup <agente> y sai doctor"
+# Each binary goes in under a temp name and is renamed over the old one, so a
+# running copy (the app, the MCP server or `sai update` itself) keeps working.
+for bin in sai saispace-mcp saispace; do
+  [ -f "$tmp/$bin" ] || continue
+  install -m 755 "$tmp/$bin" "$bin_dir/.$bin.new"
+  mv -f "$bin_dir/.$bin.new" "$bin_dir/$bin"
+done
+echo "Instalado $version en $bin_dir. Siguiente: sai setup <agente> y sai doctor. Para actualizar: sai update"
 case ":$PATH:" in *":$bin_dir:"*) ;; *) echo "Añade $bin_dir a tu PATH" ;; esac

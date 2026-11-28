@@ -25,11 +25,12 @@ mod setup_mcp;
 mod setup_rules;
 mod skills;
 mod sync;
+mod update;
 
 use clap::{Parser, Subcommand};
 use std::process::ExitCode;
 
-pub const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", env!("SAI_COMMIT"), ")");
+pub const VERSION: &str = concat!(env!("SAI_VERSION"), " (", env!("SAI_COMMIT"), ")");
 
 #[derive(Debug, thiserror::Error)]
 pub enum CliError {
@@ -105,6 +106,8 @@ enum Command {
     Bench(bench::BenchArgs),
     #[command(about = "Muestra los KPIs diarios de memoria y aprendizaje")]
     Kpi(kpi::KpiArgs),
+    #[command(about = "Instala la última versión publicada de sai, el MCP y la app")]
+    Update(update::UpdateArgs),
 }
 
 #[derive(Subcommand)]
@@ -120,6 +123,7 @@ fn main() -> ExitCode {
     let result = match cli.command {
         Command::Check(args) => rules::check(&args),
         Command::Doctor(args) => doctor::run(&args),
+        Command::Update(args) => update::run(&args),
         Command::Sync(cmd) => sync::sync(&cmd).map(|()| ExitCode::SUCCESS),
         Command::Export(cmd) => sync::export(&cmd).map(|()| ExitCode::SUCCESS),
         Command::Init { name } => init::run(name.as_deref()).map(|()| ExitCode::SUCCESS),
