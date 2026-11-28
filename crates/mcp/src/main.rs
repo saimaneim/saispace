@@ -1,10 +1,14 @@
 use rmcp::ServiceExt;
 use saispace_core::Db;
-use saispace_mcp::{Config, SaiSpaceServer};
+use saispace_mcp::{Config, SaiSpaceServer, VERSION};
 use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    if std::env::args().any(|a| a == "--version" || a == "-V") {
+        println!("saispace-mcp {VERSION}");
+        return Ok(());
+    }
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()

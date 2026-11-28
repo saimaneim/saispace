@@ -1,4 +1,5 @@
 pub mod db;
+pub mod doctor;
 pub mod error;
 pub mod git_history;
 pub mod inventory;

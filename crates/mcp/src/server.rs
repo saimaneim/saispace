@@ -25,7 +25,7 @@ pub struct SaiSpaceServer {
 impl ServerHandler for SaiSpaceServer {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
-            .with_server_info(Implementation::new("saispace", "0.1.0"))
+            .with_server_info(Implementation::new("saispace", crate::VERSION))
             .with_instructions(INSTRUCTIONS)
     }
 }

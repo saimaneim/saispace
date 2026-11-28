@@ -11,6 +11,7 @@ macro_rules! out {
 }
 
 mod bench;
+mod doctor;
 mod kpi;
 mod memory;
 mod nudge;
@@ -24,6 +25,8 @@ mod skills;
 
 use clap::{Parser, Subcommand};
 use std::process::ExitCode;
+
+pub const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", env!("SAI_COMMIT"), ")");
 
 #[derive(Debug, thiserror::Error)]
 pub enum CliError {
@@ -44,7 +47,7 @@ pub type CliResult<T> = Result<T, CliError>;
 #[derive(Parser)]
 #[command(
     name = "sai",
-    version,
+    version = VERSION,
     about = "saispace: reglas verificables y memoria persistente para agentes de IA"
 )]
 struct Cli {
@@ -56,6 +59,10 @@ struct Cli {
 enum Command {
     #[command(about = "Ejecuta las comprobaciones de .agents/checks sobre el repositorio")]
     Check(rules::CheckArgs),
+    #[command(
+        about = "Revisa la base de datos, el índice, la clave del vault y los agentes conectados (solo lectura)"
+    )]
+    Doctor(doctor::DoctorArgs),
     #[command(about = "Crea, lista o elimina reglas")]
     #[command(subcommand)]
     Rule(rules::RuleCommand),
@@ -96,6 +103,7 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     let result = match cli.command {
         Command::Check(args) => rules::check(&args),
+        Command::Doctor(args) => doctor::run(&args),
         Command::Rule(cmd) => rules::rule(cmd).map(|()| ExitCode::SUCCESS),
         Command::Context(args) => rules::context(&args).map(|()| ExitCode::SUCCESS),
         Command::Memory(cmd) => memory::run(cmd).map(|()| ExitCode::SUCCESS),
