@@ -142,14 +142,14 @@ files = ["docs/*/*.md"]
 [check]
 kind = "refs_exist"
 pattern = '\[\[(?P<name>[A-Z][a-z]+)\]\]'
-template = "src/{parent}/{name}.tsx"
+template = "src/{parent}/{name}.stories.tsx"
 suffixes = []
 "#]);
     let found = repo.check(&by_capture, "docs/components/button.md");
     assert_eq!(
         found.len(),
         3,
-        "src/components/Button.tsx, Card.tsx and Modal.tsx are cased differently from the files"
+        "no Button, Card or Modal stories exist (independent of case-insensitive filesystems)"
     );
     assert_eq!(
         found[2].snippet,
