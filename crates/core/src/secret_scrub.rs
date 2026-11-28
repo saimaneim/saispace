@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 
 pub const REDACTED: &str = "[REDACTADO]";
 
-static TOKEN_SHAPES: LazyLock<Regex> = LazyLock::new(|| {
+static TOKEN_SHAPES: LazyLock<Option<Regex>> = LazyLock::new(|| {
     Regex::new(concat!(
         r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----",
         r"|\b(?:sk-ant-|sk-proj-|sk-)[A-Za-z0-9_\-]{20,}",
@@ -20,19 +20,18 @@ static TOKEN_SHAPES: LazyLock<Regex> = LazyLock::new(|| {
         r"|\beyJ[A-Za-z0-9_\-]{10,}\.eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}",
         r"|\b[a-z][a-z0-9+.\-]*://[^\s:/@]+:[^\s@/]{3,}@",
     ))
-    .expect("valid token regex")
+    .ok()
 });
 
 /// `KEY=value`, `KEY: value` or `"KEY": "value"`; group 1 is the key, group 2
 /// the value.
-static ASSIGNMENT: LazyLock<Regex> = LazyLock::new(|| {
+static ASSIGNMENT: LazyLock<Option<Regex>> = LazyLock::new(|| {
     Regex::new(r#"(?i)\b([A-Z][A-Z0-9_]*(?:PASSWORD|PASSWD|SECRET|TOKEN|API_?KEY|PRIVATE_KEY)|[A-Z][A-Z0-9_]{2,})"?\s*[:=]\s*"?([^\s"'`,;]{8,})"#)
-        .expect("valid assignment regex")
+        .ok()
 });
 
-static CREDENTIAL_NAME: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)(PASSWORD|PASSWD|SECRET|TOKEN|API_?KEY|PRIVATE_KEY|ACCESS_KEY)$")
-        .expect("valid name regex")
+static CREDENTIAL_NAME: LazyLock<Option<Regex>> = LazyLock::new(|| {
+    Regex::new(r"(?i)(PASSWORD|PASSWD|SECRET|TOKEN|API_?KEY|PRIVATE_KEY|ACCESS_KEY)$").ok()
 });
 
 /// Placeholders people write in docs; never worth redacting.
@@ -49,8 +48,16 @@ fn is_placeholder(value: &str) -> bool {
 /// replaced. `vault_names` are the names of secrets kept in the vault.
 #[must_use]
 pub fn scrub(text: &str, vault_names: &[String]) -> (String, usize) {
+    // The patterns are constants covered by tests; `None` cannot happen.
+    let (Some(token_re), Some(assignment), Some(credential)) = (
+        TOKEN_SHAPES.as_ref(),
+        ASSIGNMENT.as_ref(),
+        CREDENTIAL_NAME.as_ref(),
+    ) else {
+        return (text.to_string(), 0);
+    };
     let mut count = 0;
-    let shaped = TOKEN_SHAPES.replace_all(text, |caps: &regex::Captures| {
+    let shaped = token_re.replace_all(text, |caps: &regex::Captures| {
         count += 1;
         let m = &caps[0];
         // Keep the scheme and user of a URL so the note still makes sense.
@@ -60,11 +67,11 @@ pub fn scrub(text: &str, vault_names: &[String]) -> (String, usize) {
         }
         REDACTED.to_string()
     });
-    let assigned = ASSIGNMENT.replace_all(&shaped, |caps: &regex::Captures| {
+    let assigned = assignment.replace_all(&shaped, |caps: &regex::Captures| {
         let key = &caps[1];
         let value = &caps[2];
-        let sensitive = CREDENTIAL_NAME.is_match(key)
-            || vault_names.iter().any(|n| n.eq_ignore_ascii_case(key));
+        let sensitive =
+            credential.is_match(key) || vault_names.iter().any(|n| n.eq_ignore_ascii_case(key));
         if !sensitive || is_placeholder(value) || value.contains(REDACTED) {
             return caps[0].to_string();
         }
@@ -77,6 +84,11 @@ pub fn scrub(text: &str, vault_names: &[String]) -> (String, usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn patterns_compile() {
+        assert!(TOKEN_SHAPES.is_some() && ASSIGNMENT.is_some() && CREDENTIAL_NAME.is_some());
+    }
 
     #[test]
     fn redacts_known_shapes_and_named_values() {

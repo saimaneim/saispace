@@ -6,7 +6,8 @@ use std::error::Error;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     if std::env::args().any(|a| a == "--version" || a == "-V") {
-        println!("saispace-mcp {VERSION}");
+        // stderr: stdout belongs to the MCP protocol.
+        eprintln!("saispace-mcp {VERSION}");
         return Ok(());
     }
     tracing_subscriber::fmt()
