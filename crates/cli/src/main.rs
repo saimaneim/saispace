@@ -23,6 +23,7 @@ mod secret;
 mod setup;
 mod setup_rules;
 mod skills;
+mod sync;
 
 use clap::{Parser, Subcommand};
 use std::process::ExitCode;
@@ -64,6 +65,12 @@ enum Command {
         about = "Revisa la base de datos, el índice, la clave del vault y los agentes conectados (solo lectura)"
     )]
     Doctor(doctor::DoctorArgs),
+    #[command(about = "Comparte la memoria del proyecto por git, sin nube ni claves")]
+    #[command(subcommand)]
+    Sync(sync::SyncCommand),
+    #[command(about = "Exporta la memoria a otros formatos")]
+    #[command(subcommand)]
+    Export(sync::ExportCommand),
     #[command(
         about = "Fija este repo a un proyecto con .saispace.toml (el nombre sobrevive a clones y renombres)"
     )]
@@ -112,6 +119,8 @@ fn main() -> ExitCode {
     let result = match cli.command {
         Command::Check(args) => rules::check(&args),
         Command::Doctor(args) => doctor::run(&args),
+        Command::Sync(cmd) => sync::sync(&cmd).map(|()| ExitCode::SUCCESS),
+        Command::Export(cmd) => sync::export(&cmd).map(|()| ExitCode::SUCCESS),
         Command::Init { name } => init::run(name.as_deref()).map(|()| ExitCode::SUCCESS),
         Command::Rule(cmd) => rules::rule(cmd).map(|()| ExitCode::SUCCESS),
         Command::Context(args) => rules::context(&args).map(|()| ExitCode::SUCCESS),

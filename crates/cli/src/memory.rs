@@ -212,6 +212,26 @@ pub enum MemoryCommand {
         #[arg(help = "Elimina solo los resúmenes de sesión sobrantes", long)]
         prune_sessions: bool,
     },
+    #[command(
+        about = "Pasada de mantenimiento: parecidas, sin uso, sesiones sobrantes y huérfanas. Sin --apply solo muestra el plan"
+    )]
+    Tidy {
+        #[arg(
+            help = "Aplica el plan: fusiona parecidas, archiva sesiones y enlaza huérfanas",
+            long
+        )]
+        apply: bool,
+        #[arg(
+            help = "Días sin uso para listar una memoria",
+            long,
+            default_value_t = 60
+        )]
+        days: i64,
+        #[arg(help = "Revisa todos los proyectos", long)]
+        all: bool,
+        #[arg(help = "Salida en formato JSON", long)]
+        json: bool,
+    },
     #[command(about = "Importa las observaciones de engram (idempotente)")]
     ImportEngram {
         #[arg(help = "Ruta opcional a la base de datos de engram", long)]
@@ -567,6 +587,89 @@ async fn merge(
             .collect::<Vec<_>>()
             .join(", ")
     );
+    Ok(())
+}
+
+async fn tidy(db: &Db, apply: bool, days: i64, all: bool, json: bool) -> CliResult<()> {
+    let scope = if all {
+        MemoryScope::All
+    } else {
+        MemoryScope::for_project(current_project(db, false).await?.map(|p| p.id))
+    };
+    let plan = db
+        .tidy_plan(
+            scope,
+            days,
+            i64::try_from(saispace_core::KEEP_SESSIONS).unwrap_or(3),
+        )
+        .await?;
+    let result = if apply {
+        Some(db.apply_tidy(&plan).await?)
+    } else {
+        None
+    };
+    if json {
+        crate::out!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({ "plan": plan, "applied": result }))?
+        );
+        return Ok(());
+    }
+    if plan.is_empty() {
+        crate::out!("todo en orden");
+        return Ok(());
+    }
+    if !plan.duplicates.is_empty() {
+        crate::out!("# Parecidas, se fusionan · {}", plan.duplicates.len());
+        for pair in &plan.duplicates {
+            crate::out!(
+                "- {} {} ≈ {} {}",
+                short_id(pair.a.id),
+                excerpt(&pair.a.title, 60),
+                short_id(pair.b.id),
+                excerpt(&pair.b.title, 60)
+            );
+        }
+    }
+    if !plan.surplus_sessions.is_empty() {
+        crate::out!(
+            "# Resúmenes de sesión sobrantes, se archivan · {}",
+            plan.surplus_sessions.len()
+        );
+        for m in &plan.surplus_sessions {
+            print_memory_line(m);
+        }
+    }
+    if !plan.orphans.is_empty() {
+        crate::out!("# Huérfanas con proyecto, se enlazan");
+        for (group, project) in &plan.orphans {
+            crate::out!(
+                "- {} ({}) → {}",
+                group.project_name,
+                group.count,
+                project.name
+            );
+        }
+    }
+    if !plan.stale.is_empty() {
+        crate::out!(
+            "# Sin uso en {days} días, solo para revisar · {}",
+            plan.stale.len()
+        );
+        for m in &plan.stale {
+            print_memory_line(m);
+        }
+    }
+    if let Some(r) = result {
+        crate::out!(
+            "\nhecho: {} fusionadas, {} sesiones archivadas, {} huérfanas enlazadas",
+            r.merged,
+            r.archived_sessions,
+            r.attached_orphans
+        );
+    } else {
+        crate::out!("\nNada cambiado. Aplica con: sai memory tidy --apply");
+    }
     Ok(())
 }
 
@@ -1132,6 +1235,12 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
             json,
             prune_sessions,
         } => stale(&db, days, keep_sessions, all, json, prune_sessions).await?,
+        MemoryCommand::Tidy {
+            apply,
+            days,
+            all,
+            json,
+        } => tidy(&db, apply, days, all, json).await?,
         MemoryCommand::ImportEngram { db: source } => import_engram(&db, source).await?,
         MemoryCommand::Orphans => list_orphans(&db).await?,
         MemoryCommand::Link { project_name, path } => {
