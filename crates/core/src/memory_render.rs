@@ -4,7 +4,45 @@ use crate::models::{
 };
 use std::fmt::Write as _;
 
-pub const CONTEXT_BUDGET: usize = 6_000;
+/// Default size cap of the session context, in bytes. Sections are filled in
+/// priority order (preferences, environment, temporary, pinned, plan, last
+/// session, memories) and stop when the cap is reached.
+pub const CONTEXT_BUDGET: usize = 8_000;
+/// Smallest accepted cap: enough for the header and the top preferences.
+pub const MIN_CONTEXT_BUDGET: usize = 1_000;
+
+/// Context budget from `SAISPACE_CONTEXT_BYTES`, or the default.
+#[must_use]
+pub fn context_budget_from_env() -> usize {
+    std::env::var("SAISPACE_CONTEXT_BYTES")
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .map_or(CONTEXT_BUDGET, |n| n.max(MIN_CONTEXT_BUDGET))
+}
+
+const CUT_NOTE: &str = "- … más con `sai memory search`\n";
+
+/// Appends `line` while it fits in `budget`; once one line does not fit,
+/// every later line is dropped and a single cut note is written.
+struct Budget {
+    max: usize,
+    full: bool,
+}
+
+impl Budget {
+    fn push(&mut self, out: &mut String, line: &str) -> bool {
+        if self.full {
+            return false;
+        }
+        if out.len() + line.len() + CUT_NOTE.len() > self.max {
+            self.full = true;
+            out.push_str(CUT_NOTE);
+            return false;
+        }
+        out.push_str(line);
+        true
+    }
+}
 
 /// Notice prepended to the session-start index after Claude Code compacts the
 /// conversation, reminding the agent to persist what it worked on.
@@ -134,7 +172,22 @@ fn render_open_tasks(out: &mut String, context: &MemoryContext) {
 
 #[must_use]
 pub fn render_context(project: Option<&Project>, context: &MemoryContext) -> String {
+    render_context_within(project, context, CONTEXT_BUDGET)
+}
+
+/// [`render_context`] capped at `max_bytes` (at least [`MIN_CONTEXT_BUDGET`]).
+#[must_use]
+#[allow(clippy::too_many_lines)] // one block per section, in priority order
+pub fn render_context_within(
+    project: Option<&Project>,
+    context: &MemoryContext,
+    max_bytes: usize,
+) -> String {
     let mut out = String::new();
+    let mut budget = Budget {
+        max: max_bytes.max(MIN_CONTEXT_BUDGET),
+        full: false,
+    };
     match project {
         Some(p) => {
             let _ = writeln!(out, "# Memoria de {} ({})", p.name, p.path);
@@ -148,41 +201,45 @@ pub fn render_context(project: Option<&Project>, context: &MemoryContext) -> Str
     if !context.preferences.is_empty() {
         out.push_str("\n## Preferencias del usuario\n");
         for m in &context.preferences {
-            let _ = writeln!(
-                out,
-                "- {}: {} [{}]",
+            let line = format!(
+                "- {}: {} [{}]\n",
                 m.title,
                 rule_preview(&m.content, 200),
                 short_id(m.id)
             );
+            budget.push(&mut out, &line);
         }
     }
-    render_environment(&mut out, context);
-    render_temporary(&mut out, context);
-    if !context.pinned.is_empty() {
+    if !budget.full {
+        render_environment(&mut out, context);
+        render_temporary(&mut out, context);
+    }
+    if !context.pinned.is_empty() && !budget.full {
         out.push_str("\n## Fijadas\n");
         for m in &context.pinned {
-            let _ = writeln!(
-                out,
-                "- [{}] {} · {}\n  {}",
+            let line = format!(
+                "- [{}] {} · {}\n  {}\n",
                 kind_label(m.kind),
                 m.title,
                 short_id(m.id),
                 excerpt(&m.content, 240)
             );
+            budget.push(&mut out, &line);
         }
     }
-    render_open_tasks(&mut out, context);
+    if !budget.full {
+        render_open_tasks(&mut out, context);
+    }
     if let Some(m) = &context.last_session {
-        let _ = writeln!(
-            out,
-            "\n## Última sesión · {} · {}\n{}",
+        let block = format!(
+            "\n## Última sesión · {} · {}\n{}\n",
             m.updated_at.format("%Y-%m-%d"),
             short_id(m.id),
             excerpt(&m.content, 700)
         );
+        budget.push(&mut out, &block);
     }
-    if !context.memories.is_empty() {
+    if !context.memories.is_empty() && !budget.full {
         out.push_str("\n## Memorias\n");
         for m in &context.memories {
             let line = format!(
@@ -192,26 +249,26 @@ pub fn render_context(project: Option<&Project>, context: &MemoryContext) -> Str
                 m.updated_at.format("%Y-%m-%d"),
                 short_id(m.id)
             );
-            if out.len() + line.len() > CONTEXT_BUDGET {
-                out.push_str("- … más con `sai memory search`\n");
+            if !budget.push(&mut out, &line) {
                 break;
             }
-            out.push_str(&line);
         }
     }
-    if !context.consolidate.is_empty() {
+    if !context.consolidate.is_empty() && !budget.full {
         out.push_str(
             "\n## Para consolidar\nParecen la misma memoria: si lo son, únelas antes de terminar con `consolidate_memories` o `sai memory merge` (no se borra nada).\n",
         );
         for hint in &context.consolidate {
-            let _ = writeln!(
-                out,
-                "- {} {} ≈ {} {}",
+            let line = format!(
+                "- {} {} ≈ {} {}\n",
                 short_id(hint.a),
                 excerpt(&hint.a_title, 60),
                 short_id(hint.b),
                 excerpt(&hint.b_title, 60)
             );
+            if !budget.push(&mut out, &line) {
+                break;
+            }
         }
     }
     if context.preferences.is_empty()
@@ -276,7 +333,7 @@ pub fn render_memory(m: &Memory, links: &[MemoryLink]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::ProjectStatus;
+    use crate::models::{ProjectStatus, Visibility};
     use chrono::Utc;
     use uuid::Uuid;
 
@@ -357,6 +414,7 @@ mod tests {
                 last_used_at: None,
                 use_count: 0,
                 superseded_by: None,
+                scope: Visibility::Project,
             });
         }
         let context = MemoryContext {
@@ -365,6 +423,21 @@ mod tests {
         };
         let rendered = render_context(None, &context);
         assert!(rendered.contains("- … más con `sai memory search`"));
+    }
+
+    #[test]
+    fn context_never_exceeds_its_budget_and_keeps_preferences_first() {
+        let prefs: Vec<Memory> = (0..40)
+            .map(|i| memory(&format!("Preferencia {i}"), &"texto largo ".repeat(20)))
+            .collect();
+        let context = MemoryContext {
+            preferences: prefs,
+            ..MemoryContext::default()
+        };
+        let rendered = render_context_within(None, &context, 2_000);
+        assert!(rendered.len() <= 2_000, "{}", rendered.len());
+        assert!(rendered.contains("Preferencia 0"));
+        assert_eq!(rendered.matches("… más con").count(), 1);
     }
 
     fn memory(title: &str, content: &str) -> Memory {
@@ -383,6 +456,7 @@ mod tests {
             last_used_at: None,
             use_count: 0,
             superseded_by: None,
+            scope: Visibility::Project,
         }
     }
 

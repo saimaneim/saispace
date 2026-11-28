@@ -88,3 +88,24 @@ pub fn is_auto_project_root(root: &Path, home: Option<&Path>) -> bool {
         Err(_) => true,
     }
 }
+
+/// File that pins a folder to a project: `project = "name"`. Written by
+/// `sai init`; commit it so every clone resolves to the same project name.
+pub const PROJECT_MARKER: &str = ".saispace.toml";
+
+/// The nearest ancestor of `path` holding [`PROJECT_MARKER`], with the
+/// project name it declares (the folder name when `project` is missing).
+#[must_use]
+pub fn find_project_marker(path: &Path) -> Option<(PathBuf, String)> {
+    let dir = path
+        .ancestors()
+        .find(|d| d.join(PROJECT_MARKER).is_file())?;
+    let text = std::fs::read_to_string(dir.join(PROJECT_MARKER)).ok()?;
+    let declared = text
+        .parse::<toml::Table>()
+        .ok()
+        .and_then(|t| t.get("project")?.as_str().map(str::trim).map(String::from))
+        .filter(|n| !n.is_empty());
+    let name = declared.or_else(|| dir.file_name().map(|n| n.to_string_lossy().into_owned()))?;
+    Some((dir.to_path_buf(), name))
+}

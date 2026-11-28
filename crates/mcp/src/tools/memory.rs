@@ -7,7 +7,7 @@ use saispace_core::memory_render::{excerpt, rule_preview};
 use saispace_core::models::{
     ActionKind, ConsolidateHint, ConsolidateInput, EntityKind, LinkDirection, Memory, MemoryKind,
     MemoryLink, MemoryRelation, MemoryScope, Project, RecordActivityInput, SaveMemoryInput,
-    SimilarMemory,
+    SimilarMemory, Visibility,
 };
 use saispace_core::{CoreError, short_id};
 use schemars::JsonSchema;
@@ -32,6 +32,8 @@ pub struct SaveMemoryParams {
     /// Temporary fact: expires at this time (RFC 3339, `YYYY-MM-DD`, or `6h`/`3d`
     /// from now), e.g. a provider out of quota until its reset time.
     pub expires_at: Option<String>,
+    /// Not exported by `sai sync`.
+    pub personal: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -39,6 +41,7 @@ pub struct MemoryContextParams {
     pub project_id: Option<String>,
     pub path: Option<String>,
     pub limit: Option<i64>,
+    pub max_bytes: Option<usize>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -225,6 +228,35 @@ struct ContextResponse {
     /// Look-alike pairs: merge them with `consolidate_memories` if they are one.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     consolidate: Vec<PairView>,
+    /// Set when items were left out to fit `max_bytes`.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    truncated: bool,
+}
+
+impl ContextResponse {
+    fn size(&self) -> usize {
+        serde_json::to_string(self).map_or(0, |s| s.len())
+    }
+
+    /// Drops the least important items until the JSON fits in `max_bytes`:
+    /// look-alike pairs, then recent titles, last session, pinned, temporary,
+    /// host lessons and finally preferences.
+    fn fit(&mut self, max_bytes: usize) {
+        while self.size() > max_bytes {
+            self.truncated = true;
+            if self.consolidate.pop().is_some()
+                || self.memories.pop().is_some()
+                || self.last_session.take().is_some()
+                || self.pinned.pop().is_some()
+                || self.temporary.pop().is_some()
+                || self.environment.pop().is_some()
+                || self.preferences.pop().is_some()
+            {
+                continue;
+            }
+            break;
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -386,6 +418,16 @@ impl SaiSpaceServer {
         {
             return format_error(&err);
         }
+        if params.personal == Some(true) {
+            saved = match self
+                .db
+                .set_memory_scope(saved.id, Visibility::Personal)
+                .await
+            {
+                Ok(memory) => memory,
+                Err(err) => return format_error(&err),
+            };
+        }
         let action = if saved.created_at == saved.updated_at {
             ActionKind::Create
         } else {
@@ -483,7 +525,7 @@ impl SaiSpaceServer {
         {
             return format_error(&err);
         }
-        format_success(&ContextResponse {
+        let mut response = ContextResponse {
             project: project.map(|p| ProjectBrief {
                 id: p.id,
                 name: p.name,
@@ -522,7 +564,14 @@ impl SaiSpaceServer {
                 .map(|m| ContextItem::new(m, 0))
                 .collect(),
             consolidate: context.consolidate.iter().map(PairView::new).collect(),
-        })
+            truncated: false,
+        };
+        let budget = params
+            .max_bytes
+            .unwrap_or_else(saispace_core::memory_render::context_budget_from_env)
+            .max(saispace_core::memory_render::MIN_CONTEXT_BUDGET);
+        response.fit(budget);
+        format_success(&response)
     }
 
     #[tool(

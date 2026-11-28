@@ -35,6 +35,17 @@ impl MemoryKind {
     }
 }
 
+/// Who a memory belongs to: the repo (`project`, shareable with `sai sync`)
+/// or the developer (`personal`, never exported).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "TEXT", rename_all = "snake_case")]
+pub enum Visibility {
+    #[default]
+    Project,
+    Personal,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Memory {
     pub id: Uuid,
@@ -51,6 +62,9 @@ pub struct Memory {
     pub use_count: i64,
     /// Set when the memory was consolidated into another one.
     pub superseded_by: Option<Uuid>,
+    #[serde(default)]
+    #[sqlx(default)]
+    pub scope: Visibility,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

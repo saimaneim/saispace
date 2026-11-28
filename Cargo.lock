@@ -3770,6 +3770,7 @@ dependencies = [
  "chacha20poly1305",
  "chrono",
  "getrandom 0.3.4",
+ "regex",
  "serde",
  "serde_json",
  "sqlx",

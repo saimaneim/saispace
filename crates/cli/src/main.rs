@@ -12,6 +12,7 @@ macro_rules! out {
 
 mod bench;
 mod doctor;
+mod init;
 mod kpi;
 mod memory;
 mod nudge;
@@ -63,6 +64,13 @@ enum Command {
         about = "Revisa la base de datos, el índice, la clave del vault y los agentes conectados (solo lectura)"
     )]
     Doctor(doctor::DoctorArgs),
+    #[command(
+        about = "Fija este repo a un proyecto con .saispace.toml (el nombre sobrevive a clones y renombres)"
+    )]
+    Init {
+        #[arg(help = "Nombre del proyecto (por defecto, la carpeta)")]
+        name: Option<String>,
+    },
     #[command(about = "Crea, lista o elimina reglas")]
     #[command(subcommand)]
     Rule(rules::RuleCommand),
@@ -104,6 +112,7 @@ fn main() -> ExitCode {
     let result = match cli.command {
         Command::Check(args) => rules::check(&args),
         Command::Doctor(args) => doctor::run(&args),
+        Command::Init { name } => init::run(name.as_deref()).map(|()| ExitCode::SUCCESS),
         Command::Rule(cmd) => rules::rule(cmd).map(|()| ExitCode::SUCCESS),
         Command::Context(args) => rules::context(&args).map(|()| ExitCode::SUCCESS),
         Command::Memory(cmd) => memory::run(cmd).map(|()| ExitCode::SUCCESS),

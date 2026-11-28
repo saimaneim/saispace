@@ -17,7 +17,7 @@ pub const MAX_MEMORY_CONTENT_CHARS: usize = 20_000;
 /// few enough not to cost much.
 pub(crate) const MAX_CONSOLIDATE_HINTS: usize = 3;
 
-pub(crate) const MEMORY_COLUMNS: &str = "id, project_id, NULLIF(project_name, '') AS project_name, kind, title, content, NULLIF(topic_key, '') AS topic_key, pinned, created_at, updated_at, last_used_at, use_count, superseded_by";
+pub(crate) const MEMORY_COLUMNS: &str = "id, project_id, NULLIF(project_name, '') AS project_name, kind, title, content, NULLIF(topic_key, '') AS topic_key, pinned, created_at, updated_at, last_used_at, use_count, superseded_by, scope";
 
 /// Share of meaningful title words two memories must have in common (Jaccard)
 /// to count as possible duplicates. One shared word such as a client name
@@ -308,6 +308,8 @@ impl Db {
     ) -> CoreResult<Memory> {
         let title = text_with_limit("title", &input.title, MAX_MEMORY_TITLE_CHARS)?;
         let content = text_with_limit("content", &input.content, MAX_MEMORY_CONTENT_CHARS)?;
+        let title = self.scrub_secrets(&title).await?;
+        let content = self.scrub_secrets(&content).await?;
         let project_name = match (input.project_id, input.project_name.as_deref()) {
             (Some(id), _) => {
                 self.get_project(id)

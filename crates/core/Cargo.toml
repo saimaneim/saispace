@@ -13,6 +13,7 @@ sqlx = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
 toml = "0.8"
+regex = "1.13"
 chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"] }
 getrandom = "0.3"
 

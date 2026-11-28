@@ -443,3 +443,33 @@ async fn test_create_and_update_task_validate_title() {
         .expect("valid update should succeed");
     assert_eq!(renamed.task.title, "Renamed task");
 }
+
+#[tokio::test]
+async fn marker_file_names_the_project_and_wins_over_a_parent_project() {
+    let db = setup_test_db().await;
+    let dir = tempfile::tempdir().expect("tempdir");
+    let parent = dir.path().join("monorepo");
+    let app = parent.join("apps/app");
+    std::fs::create_dir_all(app.join("src")).expect("dirs");
+    db.create_project(CreateProjectInput {
+        name: "monorepo".into(),
+        path: parent.display().to_string(),
+    })
+    .await
+    .expect("parent");
+    std::fs::write(app.join(".saispace.toml"), "project = \"tienda-web\"\n").expect("marker");
+
+    let found = db
+        .project_for_path(&app.join("src"), false)
+        .await
+        .expect("resolve")
+        .expect("project");
+    assert_eq!(found.name, "tienda-web");
+    assert_eq!(found.path, app.display().to_string());
+    let again = db
+        .project_for_path(&app, false)
+        .await
+        .expect("resolve")
+        .expect("project");
+    assert_eq!(again.id, found.id, "registered once, then reused");
+}

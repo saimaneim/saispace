@@ -17,6 +17,7 @@ pub mod memory_expiry;
 pub mod memory_graph;
 pub mod memory_orphans;
 pub mod memory_pin;
+pub mod memory_privacy;
 pub mod memory_stale;
 pub mod memory_stats;
 pub mod memory_topics;

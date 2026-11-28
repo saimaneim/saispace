@@ -1,12 +1,12 @@
 use crate::{CliError, CliResult};
 use clap::Subcommand;
 use saispace_core::memory_render::{
-    excerpt, kind_label, render_compact_notice, render_context, render_memory,
+    excerpt, kind_label, render_compact_notice, render_context_within, render_memory,
 };
 use saispace_core::models::{
     ActionKind, Actor, ConsolidateInput, EntityKind, LinkDirection, Memory, MemoryKind,
     MemoryRelation, MemoryScope, Project, RecordActivityInput, SaveMemoryInput, SearchKind,
-    UpdateMemoryInput,
+    UpdateMemoryInput, Visibility,
 };
 use saispace_core::{Db, default_db_path, short_id};
 use std::io::{IsTerminal, Read, Write};
@@ -41,6 +41,8 @@ pub enum MemoryCommand {
             long
         )]
         until: Option<String>,
+        #[arg(help = "Nota personal: no se comparte con `sai sync export`", long)]
+        personal: bool,
     },
     #[command(about = "Lista memorias recientes del proyecto y globales")]
     List {
@@ -90,6 +92,14 @@ pub enum MemoryCommand {
         until: Option<String>,
         #[arg(help = "Quita la caducidad", long, conflicts_with = "until")]
         no_until: bool,
+        #[arg(help = "Márcala como personal (no se exporta)", long)]
+        personal: bool,
+        #[arg(
+            help = "Márcala como del proyecto (se exporta)",
+            long,
+            conflicts_with = "personal"
+        )]
+        shared: bool,
     },
     #[command(about = "Búsqueda FTS5 en memorias, notas, tareas y reglas")]
     Search {
@@ -114,6 +124,11 @@ pub enum MemoryCommand {
             value_parser = ["startup", "resume", "clear", "compact"]
         )]
         source: Option<String>,
+        #[arg(
+            help = "Tamaño máximo en bytes (por defecto SAISPACE_CONTEXT_BYTES u 8000)",
+            long
+        )]
+        max_bytes: Option<usize>,
     },
     #[command(about = "Contenido completo de una memoria")]
     Get {
@@ -130,6 +145,15 @@ pub enum MemoryCommand {
     Rm {
         #[arg(help = "Id de la memoria a eliminar")]
         id: String,
+    },
+    #[command(
+        about = "Borra una memoria sin dejar rastro (índice, enlaces, actividad y páginas libres). Irreversible"
+    )]
+    Purge {
+        #[arg(help = "Id de la memoria a purgar")]
+        id: String,
+        #[arg(help = "Confirma el borrado irreversible", long)]
+        yes: bool,
     },
     #[command(about = "Enlaza dos memorias (relacionada, depende de)")]
     Connect {
@@ -821,7 +845,9 @@ async fn context(
     limit: i64,
     json: bool,
     source: Option<String>,
+    max_bytes: Option<usize>,
 ) -> CliResult<()> {
+    let budget = max_bytes.unwrap_or_else(saispace_core::memory_render::context_budget_from_env);
     // An explicit --source flag wins; otherwise sniff the hook payload that
     // Claude Code pipes on stdin.
     let hook = if source.is_some() {
@@ -857,10 +883,13 @@ async fn context(
         crate::out!(
             "{}\n{}",
             render_compact_notice(),
-            render_context(project.as_ref(), &context).trim_end()
+            render_context_within(project.as_ref(), &context, budget).trim_end()
         );
     } else {
-        crate::out!("{}", render_context(project.as_ref(), &context).trim_end());
+        crate::out!(
+            "{}",
+            render_context_within(project.as_ref(), &context, budget).trim_end()
+        );
     }
     let _ = std::io::stdout().flush();
 
@@ -979,6 +1008,7 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
             global,
             triggers,
             until,
+            personal,
         } => {
             // Parse first so a bad date never leaves a half-saved memory.
             if let Some(raw) = &until {
@@ -987,6 +1017,9 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
             let id = save(&db, title, content, &kind, topic, global, &triggers).await?;
             if until.is_some() {
                 set_until(&db, id, until.as_deref()).await?;
+            }
+            if personal {
+                db.set_memory_scope(id, Visibility::Personal).await?;
             }
         }
         MemoryCommand::List {
@@ -1005,8 +1038,18 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
             no_triggers,
             until,
             no_until,
+            personal,
+            shared,
         } => {
             let id = db.resolve_memory_id(&id).await?;
+            if personal || shared {
+                let scope = if personal {
+                    Visibility::Personal
+                } else {
+                    Visibility::Project
+                };
+                db.set_memory_scope(id, scope).await?;
+            }
             let expiry_only = title.is_none()
                 && content.is_none()
                 && kind.is_none()
@@ -1015,9 +1058,9 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
                 && !no_triggers;
             if until.is_some() || no_until {
                 set_until(&db, id, until.as_deref()).await?;
-                if expiry_only {
-                    return Ok(());
-                }
+            }
+            if expiry_only && (until.is_some() || no_until || personal || shared) {
+                return Ok(());
             }
             // --no-triggers conflicts with --trigger, so it means an empty list.
             let triggers = (no_triggers || !triggers.is_empty()).then_some(triggers);
@@ -1042,9 +1085,23 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
             limit,
             json,
             source,
-        } => context(&db, &db_path, limit, json, source).await?,
+            max_bytes,
+        } => context(&db, &db_path, limit, json, source, max_bytes).await?,
         MemoryCommand::Get { id, json } => get(&db, &id, json).await?,
         MemoryCommand::Rm { id } => rm(&db, db.resolve_memory_id(&id).await?).await?,
+        MemoryCommand::Purge { id, yes } => {
+            let id = db.resolve_memory_id(&id).await?;
+            let memory = db.get_memory(id).await?;
+            if !yes {
+                return Err(CliError::Usage(format!(
+                    "purgar {} «{}» es irreversible: repite con --yes",
+                    short_id(id),
+                    memory.title
+                )));
+            }
+            db.purge_memory(id).await?;
+            crate::out!("purgada {}", short_id(id));
+        }
         MemoryCommand::Pin { id } => {
             set_pinned(&db, db.resolve_memory_id(&id).await?, true).await?;
         }

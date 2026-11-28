@@ -15,7 +15,6 @@ pub struct ListProjectsParams {}
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub struct DoctorParams {
-    /// Project folder to resolve (defaults to none).
     pub path: Option<String>,
 }
 
@@ -51,7 +50,7 @@ pub struct RegisterProjectResponse {
 impl SaiSpaceServer {
     #[tool(
         name = "doctor",
-        description = "Read-only health: DB integrity, search index, vault key, agents wired"
+        description = "Read-only health check: DB, index, vault key, agents"
     )]
     async fn doctor(&self, Parameters(params): Parameters<DoctorParams>) -> CallToolResult {
         let db_path = match saispace_core::default_db_path() {
