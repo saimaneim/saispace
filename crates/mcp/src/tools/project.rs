@@ -57,12 +57,10 @@ impl SaiSpaceServer {
             Ok(p) => p,
             Err(err) => return format_error(&err),
         };
-        let cwd = std::path::PathBuf::from(
-            params
-                .path
-                .as_deref()
-                .map_or_else(String::new, canonicalize_path),
-        );
+        let cwd = match params.path.as_deref() {
+            Some(path) => std::path::PathBuf::from(canonicalize_path(path)),
+            None => std::env::current_dir().unwrap_or_default(),
+        };
         let home = std::env::var_os("HOME")
             .filter(|h| !h.is_empty())
             .map(std::path::PathBuf::from);

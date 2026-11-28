@@ -42,6 +42,28 @@ impl Budget {
         out.push_str(line);
         true
     }
+
+    /// Writes `header` and then `lines` while they fit. The header only goes
+    /// in together with its first line, so a section is never left empty.
+    fn section(&mut self, out: &mut String, header: &str, lines: &[String]) {
+        let Some(first) = lines.first() else {
+            return;
+        };
+        if self.full {
+            return;
+        }
+        if out.len() + header.len() + first.len() + CUT_NOTE.len() > self.max {
+            self.full = true;
+            out.push_str(CUT_NOTE);
+            return;
+        }
+        out.push_str(header);
+        for line in lines {
+            if !self.push(out, line) {
+                break;
+            }
+        }
+    }
 }
 
 /// Notice prepended to the session-start index after Claude Code compacts the
@@ -103,71 +125,78 @@ pub fn kind_label(kind: MemoryKind) -> &'static str {
 }
 
 /// Host lessons (`env:` triggers), shown in full: they apply right away.
-fn render_environment(out: &mut String, context: &MemoryContext) {
-    if !context.environment.is_empty() {
-        let hosts: Vec<&str> = context
-            .hosts
-            .iter()
-            .map(|h| crate::recall::host_label(h))
-            .collect();
-        let _ = writeln!(
-            out,
-            "\n## Entorno: {}\nLecciones de este entorno: aplícalas sin esperar a que el usuario lo recuerde.",
-            hosts.join(" + ")
-        );
-        for m in &context.environment {
-            let _ = writeln!(
-                out,
-                "- {}: {} [{}]",
+fn render_environment(out: &mut String, budget: &mut Budget, context: &MemoryContext) {
+    let hosts: Vec<&str> = context
+        .hosts
+        .iter()
+        .map(|h| crate::recall::host_label(h))
+        .collect();
+    let header = format!(
+        "\n## Entorno: {}\nLecciones de este entorno: aplícalas sin esperar a que el usuario lo recuerde.\n",
+        hosts.join(" + ")
+    );
+    let lines: Vec<String> = context
+        .environment
+        .iter()
+        .map(|m| {
+            format!(
+                "- {}: {} [{}]\n",
                 excerpt(&m.title, 90),
                 crate::recall::lesson_text(&m.content, 300),
                 short_id(m.id)
-            );
-        }
-    }
+            )
+        })
+        .collect();
+    budget.section(out, &header, &lines);
 }
 
-fn render_temporary(out: &mut String, context: &MemoryContext) {
-    if context.temporary.is_empty() {
-        return;
-    }
-    out.push_str("\n## Estado temporal\nHechos con caducidad: tenlos en cuenta antes de actuar (p. ej. no delegues a un proveedor sin cuota).\n");
-    for t in &context.temporary {
-        let _ = writeln!(
-            out,
-            "- {}: {} · hasta {} [{}]",
-            t.memory.title,
-            rule_preview(&t.memory.content, 160),
-            t.expires_at.format("%Y-%m-%d %H:%M UTC"),
-            short_id(t.memory.id)
-        );
-    }
-}
-
-fn render_open_tasks(out: &mut String, context: &MemoryContext) {
-    if context.open_tasks.is_empty() {
-        return;
-    }
-    out.push_str(
-        "\n## Pendiente del plan\nTareas sin cerrar. Termínalas o di al usuario por qué no; al acabar una, `sai plan done <id>` (o complete_task).\n",
+fn render_temporary(out: &mut String, budget: &mut Budget, context: &MemoryContext) {
+    let lines: Vec<String> = context
+        .temporary
+        .iter()
+        .map(|t| {
+            format!(
+                "- {}: {} · hasta {} [{}]\n",
+                t.memory.title,
+                rule_preview(&t.memory.content, 160),
+                t.expires_at.format("%Y-%m-%d %H:%M UTC"),
+                short_id(t.memory.id)
+            )
+        })
+        .collect();
+    budget.section(
+        out,
+        "\n## Estado temporal\nHechos con caducidad: tenlos en cuenta antes de actuar (p. ej. no delegues a un proveedor sin cuota).\n",
+        &lines,
     );
-    for t in &context.open_tasks {
-        let status = match t.status {
-            TaskStatus::InProgress => " (en curso)",
-            TaskStatus::Blocked => " (bloqueada)",
-            _ => "",
-        };
-        let goal = t
-            .goal
-            .as_deref()
-            .map_or_default(|g| format!(" · {}", excerpt(g, 50)));
-        let _ = writeln!(
-            out,
-            "- {}{status}{goal} · {}",
-            excerpt(&t.title, 90),
-            short_id(t.id)
-        );
-    }
+}
+
+fn render_open_tasks(out: &mut String, budget: &mut Budget, context: &MemoryContext) {
+    let lines: Vec<String> = context
+        .open_tasks
+        .iter()
+        .map(|t| {
+            let status = match t.status {
+                TaskStatus::InProgress => " (en curso)",
+                TaskStatus::Blocked => " (bloqueada)",
+                _ => "",
+            };
+            let goal = t
+                .goal
+                .as_deref()
+                .map_or_default(|g| format!(" · {}", excerpt(g, 50)));
+            format!(
+                "- {}{status}{goal} · {}\n",
+                excerpt(&t.title, 90),
+                short_id(t.id)
+            )
+        })
+        .collect();
+    budget.section(
+        out,
+        "\n## Pendiente del plan\nTareas sin cerrar. Termínalas o di al usuario por qué no; al acabar una, `sai plan done <id>` (o complete_task).\n",
+        &lines,
+    );
 }
 
 #[must_use]
@@ -177,7 +206,6 @@ pub fn render_context(project: Option<&Project>, context: &MemoryContext) -> Str
 
 /// [`render_context`] capped at `max_bytes` (at least [`MIN_CONTEXT_BUDGET`]).
 #[must_use]
-#[allow(clippy::too_many_lines)] // one block per section, in priority order
 pub fn render_context_within(
     project: Option<&Project>,
     context: &MemoryContext,
@@ -198,79 +226,80 @@ pub fn render_context_within(
         "`sai memory get <id>` abre una (con sus enlaces); `sai memory search \"<texto>\"` busca.\n\
          Guarda decisiones, causas raíz y pendientes con `sai memory save --topic <tema>` (mismo tema = actualiza). Si el usuario te corrige, guárdalo con `--kind preference`.\n",
     );
-    if !context.preferences.is_empty() {
-        out.push_str("\n## Preferencias del usuario\n");
-        for m in &context.preferences {
-            let line = format!(
+    let preferences: Vec<String> = context
+        .preferences
+        .iter()
+        .map(|m| {
+            format!(
                 "- {}: {} [{}]\n",
                 m.title,
                 rule_preview(&m.content, 200),
                 short_id(m.id)
-            );
-            budget.push(&mut out, &line);
-        }
-    }
-    if !budget.full {
-        render_environment(&mut out, context);
-        render_temporary(&mut out, context);
-    }
-    if !context.pinned.is_empty() && !budget.full {
-        out.push_str("\n## Fijadas\n");
-        for m in &context.pinned {
-            let line = format!(
+            )
+        })
+        .collect();
+    budget.section(&mut out, "\n## Preferencias del usuario\n", &preferences);
+    render_environment(&mut out, &mut budget, context);
+    render_temporary(&mut out, &mut budget, context);
+    let pinned: Vec<String> = context
+        .pinned
+        .iter()
+        .map(|m| {
+            format!(
                 "- [{}] {} · {}\n  {}\n",
                 kind_label(m.kind),
                 m.title,
                 short_id(m.id),
                 excerpt(&m.content, 240)
-            );
-            budget.push(&mut out, &line);
-        }
-    }
-    if !budget.full {
-        render_open_tasks(&mut out, context);
-    }
+            )
+        })
+        .collect();
+    budget.section(&mut out, "\n## Fijadas\n", &pinned);
+    render_open_tasks(&mut out, &mut budget, context);
     if let Some(m) = &context.last_session {
-        let block = format!(
-            "\n## Última sesión · {} · {}\n{}\n",
+        let header = format!(
+            "\n## Última sesión · {} · {}\n",
             m.updated_at.format("%Y-%m-%d"),
             short_id(m.id),
-            excerpt(&m.content, 700)
         );
-        budget.push(&mut out, &block);
+        budget.section(
+            &mut out,
+            &header,
+            &[format!("{}\n", excerpt(&m.content, 700))],
+        );
     }
-    if !context.memories.is_empty() && !budget.full {
-        out.push_str("\n## Memorias\n");
-        for m in &context.memories {
-            let line = format!(
+    let memories: Vec<String> = context
+        .memories
+        .iter()
+        .map(|m| {
+            format!(
                 "- [{}] {} · {} · {}\n",
                 kind_label(m.kind),
                 excerpt(&m.title, 90),
                 m.updated_at.format("%Y-%m-%d"),
                 short_id(m.id)
-            );
-            if !budget.push(&mut out, &line) {
-                break;
-            }
-        }
-    }
-    if !context.consolidate.is_empty() && !budget.full {
-        out.push_str(
-            "\n## Para consolidar\nParecen la misma memoria: si lo son, únelas antes de terminar con `consolidate_memories` o `sai memory merge` (no se borra nada).\n",
-        );
-        for hint in &context.consolidate {
-            let line = format!(
+            )
+        })
+        .collect();
+    budget.section(&mut out, "\n## Memorias\n", &memories);
+    let consolidate: Vec<String> = context
+        .consolidate
+        .iter()
+        .map(|hint| {
+            format!(
                 "- {} {} ≈ {} {}\n",
                 short_id(hint.a),
                 excerpt(&hint.a_title, 60),
                 short_id(hint.b),
                 excerpt(&hint.b_title, 60)
-            );
-            if !budget.push(&mut out, &line) {
-                break;
-            }
-        }
-    }
+            )
+        })
+        .collect();
+    budget.section(
+        &mut out,
+        "\n## Para consolidar\nParecen la misma memoria: si lo son, únelas antes de terminar con `consolidate_memories` o `sai memory merge` (no se borra nada).\n",
+        &consolidate,
+    );
     if context.preferences.is_empty()
         && context.environment.is_empty()
         && context.pinned.is_empty()
@@ -437,6 +466,24 @@ mod tests {
         let rendered = render_context_within(None, &context, 2_000);
         assert!(rendered.len() <= 2_000, "{}", rendered.len());
         assert!(rendered.contains("Preferencia 0"));
+        assert_eq!(rendered.matches("… más con").count(), 1);
+    }
+
+    #[test]
+    fn every_section_counts_against_the_budget() {
+        let many = |prefix: &str| -> Vec<Memory> {
+            (0..30)
+                .map(|i| memory(&format!("{prefix} {i}"), &"lección larga ".repeat(20)))
+                .collect()
+        };
+        let context = MemoryContext {
+            environment: many("Entorno"),
+            pinned: many("Fijada"),
+            memories: many("Memoria"),
+            ..MemoryContext::default()
+        };
+        let rendered = render_context_within(None, &context, 1_000);
+        assert!(rendered.len() <= 1_000, "{}", rendered.len());
         assert_eq!(rendered.matches("… más con").count(), 1);
     }
 

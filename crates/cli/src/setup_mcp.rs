@@ -147,7 +147,13 @@ fn without_toml_block(text: &str) -> String {
 /// Returns an error if the file is not valid JSON/an object or cannot be written.
 pub fn install(client: Client, path: &Path, command: &str) -> CliResult<bool> {
     if client == Client::Codex {
-        let current = fs::read_to_string(path).unwrap_or_default();
+        // Only a missing file counts as empty: any other read error must not
+        // end with the user's config replaced by the saispace block alone.
+        let current = match fs::read_to_string(path) {
+            Ok(text) => text,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => String::new(),
+            Err(err) => return Err(err.into()),
+        };
         let mut next = without_toml_block(&current).trim_end().to_string();
         if !next.is_empty() {
             next.push_str("\n\n");

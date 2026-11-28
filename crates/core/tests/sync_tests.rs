@@ -88,3 +88,36 @@ async fn export_import_roundtrip_is_idempotent_and_keeps_private_data_home() {
     assert_eq!((again.added, again.updated, again.unchanged), (0, 0, 2));
     assert_eq!((again.links, again.triggers), (0, 0));
 }
+
+#[tokio::test]
+async fn temporary_facts_keep_their_deadline_and_expired_ones_stay_home() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let (a, pa) = db_with_project(tmp.path(), "a.db").await;
+    let soon = chrono::Utc::now() + chrono::Duration::hours(6);
+    let temporary = a
+        .save_memory(save(Some(&pa), "Sin cuota", None))
+        .await
+        .expect("temporary");
+    a.set_memory_expiry(temporary.id, Some(soon))
+        .await
+        .expect("expiry");
+    let expired = a
+        .save_memory(save(Some(&pa), "Ya caducada", None))
+        .await
+        .expect("expired");
+    a.set_memory_expiry(
+        expired.id,
+        Some(chrono::Utc::now() - chrono::Duration::hours(1)),
+    )
+    .await
+    .expect("expiry");
+
+    let dir = tmp.path().join("repo").join(SYNC_DIR);
+    let counts = a.sync_export(&pa, &dir).await.expect("export");
+    assert_eq!(counts.memories, 1);
+
+    let (b, pb) = db_with_project(tmp.path(), "b.db").await;
+    b.sync_import(&pb, &dir).await.expect("import");
+    let deadline = b.memory_expiry(temporary.id).await.expect("read");
+    assert_eq!(deadline.map(|d| d.timestamp()), Some(soon.timestamp()));
+}

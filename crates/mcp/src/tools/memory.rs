@@ -413,9 +413,8 @@ impl SaiSpaceServer {
             },
             None => Vec::new(),
         };
-        if let Some(at) = expires_at
-            && let Err(err) = self.db.set_memory_expiry(saved.id, Some(at)).await
-        {
+        // Saving again on a topic without `expires_at` makes the fact durable.
+        if let Err(err) = self.db.set_memory_expiry(saved.id, expires_at).await {
             return format_error(&err);
         }
         if params.personal == Some(true) {

@@ -39,52 +39,82 @@ impl Db {
         self.get_memory(id).await
     }
 
-    /// Irreversibly erases a memory: its row, search index entry, links,
+    /// Irreversibly erases a memory, and every memory consolidated into it
+    /// (they usually hold the same text and would otherwise come back as
+    /// active once `superseded_by` is cleared): its row, search index entry, links,
     /// triggers and expiry (cascades), the activity entries that name it, and
     /// the freed pages (`secure_delete`, FTS merge and WAL checkpoint), so the
     /// text cannot be recovered from the file.
     ///
+    /// Returns the number of memories erased and whether the WAL was fully
+    /// checkpointed (`false` while another connection, such as the open app,
+    /// still reads it: old pages leave the WAL at its next checkpoint).
+    ///
     /// # Errors
     ///
     /// Returns an error if the memory does not exist or the purge fails.
-    pub async fn purge_memory(&self, id: Uuid) -> CoreResult<()> {
+    pub async fn purge_memory(&self, id: Uuid) -> CoreResult<PurgeReport> {
         let mut conn = self.pool().acquire().await?;
         sqlx::query("PRAGMA secure_delete = ON")
             .execute(&mut *conn)
             .await?;
         let result = async {
             let mut tx = conn.begin().await?;
-            let deleted = sqlx::query("DELETE FROM memories WHERE id = ?1")
-                .bind(id)
-                .execute(&mut *tx)
-                .await?;
-            if deleted.rows_affected() == 0 {
+            let ids: Vec<Uuid> = sqlx::query_scalar(
+                r"
+                WITH RECURSIVE absorbed(id) AS (
+                    SELECT id FROM memories WHERE id = ?1
+                    UNION
+                    SELECT m.id FROM memories m JOIN absorbed a ON m.superseded_by = a.id
+                )
+                SELECT id FROM absorbed
+                ",
+            )
+            .bind(id)
+            .fetch_all(&mut *tx)
+            .await?;
+            if ids.is_empty() {
                 return Err(CoreError::NotFound {
                     entity: "memory",
                     id,
                 });
             }
-            sqlx::query("DELETE FROM activity_events WHERE entity_id = ?1")
-                .bind(id)
-                .execute(&mut *tx)
-                .await?;
+            for gone in &ids {
+                sqlx::query("DELETE FROM memories WHERE id = ?1")
+                    .bind(gone)
+                    .execute(&mut *tx)
+                    .await?;
+                sqlx::query("DELETE FROM activity_events WHERE entity_id = ?1")
+                    .bind(gone)
+                    .execute(&mut *tx)
+                    .await?;
+            }
             sqlx::query("INSERT INTO search_index(search_index) VALUES ('optimize')")
                 .execute(&mut *tx)
                 .await?;
             tx.commit().await?;
-            Ok(())
+            Ok(ids.len())
         }
         .await;
         let _ = sqlx::query("PRAGMA secure_delete = OFF")
             .execute(&mut *conn)
             .await;
-        result?;
+        let purged = result?;
         // Old page images live in the WAL until a checkpoint copies them out.
-        sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
-            .execute(&mut *conn)
+        let (busy, _, _): (i64, i64, i64) = sqlx::query_as("PRAGMA wal_checkpoint(TRUNCATE)")
+            .fetch_one(&mut *conn)
             .await?;
-        Ok(())
+        Ok(PurgeReport {
+            purged,
+            wal_clean: busy == 0,
+        })
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PurgeReport {
+    pub purged: usize,
+    pub wal_clean: bool,
 }
 
 #[cfg(test)]
@@ -148,5 +178,36 @@ mod tests {
             db.purge_memory(m.id).await.is_err(),
             "second purge is NotFound"
         );
+    }
+
+    #[tokio::test]
+    async fn purge_also_erases_memories_merged_into_it() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let db = Db::open(&dir.path().join("s.db")).await.expect("db");
+        let a = db
+            .save_memory(input("Nota A", "texto viejo"))
+            .await
+            .expect("a");
+        let b = db
+            .save_memory(input("Nota B", "texto nuevo"))
+            .await
+            .expect("b");
+        let merged = db
+            .consolidate_memories(crate::models::ConsolidateInput {
+                ids: vec![b.id, a.id],
+                title: "Nota".into(),
+                content: "texto nuevo y viejo".into(),
+                kind: None,
+                topic_key: None,
+            })
+            .await
+            .expect("merge");
+        let report = db.purge_memory(merged.id).await.expect("purge");
+        assert_eq!(report.purged, 2);
+        let left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM memories")
+            .fetch_one(db.pool())
+            .await
+            .expect("count");
+        assert_eq!(left, 0, "the absorbed memory must not come back");
     }
 }

@@ -26,7 +26,8 @@ pub fn parse_until(raw: &str, now: DateTime<Utc>) -> CoreResult<DateTime<Utc>> {
     } else if let Ok(day) = NaiveDate::parse_from_str(raw, "%Y-%m-%d") {
         day.and_hms_opt(23, 59, 59).ok_or_else(invalid)?.and_utc()
     } else {
-        let split = raw.len().checked_sub(1).ok_or_else(invalid)?;
+        // Split before the last character, not byte: `3ñ` must not panic.
+        let (split, _) = raw.char_indices().last().ok_or_else(invalid)?;
         let (num, unit) = raw.split_at(split);
         let n: i64 = num.parse().map_err(|_| invalid())?;
         let span = match unit {
@@ -180,5 +181,7 @@ mod tests {
         assert!(parse_until("2026-11-01", now).is_err(), "past");
         assert!(parse_until("soon", now).is_err());
         assert!(parse_until("", now).is_err());
+        assert!(parse_until("3ñ", now).is_err(), "multi-byte unit");
+        assert!(parse_until("5€", now).is_err());
     }
 }

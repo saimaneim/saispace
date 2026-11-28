@@ -1118,9 +1118,8 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
                 saispace_core::db::memory_expiry::parse_until(raw, chrono::Utc::now())?;
             }
             let id = save(&db, title, content, &kind, topic, global, &triggers).await?;
-            if until.is_some() {
-                set_until(&db, id, until.as_deref()).await?;
-            }
+            // Saving again on a topic without --until makes the fact durable.
+            set_until(&db, id, until.as_deref()).await?;
             if personal {
                 db.set_memory_scope(id, Visibility::Personal).await?;
             }
@@ -1202,8 +1201,13 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
                     memory.title
                 )));
             }
-            db.purge_memory(id).await?;
-            crate::out!("purgada {}", short_id(id));
+            let report = db.purge_memory(id).await?;
+            crate::out!("purgada {} ({} memorias)", short_id(id), report.purged);
+            if !report.wal_clean {
+                crate::out!(
+                    "la app u otro proceso tiene la base abierta: los restos salen del WAL al cerrarlo"
+                );
+            }
         }
         MemoryCommand::Pin { id } => {
             set_pinned(&db, db.resolve_memory_id(&id).await?, true).await?;

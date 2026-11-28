@@ -71,11 +71,24 @@ impl Db {
             .filter_map(|g| {
                 let key = project_key(&g.project_name);
                 let project = projects.iter().find(|p| project_key(&p.name) == key)?;
-                Some((g, project.clone()))
+                let in_scope = match scope {
+                    MemoryScope::All => true,
+                    MemoryScope::GlobalOnly => false,
+                    MemoryScope::Project(id) => project.id == id,
+                };
+                in_scope.then(|| (g, project.clone()))
             })
             .collect();
+        // A personal note is never merged into a shared one (or the reverse):
+        // the merged text would change who can see it.
+        let duplicates = self
+            .duplicate_pairs(scope, MAX_PAIRS)
+            .await?
+            .into_iter()
+            .filter(|pair| pair.a.scope == pair.b.scope)
+            .collect();
         Ok(TidyPlan {
-            duplicates: self.duplicate_pairs(scope, MAX_PAIRS).await?,
+            duplicates,
             stale: report.stale,
             surplus_sessions: report.surplus_sessions,
             orphans,

@@ -205,8 +205,20 @@ impl Db {
             };
         }
         if let Some((root, name)) = find_project_marker(path) {
+            let root = std::fs::canonicalize(&root).unwrap_or(root);
             let root_str = root.to_string_lossy().to_string();
             if let Some(project) = self.get_project_by_path(&root_str).await? {
+                return Ok(Some(project));
+            }
+            // Another clone of the same repo, or the same folder reached
+            // through a symlink: the marker's name is the identity.
+            let key = project_key(&name);
+            if let Some(project) = self
+                .list_projects()
+                .await?
+                .into_iter()
+                .find(|p| project_key(&p.name) == key)
+            {
                 return Ok(Some(project));
             }
             // The marker is an explicit choice: register even if not asked.

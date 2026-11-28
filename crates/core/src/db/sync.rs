@@ -41,6 +41,9 @@ pub struct SyncMemory {
     pub updated_at: DateTime<Utc>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub superseded_by: Option<Uuid>,
+    /// Temporary facts keep their deadline on every machine.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, sqlx::FromRow)]
@@ -157,6 +160,7 @@ impl Db {
                 .bind(m.updated_at)
                 .execute(self.pool())
                 .await?;
+                self.set_memory_expiry(id, m.expires_at).await?;
                 report.updated += 1;
                 Ok(id)
             }
@@ -178,6 +182,9 @@ impl Db {
                 .bind(m.updated_at)
                 .execute(self.pool())
                 .await?;
+                if m.expires_at.is_some() {
+                    self.set_memory_expiry(m.id, m.expires_at).await?;
+                }
                 report.added += 1;
                 Ok(m.id)
             }
@@ -188,10 +195,12 @@ impl Db {
         let sql = format!(
             "SELECT {MEMORY_COLUMNS} FROM memories
              WHERE project_id = ?1 AND scope = 'project'
+               AND id NOT IN (SELECT memory_id FROM memory_expiry WHERE expires_at <= ?2)
              ORDER BY id"
         );
         Ok(sqlx::query_as::<_, Memory>(&sql)
             .bind(project_id)
+            .bind(Utc::now())
             .fetch_all(self.pool())
             .await?)
     }
@@ -206,9 +215,16 @@ impl Db {
             .map_err(|e| CoreError::Validation(format!("{}: {e}", dir.display())))?;
         let memories = self.shareable_memories(project.id).await?;
         let ids: std::collections::HashSet<Uuid> = memories.iter().map(|m| m.id).collect();
+        let mut expiries = std::collections::HashMap::new();
+        for m in &memories {
+            if let Some(at) = self.memory_expiry(m.id).await? {
+                expiries.insert(m.id, at);
+            }
+        }
         let rows: Vec<SyncMemory> = memories
             .into_iter()
             .map(|m| SyncMemory {
+                expires_at: expiries.get(&m.id).copied(),
                 id: m.id,
                 kind: m.kind,
                 title: m.title,

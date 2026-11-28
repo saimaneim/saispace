@@ -6,7 +6,7 @@ use crate::db::memory::{MAX_MEMORY_CONTENT_CHARS, MAX_MEMORY_TITLE_CHARS};
 use crate::db::validation::text_with_limit;
 use crate::error::{CoreError, CoreResult};
 use crate::models::{
-    ConsolidateInput, LinkDirection, Memory, MemoryKind, MemoryLink, MemoryRelation,
+    ConsolidateInput, LinkDirection, Memory, MemoryKind, MemoryLink, MemoryRelation, Visibility,
 };
 use crate::topic_key::normalize_topic_key;
 use chrono::Utc;
@@ -73,6 +73,16 @@ struct LinkRow {
 struct TopicRow {
     id: Uuid,
     topic_key: String,
+}
+
+/// Personal text merged into a memory keeps it personal, so sync never
+/// exports it.
+fn merged_scope(memories: &[Memory]) -> Visibility {
+    if memories.iter().any(|m| m.scope == Visibility::Personal) {
+        Visibility::Personal
+    } else {
+        Visibility::Project
+    }
 }
 
 impl Db {
@@ -338,6 +348,8 @@ impl Db {
         }
         let title = text_with_limit("title", &input.title, MAX_MEMORY_TITLE_CHARS)?;
         let content = text_with_limit("content", &input.content, MAX_MEMORY_CONTENT_CHARS)?;
+        let title = self.scrub_secrets(&title).await?;
+        let content = self.scrub_secrets(&content).await?;
 
         let mut memories = Vec::with_capacity(ids.len());
         for id in &ids {
@@ -384,6 +396,7 @@ impl Db {
             .unwrap_or_default();
         let kind = input.kind.unwrap_or(target.kind);
         let pinned = memories.iter().any(|m| m.pinned);
+        let scope = merged_scope(&memories);
         let use_count: i64 = memories.iter().map(|m| m.use_count).sum();
         let last_used_at = memories.iter().filter_map(|m| m.last_used_at).max();
         let now = Utc::now();
@@ -401,7 +414,7 @@ impl Db {
             r"
             UPDATE memories
             SET title = ?1, content = ?2, kind = ?3, topic_key = ?4, pinned = ?5,
-                use_count = ?6, last_used_at = ?7, updated_at = ?8
+                use_count = ?6, last_used_at = ?7, updated_at = ?8, scope = ?10
             WHERE id = ?9
             ",
         )
@@ -414,6 +427,7 @@ impl Db {
         .bind(last_used_at)
         .bind(now)
         .bind(target.id)
+        .bind(scope)
         .execute(&mut *tx)
         .await?;
         let other_ids: Vec<Uuid> = others.iter().map(|m| m.id).collect();
