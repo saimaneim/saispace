@@ -69,6 +69,37 @@ pub fn detect_project_root(path: &Path) -> PathBuf {
         .to_path_buf()
 }
 
+/// Main checkout of a linked git worktree: its `.git` is a file pointing at
+/// `<main>/.git/worktrees/<name>`. Submodules (`.git/modules/…`) are not
+/// worktrees and return `None`.
+fn main_checkout_of(worktree: &Path) -> Option<PathBuf> {
+    let text = std::fs::read_to_string(worktree.join(".git")).ok()?;
+    let gitdir = PathBuf::from(text.strip_prefix("gitdir:")?.trim());
+    let gitdir = if gitdir.is_absolute() {
+        gitdir
+    } else {
+        worktree.join(gitdir)
+    };
+    let worktrees = gitdir.parent()?;
+    if worktrees.file_name()? != "worktrees" {
+        return None;
+    }
+    let dot_git = worktrees.parent()?;
+    (dot_git.file_name()? == ".git").then(|| dot_git.parent().map(Path::to_path_buf))?
+}
+
+/// `path` seen from the main checkout when it lives in a linked git worktree
+/// (agents such as T3 Code or Codex work in throwaway worktrees), so a
+/// worktree resolves to the project of its repository instead of a new one.
+#[must_use]
+pub fn canonical_project_path(path: &Path) -> PathBuf {
+    let root = detect_project_root(path);
+    match main_checkout_of(&root) {
+        Some(main) => main.join(path.strip_prefix(&root).unwrap_or(Path::new(""))),
+        None => path.to_path_buf(),
+    }
+}
+
 /// Whether `root` may be registered automatically as a project. Rejects the
 /// filesystem root, `home` and its ancestors, and direct children of `home`
 /// (such as `~/Dev`), which usually hold many projects.

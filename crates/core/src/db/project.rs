@@ -2,7 +2,10 @@ use crate::db::Db;
 use crate::db::validation::{limited_text, required_text};
 use crate::error::{CoreError, CoreResult};
 use crate::models::{CreateProjectInput, Project, ProjectStatus, UpdateProjectInput};
-use crate::paths::{detect_project_root, find_project_marker, is_auto_project_root, project_key};
+use crate::paths::{
+    canonical_project_path, detect_project_root, find_project_marker, is_auto_project_root,
+    project_key,
+};
 use chrono::Utc;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -160,6 +163,7 @@ impl Db {
         &self,
         path: &std::path::Path,
     ) -> CoreResult<Option<Project>> {
+        let path = canonical_project_path(path);
         let projects = self.list_projects().await?;
         Ok(projects
             .into_iter()
@@ -181,6 +185,8 @@ impl Db {
         path: &Path,
         register: bool,
     ) -> CoreResult<Option<Project>> {
+        let path = canonical_project_path(path);
+        let path = path.as_path();
         if let Some(wanted) = std::env::var("SAISPACE_PROJECT")
             .ok()
             .filter(|v| !v.trim().is_empty())
