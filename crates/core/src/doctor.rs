@@ -190,7 +190,7 @@ fn integration_checks(home: &Path) -> Vec<Check> {
         .map_or_else(|| home.join(".claude"), PathBuf::from);
     let opencode = xdg.join("opencode");
     let mcp = "saispace-mcp";
-    let agents: [(&str, PathBuf, bool); 5] = [
+    let agents: [(&str, PathBuf, bool); 7] = [
         (
             "Claude Code",
             claude.clone(),
@@ -216,6 +216,16 @@ fn integration_checks(home: &Path) -> Vec<Check> {
             contains(&home.join(".gemini/settings.json"), mcp),
         ),
         (
+            "Antigravity",
+            home.join(".gemini/config"),
+            contains(&home.join(".gemini/config/mcp_config.json"), mcp),
+        ),
+        (
+            "Windsurf",
+            home.join(".codeium/windsurf"),
+            contains(&home.join(".codeium/windsurf/mcp_config.json"), mcp),
+        ),
+        (
             "Cursor",
             home.join(".cursor"),
             contains(&home.join(".cursor/mcp.json"), mcp),
@@ -231,7 +241,7 @@ fn integration_checks(home: &Path) -> Vec<Check> {
                 if wired {
                     "conectado"
                 } else {
-                    "sin conectar: ejecuta sai setup"
+                    "sin conectar: ejecuta sai setup <agente>"
                 },
             )
         })

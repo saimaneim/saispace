@@ -8,6 +8,23 @@ Local project memory and static checks for AI coding agents. One SQLite database
 
 The database lives at `~/.local/share/saispace/saispace.db` (override with `SAISPACE_DB_PATH`). Anything saved from one front end is visible in the others. Projects are resolved from the working directory (git root) and registered on the first save.
 
+## Quickstart
+
+```sh
+curl -fsSL https://github.com/saimaneim/saispace/releases/latest/download/install.sh | sh
+sai setup claude        # or: opencode, cursor, windsurf, vscode, codex, gemini-cli, antigravity, manual
+sai doctor              # database, index, vault key and connected agents, read-only
+```
+
+## Why saispace
+
+- **Lessons come back on their own.** A memory with `--trigger "database is locked"` is re-injected the moment that error shows up again, and `env:<host>` lessons load only on that host.
+- **Measured, not claimed.** `sai bench` scores recall, search, duplicate detection and latency on fixed fixtures and fails CI on regressions; `sai kpi` tracks real use.
+- **Rules that run.** `.agents/checks` are executed by `sai check` in Rust: zero tokens, same result every time.
+- **Secrets stay secret.** A ChaCha20-Poly1305 vault for keys, credentials scrubbed from every memory before it is stored, and `sai memory purge` for a trace-free delete.
+- **Local first.** No account, no server. Share a project's knowledge through git with `sai sync`.
+- **Native desktop app** in Tauri 2 over the same database.
+
 ## Workspace
 
 ```
@@ -42,7 +59,7 @@ bun install
 bunx tauri dev      # or: bunx tauri build
 ```
 
-Prebuilt `sai` binaries for linux-x64 and macos-arm64 are attached to each GitHub release (`v*` tags).
+Each GitHub release (`vX.Y.Z` tags) ships `sai` and `saispace-mcp` for linux-x64, macos-arm64, macos-x64 and windows-x64, with `SHA256SUMS` and `install.sh`. `sai --version` prints the version and commit.
 
 ## Tests
 
@@ -87,7 +104,17 @@ $ sai skills sync           # link .agents/skills into .claude/skills (Claude Co
 $ sai setup opencode        # install the OpenCode plugin
 $ sai setup claude          # install the Claude Code memory hooks
 $ sai setup rules           # copy ~/.config/saispace/rules.md into every installed agent's global file
+$ sai setup cursor          # MCP for cursor, windsurf, vscode, codex, gemini-cli, antigravity (backs up with .bak)
+$ sai doctor [--deep] [--json]
+$ sai init [name]           # pin this repo to a project name with .saispace.toml
+$ sai memory save --personal …   # personal note: never exported
+$ sai memory tidy [--apply] # merge look-alikes, archive surplus sessions, attach orphans
+$ sai memory purge <id> --yes    # irreversible, trace-free delete
+$ sai sync export | import  # share project memories through .saispace/sync/ (no personal notes, no secrets)
+$ sai export obsidian --out ~/vault   # notes with [[wikilinks]] from the memory graph
 ```
+
+The project is resolved from `SAISPACE_PROJECT`, then the nearest `.saispace.toml`, then the git root. The session context is capped at 8,000 bytes (`--max-bytes` or `SAISPACE_CONTEXT_BYTES`), filled by priority: preferences, host lessons, temporary facts, pinned, plan, last session, recent titles.
 
 Saving again with the same `--topic` updates the memory instead of creating a duplicate. Mentioning another memory's id or `topic_key` in the content links them, and only the latest 3 session summaries per project stay active.
 
@@ -112,7 +139,7 @@ Or in a JSON client config:
 }
 ```
 
-Tools include `save_memory`, `search_memory`, `memory_context`, `get_memory`, `link_memories`, `consolidate_memories`, `delete_memory`, `list_projects`, `get_project_context` (re-detects the stack), `create_task`, `update_task`, `get_active_plan`, `create_goal`, `update_goal`, `complete_task`, `list_secrets` and `request_secret_access`. Example `save_memory` call:
+Or let `sai setup <client>` write it for you. Tools include `doctor`, `save_memory`, `search_memory`, `memory_context`, `get_memory`, `link_memories`, `consolidate_memories`, `delete_memory`, `list_projects`, `get_project_context` (re-detects the stack), `create_task`, `update_task`, `get_active_plan`, `create_goal`, `update_goal`, `complete_task`, `list_secrets` and `request_secret_access`. Example `save_memory` call:
 
 ```json
 {
@@ -150,3 +177,7 @@ Agents save a lesson when it happens: a user correction becomes a `preference`; 
 | The session ends | Asks to save what was learned, naming errors that repeated. |
 
 A lesson comes back on its own through triggers: a stable piece of an error message (`--trigger "<error text>"`), or `env:<host>` for lessons about a specific host. `sai setup claude` installs the Claude Code hooks; the OpenCode plugin does the same for OpenCode.
+
+## License
+
+MIT, see [LICENSE](LICENSE).

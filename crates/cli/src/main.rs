@@ -21,6 +21,7 @@ mod recall;
 mod rules;
 mod secret;
 mod setup;
+mod setup_mcp;
 mod setup_rules;
 mod skills;
 mod sync;
