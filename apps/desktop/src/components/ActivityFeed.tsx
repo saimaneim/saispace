@@ -43,16 +43,16 @@ export function ActivityFeed({ activities }: ActivityFeedProps) {
   return (
     <section
       aria-label="Actividad"
-      className="w-full flex flex-col h-full select-none bg-transparent"
+      className="flex h-full w-full flex-col bg-transparent select-none"
     >
-      <div className="h-12 px-4 flex items-center bg-carbon flex-shrink-0">
-        <span className="font-semibold text-sm text-paper tracking-tight font-sans">Actividad</span>
+      <div className="bg-carbon flex h-12 flex-shrink-0 items-center px-4">
+        <span className="text-paper font-sans text-sm font-semibold tracking-tight">Actividad</span>
       </div>
 
       <div
         role="feed"
         aria-label="Eventos recientes de actividad"
-        className="flex-1 overflow-y-auto px-3 pb-3 space-y-1.5"
+        className="flex-1 space-y-1.5 overflow-y-auto px-3 pb-3"
       >
         {sortedActivities.map((a) => {
           const isAgent = a.actor.type === "agent";
@@ -61,17 +61,17 @@ export function ActivityFeed({ activities }: ActivityFeedProps) {
           return (
             <div
               key={a.id}
-              className="p-3 rounded-lg bg-obsidian/60 hover:bg-obsidian transition-colors duration-[120ms] space-y-1 min-w-0"
+              className="bg-obsidian/60 hover:bg-obsidian min-w-0 space-y-1 rounded-lg p-3 transition-colors duration-[120ms]"
             >
-              <div className="flex items-center justify-between gap-2 min-w-0">
-                <div className="flex items-center gap-2 min-w-0 flex-1">
+              <div className="flex min-w-0 items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
                   {isAgent ? (
-                    <div className="w-5 h-5 rounded-md bg-accent/12 text-accent flex items-center justify-center flex-shrink-0">
-                      <Bot className="w-3.5 h-3.5" />
+                    <div className="bg-accent/12 text-accent flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md">
+                      <Bot className="h-3.5 w-3.5" />
                     </div>
                   ) : (
-                    <div className="w-5 h-5 rounded-md bg-elevated text-mist flex items-center justify-center flex-shrink-0">
-                      <UserIcon className="w-3.5 h-3.5" />
+                    <div className="bg-elevated text-mist flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md">
+                      <UserIcon className="h-3.5 w-3.5" />
                     </div>
                   )}
 
@@ -85,12 +85,12 @@ export function ActivityFeed({ activities }: ActivityFeedProps) {
                   </span>
                 </div>
 
-                <span className="font-sans text-xs text-ash flex-shrink-0 tabular-nums">
+                <span className="text-ash flex-shrink-0 font-sans text-xs tabular-nums">
                   {formatTimeAgo(a.created_at)}
                 </span>
               </div>
 
-              <div className="text-xs text-fog pl-7 font-sans break-words">
+              <div className="text-fog pl-7 font-sans text-xs break-words">
                 <span>{getActionLabel(a.action, a.entity)}</span>
               </div>
             </div>
@@ -98,8 +98,8 @@ export function ActivityFeed({ activities }: ActivityFeedProps) {
         })}
 
         {sortedActivities.length === 0 && (
-          <div className="py-16 text-center text-sm text-fog space-y-2">
-            <Activity className="w-6 h-6 mx-auto text-ash mb-2" />
+          <div className="text-fog space-y-2 py-16 text-center text-sm">
+            <Activity className="text-ash mx-auto mb-2 h-6 w-6" />
             <p>Sin actividad registrada</p>
           </div>
         )}

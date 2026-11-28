@@ -45,11 +45,11 @@ function LinkPill({ target, className }: { target: string; className?: string })
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 max-w-[9rem] h-5 px-1.5 rounded-md bg-obsidian text-[11px] text-ash flex-shrink-0",
+        "bg-obsidian text-ash inline-flex h-5 max-w-[9rem] flex-shrink-0 items-center gap-1 rounded-md px-1.5 text-[11px]",
         className,
       )}
     >
-      <Link2 className="w-2.5 h-2.5 flex-shrink-0" />
+      <Link2 className="h-2.5 w-2.5 flex-shrink-0" />
       <span className="truncate">{target}</span>
     </span>
   );
@@ -57,17 +57,17 @@ function LinkPill({ target, className }: { target: string; className?: string })
 
 function FileLabel({ file, label }: { file: ContextFile; label?: string }) {
   const name = label ?? file.name;
-  if (!file.link) return <span className="truncate flex-1">{name}</span>;
+  if (!file.link) return <span className="flex-1 truncate">{name}</span>;
   return (
-    <span className="flex-1 min-w-0 flex items-center gap-2" title={linkHint(file)}>
-      <span className="truncate text-fog">{name}</span>
+    <span className="flex min-w-0 flex-1 items-center gap-2" title={linkHint(file)}>
+      <span className="text-fog truncate">{name}</span>
       <LinkPill target={file.link.target} className="ml-auto" />
     </span>
   );
 }
 
 function FileIcon({ file, icon: Icon }: { file: ContextFile; icon: LucideIcon }) {
-  return <Icon className={cn("w-3.5 h-3.5 flex-shrink-0", file.link ? "text-ash" : "text-fog")} />;
+  return <Icon className={cn("h-3.5 w-3.5 flex-shrink-0", file.link ? "text-ash" : "text-fog")} />;
 }
 
 function CategorySection({
@@ -91,17 +91,17 @@ function CategorySection({
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="w-full flex items-center gap-1.5 px-1.5 h-7 rounded-md text-xs font-semibold text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+        className="text-fog hover:text-paper hover:bg-obsidian focus-visible:ring-accent/40 flex h-7 w-full items-center gap-1.5 rounded-md px-1.5 text-xs font-semibold transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2"
       >
         <ChevronRight
           className={cn(
-            "w-3.5 h-3.5 flex-shrink-0 text-ash transition-transform duration-[120ms]",
-            open && "rotate-90 text-paper",
+            "text-ash h-3.5 w-3.5 flex-shrink-0 transition-transform duration-[120ms]",
+            open && "text-paper rotate-90",
           )}
         />
-        <Icon className="w-3.5 h-3.5 text-fog flex-shrink-0" />
-        <span className="truncate flex-1 text-left">{label}</span>
-        <span className="tabular-nums text-[11px] text-ash font-normal">{count}</span>
+        <Icon className="text-fog h-3.5 w-3.5 flex-shrink-0" />
+        <span className="flex-1 truncate text-left">{label}</span>
+        <span className="text-ash text-[11px] font-normal tabular-nums">{count}</span>
       </button>
       {open && children}
     </div>
@@ -465,7 +465,7 @@ export function ContextTab({ project }: ContextTabProps) {
         title={file.path}
         aria-current={selected ? "true" : undefined}
         className={cn(
-          "relative w-full flex items-center gap-2 pl-3 pr-2.5 h-8 rounded-md text-xs text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
+          "focus-visible:ring-accent/40 relative flex h-8 w-full items-center gap-2 rounded-md pr-2.5 pl-3 text-left text-xs transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2",
           selected
             ? "bg-elevated text-paper font-medium"
             : "text-mist hover:text-paper hover:bg-obsidian",
@@ -478,34 +478,34 @@ export function ContextTab({ project }: ContextTabProps) {
   };
 
   return (
-    <div className="flex-1 flex h-full overflow-hidden bg-void select-none">
-      <aside className="w-64 flex-shrink-0 bg-carbon flex flex-col h-full overflow-hidden">
-        <div className="p-3 pb-2 flex-shrink-0">
+    <div className="bg-void flex h-full flex-1 overflow-hidden select-none">
+      <aside className="bg-carbon flex h-full w-64 flex-shrink-0 flex-col overflow-hidden">
+        <div className="flex-shrink-0 p-3 pb-2">
           <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-fog pointer-events-none" />
+            <Search className="text-fog pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2" />
             <input
               type="text"
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
               placeholder="Filtrar contexto…"
               aria-label="Filtrar contexto"
-              className="w-full h-8 pl-8 pr-7 text-xs bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 transition-colors duration-[120ms]"
+              className="bg-obsidian text-paper placeholder:text-fog focus-visible:ring-accent/40 h-8 w-full rounded-md pr-7 pl-8 text-xs transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2"
             />
             {searchFilter && (
               <button
                 type="button"
                 onClick={() => setSearchFilter("")}
                 aria-label="Limpiar filtro"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 rounded flex items-center justify-center text-fog hover:text-paper hover:bg-elevated transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                className="text-fog hover:text-paper hover:bg-elevated focus-visible:ring-accent/40 absolute top-1/2 right-1 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2"
               >
-                <X className="w-3 h-3" />
+                <X className="h-3 w-3" />
               </button>
             )}
           </div>
         </div>
 
         <nav
-          className="flex-1 min-h-0 overflow-y-auto px-3 pb-3 space-y-1"
+          className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-3"
           aria-label="Ficheros de contexto"
         >
           {categorized.guidelines.length > 0 && (
@@ -540,18 +540,18 @@ export function ContextTab({ project }: ContextTabProps) {
                         onClick={() => toggleSkill(skill.id)}
                         aria-expanded={open}
                         title={skill.baseDir}
-                        className="w-full flex items-center gap-1.5 px-2 h-7 rounded-md text-xs text-mist hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                        className="text-mist hover:text-paper hover:bg-obsidian focus-visible:ring-accent/40 flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-xs transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2"
                       >
                         <ChevronRight
                           className={cn(
-                            "w-3 h-3 flex-shrink-0 text-ash transition-transform duration-[120ms]",
-                            open && "rotate-90 text-paper",
+                            "text-ash h-3 w-3 flex-shrink-0 transition-transform duration-[120ms]",
+                            open && "text-paper rotate-90",
                           )}
                         />
-                        <Folder className="w-3.5 h-3.5 text-fog flex-shrink-0" />
-                        <span className="truncate flex-1 text-left">{skill.name}</span>
+                        <Folder className="text-fog h-3.5 w-3.5 flex-shrink-0" />
+                        <span className="flex-1 truncate text-left">{skill.name}</span>
                         {skill.files.length > 1 && (
-                          <span className="tabular-nums text-[11px] text-ash">
+                          <span className="text-ash text-[11px] tabular-nums">
                             {skill.files.length}
                           </span>
                         )}
@@ -614,15 +614,15 @@ export function ContextTab({ project }: ContextTabProps) {
           )}
 
           {files.length === 0 && (
-            <div className="py-6 px-1 text-xs text-fog space-y-3">
+            <div className="text-fog space-y-3 px-1 py-6 text-xs">
               <p>Sin ficheros de contexto</p>
               <Button
                 variant="secondary"
                 onClick={handleCreateAgentsMd}
                 disabled={isSaving}
-                className="w-full h-8 text-xs"
+                className="h-8 w-full text-xs"
               >
-                <FilePlus className="w-3.5 h-3.5 mr-1.5" />
+                <FilePlus className="mr-1.5 h-3.5 w-3.5" />
                 Crear AGENTS.md
               </Button>
             </div>
@@ -630,22 +630,22 @@ export function ContextTab({ project }: ContextTabProps) {
         </nav>
       </aside>
 
-      <section className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-void">
-        <div className="px-7 pt-5 pb-4 flex items-center gap-4 flex-shrink-0">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 min-w-0">
-              <h2 className="text-base font-semibold text-paper truncate">{currentLabel}</h2>
+      <section className="bg-void flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex flex-shrink-0 items-center gap-4 px-7 pt-5 pb-4">
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-2">
+              <h2 className="text-paper truncate text-base font-semibold">{currentLabel}</h2>
               {hasChanges && (
                 <span
-                  className="w-2 h-2 rounded-full bg-status-amber flex-shrink-0"
+                  className="bg-status-amber h-2 w-2 flex-shrink-0 rounded-full"
                   title="Cambios sin guardar"
                 />
               )}
             </div>
             {(currentSubtitle !== currentLabel || selectedFile?.link) && (
-              <div className="flex items-center gap-2 min-w-0 mt-0.5">
+              <div className="mt-0.5 flex min-w-0 items-center gap-2">
                 {currentSubtitle !== currentLabel && (
-                  <p className="text-xs text-fog font-mono truncate">{currentSubtitle}</p>
+                  <p className="text-fog truncate font-mono text-xs">{currentSubtitle}</p>
                 )}
                 {selectedFile?.link &&
                   (linkTarget ? (
@@ -653,7 +653,7 @@ export function ContextTab({ project }: ContextTabProps) {
                       type="button"
                       onClick={() => selectItem(linkTarget.path)}
                       title={linkHint(selectedFile)}
-                      className="rounded-md transition-colors duration-[120ms] hover:[&>span]:text-paper focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                      className="hover:[&>span]:text-paper focus-visible:ring-accent/40 rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2"
                     >
                       <LinkPill target={selectedFile.link.target} />
                     </button>
@@ -665,7 +665,7 @@ export function ContextTab({ project }: ContextTabProps) {
           </div>
 
           <div
-            className="flex items-center gap-1 bg-obsidian p-1 rounded-lg flex-shrink-0"
+            className="bg-obsidian flex flex-shrink-0 items-center gap-1 rounded-lg p-1"
             role="tablist"
           >
             {[
@@ -681,11 +681,11 @@ export function ContextTab({ project }: ContextTabProps) {
                 title={label}
                 onClick={() => setIsPreview(id)}
                 className={cn(
-                  "h-7 w-8 rounded-md flex items-center justify-center transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
+                  "focus-visible:ring-accent/40 flex h-7 w-8 items-center justify-center rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2",
                   isPreview === id ? "bg-elevated text-paper" : "text-fog hover:text-mist",
                 )}
               >
-                <Icon className="w-3.5 h-3.5" />
+                <Icon className="h-3.5 w-3.5" />
               </button>
             ))}
           </div>
@@ -700,38 +700,38 @@ export function ContextTab({ project }: ContextTabProps) {
             className="flex-shrink-0"
           >
             {isSaving ? (
-              <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none" />
+              <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
             ) : hasSaved ? (
-              <Check className="w-4 h-4 text-pulse-green" />
+              <Check className="text-pulse-green h-4 w-4" />
             ) : (
-              <Save className="w-4 h-4" />
+              <Save className="h-4 w-4" />
             )}
           </Button>
         </div>
 
         {errorMessage && (
           <div
-            className="mx-7 mb-3 px-3 py-2 rounded-md text-xs bg-coral-red/10 text-coral-red"
+            className="bg-coral-red/10 text-coral-red mx-7 mb-3 rounded-md px-3 py-2 text-xs"
             role="alert"
           >
             {errorMessage}
           </div>
         )}
 
-        <div className="flex-1 px-7 pb-6 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto px-7 pb-6">
           {selectedKey === null ? (
-            <div className="py-20 text-center text-xs text-fog">
+            <div className="text-fog py-20 text-center text-xs">
               Sin ficheros de contexto. Crea un AGENTS.md desde la barra lateral.
             </div>
           ) : isLoadingFile ? (
-            <div className="bg-carbon rounded-xl p-6 space-y-3">
-              <div className="h-5 w-48 rounded bg-obsidian" />
-              <div className="h-4 w-full rounded bg-obsidian/70" />
-              <div className="h-4 w-5/6 rounded bg-obsidian/70" />
-              <div className="h-4 w-2/3 rounded bg-obsidian/50" />
+            <div className="bg-carbon space-y-3 rounded-xl p-6">
+              <div className="bg-obsidian h-5 w-48 rounded" />
+              <div className="bg-obsidian/70 h-4 w-full rounded" />
+              <div className="bg-obsidian/70 h-4 w-5/6 rounded" />
+              <div className="bg-obsidian/50 h-4 w-2/3 rounded" />
             </div>
           ) : loadFailed ? (
-            <div className="py-20 text-center text-xs text-fog">
+            <div className="text-fog py-20 text-center text-xs">
               No se pudo leer el fichero. Vuelve a seleccionarlo para reintentar.
             </div>
           ) : isPreview ? (
@@ -741,8 +741,8 @@ export function ContextTab({ project }: ContextTabProps) {
                   <Markdown content={content} className="max-w-none" />
                 </div>
               ) : (
-                <div className="py-16 text-center text-xs text-fog space-y-2">
-                  <FileText className="w-6 h-6 mx-auto text-ash mb-2" />
+                <div className="text-fog space-y-2 py-16 text-center text-xs">
+                  <FileText className="text-ash mx-auto mb-2 h-6 w-6" />
                   <p>Documento vacío</p>
                 </div>
               )}
@@ -755,7 +755,7 @@ export function ContextTab({ project }: ContextTabProps) {
               value={content}
               onChange={(e) => setContent(e.target.value)}
               placeholder="Escribe aquí las directrices y el contexto para los agentes…"
-              className="w-full h-full min-h-96 font-mono text-sm leading-relaxed p-5 bg-carbon rounded-xl text-paper placeholder:text-fog resize-none focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 transition-colors duration-[120ms]"
+              className="bg-carbon text-paper placeholder:text-fog focus-visible:ring-accent/40 h-full min-h-96 w-full resize-none rounded-xl p-5 font-mono text-sm leading-relaxed transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2"
             />
           )}
         </div>

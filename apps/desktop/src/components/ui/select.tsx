@@ -14,14 +14,14 @@ const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      "flex h-9 items-center justify-between gap-2 rounded-md bg-obsidian px-3 text-sm text-mist hover:bg-elevated hover:text-paper focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 transition-colors duration-[120ms] disabled:cursor-not-allowed disabled:opacity-50 select-none",
+      "bg-obsidian text-mist hover:bg-elevated hover:text-paper focus-visible:ring-accent/40 flex h-9 items-center justify-between gap-2 rounded-md px-3 text-sm transition-colors duration-[120ms] select-none focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50",
       className,
     )}
     {...props}
   >
     {children}
     <SelectPrimitive.Icon asChild>
-      <ChevronDown className="h-4 w-4 text-fog flex-shrink-0" />
+      <ChevronDown className="text-fog h-4 w-4 flex-shrink-0" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 ));
@@ -35,14 +35,14 @@ const SelectContent = React.forwardRef<
     <SelectPrimitive.Content
       ref={ref}
       className={cn(
-        "relative z-50 min-w-[10rem] overflow-hidden rounded-lg bg-elevated p-1 shadow-popover ui-surface-motion",
+        "bg-elevated shadow-popover ui-surface-motion relative z-50 min-w-[10rem] overflow-hidden rounded-lg p-1",
         position === "popper" && "data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1",
         className,
       )}
       position={position}
       {...props}
     >
-      <SelectPrimitive.Viewport className="p-0.5 overscroll-contain">
+      <SelectPrimitive.Viewport className="overscroll-contain p-0.5">
         {children}
       </SelectPrimitive.Viewport>
     </SelectPrimitive.Content>
@@ -57,14 +57,14 @@ const SelectItem = React.forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex w-full cursor-pointer select-none items-center rounded-md py-2 pl-8 pr-3 text-sm text-mist outline-none hover:bg-graphite hover:text-paper focus:bg-graphite focus:text-paper data-[disabled]:pointer-events-none data-[disabled]:opacity-50 transition-colors duration-[120ms]",
+      "text-mist hover:bg-graphite hover:text-paper focus:bg-graphite focus:text-paper relative flex w-full cursor-pointer items-center rounded-md py-2 pr-3 pl-8 text-sm transition-colors duration-[120ms] outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
       className,
     )}
     {...props}
   >
     <span className="absolute left-2 flex h-4 w-4 items-center justify-center">
       <SelectPrimitive.ItemIndicator>
-        <Check className="h-4 w-4 text-accent" />
+        <Check className="text-accent h-4 w-4" />
       </SelectPrimitive.ItemIndicator>
     </span>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>

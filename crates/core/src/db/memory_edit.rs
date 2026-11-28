@@ -37,6 +37,15 @@ impl Db {
             .map(|value| text_with_limit("content", value, MAX_MEMORY_CONTENT_CHARS))
             .transpose()?;
 
+        let title = match title {
+            Some(t) => Some(self.scrub_secrets(&t).await?),
+            None => None,
+        };
+        let content = match content {
+            Some(c) => Some(self.scrub_secrets(&c).await?),
+            None => None,
+        };
+
         // The existing row's project name decides which prefix counts as
         // redundant in the new topic_key, and gives us NotFound for free.
         let existing = self.get_memory(id).await?;

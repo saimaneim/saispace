@@ -1,4 +1,5 @@
-//! `sai setup`: installs and uninstalls agent integrations (`OpenCode`, Claude Code).
+//! `sai setup`: installs and uninstalls agent integrations (`OpenCode`, Claude Code,
+//! and the MCP server in other clients through `setup_mcp`).
 
 use crate::{CliError, CliResult};
 use clap::Subcommand;
@@ -54,6 +55,86 @@ pub enum SetupCommand {
         #[arg(help = "Quita el bloque de saispace de cada fichero", long)]
         uninstall: bool,
     },
+    #[command(about = "Conecta el MCP de saispace a Cursor (~/.cursor/mcp.json)")]
+    Cursor {
+        #[arg(help = "Quita la conexión", long)]
+        uninstall: bool,
+    },
+    #[command(about = "Conecta el MCP de saispace a Windsurf")]
+    Windsurf {
+        #[arg(help = "Quita la conexión", long)]
+        uninstall: bool,
+    },
+    #[command(about = "Conecta el MCP de saispace a VS Code (Copilot)")]
+    Vscode {
+        #[arg(help = "Quita la conexión", long)]
+        uninstall: bool,
+    },
+    #[command(about = "Conecta el MCP de saispace a Codex (~/.codex/config.toml)")]
+    Codex {
+        #[arg(help = "Quita la conexión", long)]
+        uninstall: bool,
+    },
+    #[command(about = "Conecta el MCP de saispace a Gemini CLI")]
+    GeminiCli {
+        #[arg(help = "Quita la conexión", long)]
+        uninstall: bool,
+    },
+    #[command(about = "Conecta el MCP de saispace a Antigravity")]
+    Antigravity {
+        #[arg(help = "Quita la conexión", long)]
+        uninstall: bool,
+    },
+    #[command(about = "Muestra la configuración para pegarla en cualquier otro cliente MCP")]
+    Manual,
+}
+
+fn mcp_client(cmd: &SetupCommand) -> Option<(crate::setup_mcp::Client, bool)> {
+    use crate::setup_mcp::Client;
+    Some(match cmd {
+        SetupCommand::Cursor { uninstall } => (Client::Cursor, *uninstall),
+        SetupCommand::Windsurf { uninstall } => (Client::Windsurf, *uninstall),
+        SetupCommand::Vscode { uninstall } => (Client::Vscode, *uninstall),
+        SetupCommand::Codex { uninstall } => (Client::Codex, *uninstall),
+        SetupCommand::GeminiCli { uninstall } => (Client::GeminiCli, *uninstall),
+        SetupCommand::Antigravity { uninstall } => (Client::Antigravity, *uninstall),
+        _ => return None,
+    })
+}
+
+fn run_mcp(client: crate::setup_mcp::Client, remove: bool) -> CliResult<()> {
+    let home = std::env::var_os("HOME")
+        .filter(|h| !h.is_empty())
+        .map(PathBuf::from)
+        .ok_or_else(|| CliError::Usage("HOME is not set".to_string()))?;
+    let path = client.config_path(&home);
+    let name = client.label();
+    if remove {
+        let removed = crate::setup_mcp::uninstall(client, &path)?;
+        crate::out!(
+            "{name}: {}",
+            if removed {
+                format!("saispace quitado de {}", path.display())
+            } else {
+                "no estaba conectado".to_string()
+            }
+        );
+        return Ok(());
+    }
+    let changed = crate::setup_mcp::install(client, &path, &crate::setup_mcp::server_command())?;
+    crate::out!(
+        "{name}: {} {}",
+        if changed {
+            "conectado en"
+        } else {
+            "ya conectado en"
+        },
+        path.display()
+    );
+    if changed {
+        crate::out!("Reinicia {name} para cargarlo. Comprueba con: sai doctor");
+    }
+    Ok(())
 }
 
 fn opencode_dir() -> CliResult<PathBuf> {
@@ -139,7 +220,7 @@ pub fn uninstall(config: &Path) -> CliResult<bool> {
     Ok(ours)
 }
 
-fn read_settings_object(path: &Path) -> CliResult<Value> {
+pub(crate) fn read_settings_object(path: &Path) -> CliResult<Value> {
     if !path.exists() {
         return Ok(Value::Object(Map::new()));
     }
@@ -157,7 +238,7 @@ fn read_settings_object(path: &Path) -> CliResult<Value> {
     Ok(parsed)
 }
 
-fn write_json_atomic_with_backup(path: &Path, value: &Value) -> CliResult<()> {
+pub(crate) fn write_json_atomic_with_backup(path: &Path, value: &Value) -> CliResult<()> {
     // A dotfiles symlink stays a symlink: write through to its target.
     let resolved = fs::canonicalize(path).ok();
     let path = resolved.as_deref().unwrap_or(path);
@@ -352,7 +433,23 @@ pub fn uninstall_claude(config: &Path) -> CliResult<bool> {
 }
 
 pub fn run(cmd: &SetupCommand) -> CliResult<ExitCode> {
+    if let Some((client, remove)) = mcp_client(cmd) {
+        run_mcp(client, remove)?;
+        return Ok(ExitCode::SUCCESS);
+    }
     match cmd {
+        SetupCommand::Manual => {
+            crate::out!(
+                "{}",
+                crate::setup_mcp::manual(&crate::setup_mcp::server_command())
+            );
+        }
+        SetupCommand::Cursor { .. }
+        | SetupCommand::Windsurf { .. }
+        | SetupCommand::Vscode { .. }
+        | SetupCommand::Codex { .. }
+        | SetupCommand::GeminiCli { .. }
+        | SetupCommand::Antigravity { .. } => {}
         SetupCommand::Rules { from, uninstall } => {
             crate::setup_rules::run(from.as_deref(), *uninstall)?;
         }

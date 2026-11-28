@@ -13,6 +13,11 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub struct ListProjectsParams {}
 
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub struct DoctorParams {
+    pub path: Option<String>,
+}
+
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct RegisterProjectParams {
     pub name: String,
@@ -43,6 +48,30 @@ pub struct RegisterProjectResponse {
 
 #[tool_router(router = project_tool_router, vis = "pub")]
 impl SaiSpaceServer {
+    #[tool(
+        name = "doctor",
+        description = "Read-only health check: DB, index, vault key, agents"
+    )]
+    async fn doctor(&self, Parameters(params): Parameters<DoctorParams>) -> CallToolResult {
+        let db_path = match saispace_core::default_db_path() {
+            Ok(p) => p,
+            Err(err) => return format_error(&err),
+        };
+        let cwd = match params.path.as_deref() {
+            Some(path) => std::path::PathBuf::from(canonicalize_path(path)),
+            None => std::env::current_dir().unwrap_or_default(),
+        };
+        let home = std::env::var_os("HOME")
+            .filter(|h| !h.is_empty())
+            .map(std::path::PathBuf::from);
+        match saispace_core::doctor::run(&db_path, crate::VERSION, &cwd, home.as_deref(), false)
+            .await
+        {
+            Ok(report) => format_success(&report),
+            Err(err) => format_error(&err),
+        }
+    }
+
     #[tool(name = "list_projects", description = "List all projects in SaiSpace")]
     async fn list_projects(&self, _params: Parameters<ListProjectsParams>) -> CallToolResult {
         let projects = match self.db.list_projects().await {

@@ -114,30 +114,30 @@ export function SearchDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl p-0 top-[14%] translate-y-0 overflow-hidden bg-carbon">
+      <DialogContent className="bg-carbon top-[14%] max-w-xl translate-y-0 overflow-hidden p-0">
         <DialogTitle className="sr-only">Buscar</DialogTitle>
         <DialogDescription className="sr-only">
           Busca en notas de contexto, tareas, reglas y memorias.
         </DialogDescription>
 
-        <div className="flex items-center gap-3 px-4 h-12 bg-obsidian" onKeyDown={onKeyDown}>
-          <Search className="w-4 h-4 text-fog flex-shrink-0" />
+        <div className="bg-obsidian flex h-12 items-center gap-3 px-4" onKeyDown={onKeyDown}>
+          <Search className="text-fog h-4 w-4 flex-shrink-0" />
           <input
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar…"
             aria-label="Consulta de búsqueda"
-            className="flex-1 min-w-0 h-full bg-transparent text-sm text-paper placeholder:text-fog focus:outline-none"
+            className="text-paper placeholder:text-fog h-full min-w-0 flex-1 bg-transparent text-sm focus:outline-none"
           />
           {query && (
             <button
               type="button"
               onClick={() => setQuery("")}
               aria-label="Limpiar consulta"
-              className="h-6 w-6 rounded flex items-center justify-center text-fog hover:text-paper hover:bg-elevated transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 flex-shrink-0"
+              className="text-fog hover:text-paper hover:bg-elevated focus-visible:ring-accent/40 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="h-3.5 w-3.5" />
             </button>
           )}
           {activeProjectId && (
@@ -146,7 +146,7 @@ export function SearchDialog({
               onClick={() => setOnlyProject((v) => !v)}
               aria-pressed={onlyProject}
               className={cn(
-                "h-7 px-2.5 mr-8 rounded-md text-xs font-medium flex-shrink-0 transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
+                "focus-visible:ring-accent/40 mr-8 h-7 flex-shrink-0 rounded-md px-2.5 text-xs font-medium transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2",
                 onlyProject ? "bg-elevated text-paper" : "text-fog hover:text-mist",
               )}
             >
@@ -156,10 +156,10 @@ export function SearchDialog({
         </div>
 
         <div
-          className="max-h-[min(24rem,calc(100vh-12rem))] overflow-y-auto overscroll-contain p-2 space-y-0.5"
+          className="max-h-[min(24rem,calc(100vh-12rem))] space-y-0.5 overflow-y-auto overscroll-contain p-2"
           onKeyDown={onKeyDown}
         >
-          {error && <p className="px-3 py-2 text-sm text-coral-red">{error}</p>}
+          {error && <p className="text-coral-red px-3 py-2 text-sm">{error}</p>}
           {hits.map((hit, i) => {
             const Icon = KIND_ICON[hit.kind];
             const isSelected = i === selected;
@@ -170,28 +170,28 @@ export function SearchDialog({
                 onClick={() => choose(hit)}
                 onMouseEnter={() => setSelected(i)}
                 className={cn(
-                  "relative w-full flex items-start gap-3 pl-3.5 pr-3 py-2.5 rounded-md text-left transition-colors duration-[120ms] focus:outline-none",
+                  "relative flex w-full items-start gap-3 rounded-md py-2.5 pr-3 pl-3.5 text-left transition-colors duration-[120ms] focus:outline-none",
                   isSelected ? "bg-elevated" : "hover:bg-obsidian",
                 )}
               >
-                <Icon className="w-4 h-4 mt-0.5 text-fog flex-shrink-0" />
-                <span className="flex-1 min-w-0">
-                  <span className="block text-sm font-medium text-paper truncate">{hit.title}</span>
-                  <span className="block text-xs text-fog line-clamp-2 mt-0.5 break-words">
+                <Icon className="text-fog mt-0.5 h-4 w-4 flex-shrink-0" />
+                <span className="min-w-0 flex-1">
+                  <span className="text-paper block truncate text-sm font-medium">{hit.title}</span>
+                  <span className="text-fog mt-0.5 line-clamp-2 block text-xs break-words">
                     <Snippet text={hit.snippet} />
                   </span>
                 </span>
-                <span className="text-[11px] text-fog bg-obsidian px-2 py-0.5 rounded-md flex-shrink-0">
+                <span className="text-fog bg-obsidian flex-shrink-0 rounded-md px-2 py-0.5 text-[11px]">
                   {KIND_LABEL[hit.kind]}
                 </span>
               </button>
             );
           })}
           {!error && hasQuery && hits.length === 0 && (
-            <p className="px-3 py-8 text-center text-sm text-fog">Sin resultados</p>
+            <p className="text-fog px-3 py-8 text-center text-sm">Sin resultados</p>
           )}
           {!hasQuery && (
-            <p className="px-3 py-8 text-center text-xs text-fog">
+            <p className="text-fog px-3 py-8 text-center text-xs">
               ↑↓ navegar · Enter abrir · Esc cerrar
             </p>
           )}

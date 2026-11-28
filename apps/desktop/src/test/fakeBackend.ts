@@ -16,6 +16,8 @@ import type {
   Task,
   Technology,
   TechRule,
+  TimelineDay,
+  TimelineItem,
   UpdateGoalInput,
   UpdateMemoryInput,
   UpdateProjectInput,
@@ -45,6 +47,8 @@ export interface FakeBackendOptions {
   technologies?: Technology[];
   techRules?: TechRule[];
   inventory?: Partial<AiInventory>;
+  /** What `git log` and tags give `project_timeline`, by project id. */
+  gitHistory?: Record<string, TimelineItem[]>;
 }
 
 export interface InvokeCall {
@@ -159,6 +163,37 @@ export function makeTechnology(overrides: Partial<Technology> = {}): Technology 
   };
 }
 
+export function makeTimelineItem(overrides: Partial<TimelineItem> = {}): TimelineItem {
+  return {
+    kind: "commit",
+    at: now(),
+    title: "Cambio",
+    detail: null,
+    label: null,
+    goal: null,
+    link: null,
+    hash: null,
+    pr: null,
+    files: [],
+    file_count: overrides.files?.length ?? 0,
+    ...overrides,
+  };
+}
+
+const localDay = (iso: string) => {
+  const date = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
+const KIND_ORDER: TimelineItem["kind"][] = [
+  "goal_completed",
+  "release",
+  "task_completed",
+  "commit",
+  "memory",
+];
+
 export function installFakeBackend(options: FakeBackendOptions = {}) {
   const home = options.home ?? "/home/test";
   const projects: Project[] = [...(options.projects ?? [])];
@@ -200,6 +235,61 @@ export function installFakeBackend(options: FakeBackendOptions = {}) {
     const task = tasks.find((item) => item.id === id);
     if (!task) throw new CommandError(`Tarea no encontrada: ${id}`, "not_found");
     return task;
+  };
+
+  // Mirrors `Db::project_timeline`: finished goals and tasks plus decisions
+  // come from the shared state, git entries from `options.gitHistory`.
+  const buildTimeline = (projectId: unknown): TimelineDay[] => {
+    findProject(projectId);
+    const goalTitle = (id: string | null) => goals.find((goal) => goal.id === id)?.title ?? null;
+    const items: TimelineItem[] = [
+      ...goals
+        .filter((g) => g.project_id === projectId && g.status === "completed" && g.completed_at)
+        .map((g) =>
+          makeTimelineItem({
+            kind: "goal_completed",
+            at: g.completed_at as string,
+            title: g.title,
+            detail: g.criteria,
+          }),
+        ),
+      ...tasks
+        .filter((t) => t.project_id === projectId && t.status === "done" && t.completed_at)
+        .map((t) =>
+          makeTimelineItem({
+            kind: "task_completed",
+            at: t.completed_at as string,
+            title: t.title,
+            goal: goalTitle(t.goal_id),
+          }),
+        ),
+      ...memories
+        .filter(
+          (m) =>
+            m.project_id === projectId &&
+            (m.kind === "decision" || m.kind === "architecture") &&
+            !m.superseded_by,
+        )
+        .map((m) =>
+          makeTimelineItem({
+            kind: "memory",
+            at: m.created_at,
+            title: m.title,
+            label: m.kind === "decision" ? "Decisión" : "Arquitectura",
+          }),
+        ),
+      ...(options.gitHistory?.[String(projectId)] ?? []),
+    ].sort(
+      (a, b) => b.at.localeCompare(a.at) || KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind),
+    );
+    const days: TimelineDay[] = [];
+    for (const item of items) {
+      const date = localDay(item.at);
+      const last = days.at(-1);
+      if (last?.date === date) last.items.push(item);
+      else days.push({ date, items: [item] });
+    }
+    return days;
   };
 
   const buildPlan = (projectId: unknown, filter: PlanFilter): Plan => {
@@ -393,6 +483,8 @@ export function installFakeBackend(options: FakeBackendOptions = {}) {
       );
     },
 
+    project_timeline: ({ projectId }) => buildTimeline(projectId),
+
     // Directory picker
     list_directory: ({ path }) => {
       const current = (path as string | undefined) ?? home;
@@ -474,7 +566,18 @@ export function installFakeBackend(options: FakeBackendOptions = {}) {
     list_technologies: () => technologies,
     sync_project_stack: () => technologies,
     list_project_tech_rules: () => techRules,
-    search_memory: () => [],
+    search_memory: ({ query }) =>
+      memories
+        .filter((m) => m.title.toLowerCase().includes(String(query).toLowerCase()))
+        .map((m) => ({
+          kind: "memory",
+          id: m.id,
+          project_id: m.project_id,
+          title: m.title,
+          snippet: m.content,
+          rank: 0,
+        })),
+    open_url: () => undefined,
     tech_icon: () => null,
     memory_usage_stats: () => ({
       saves_by_agent: [],

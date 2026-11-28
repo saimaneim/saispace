@@ -1,12 +1,16 @@
 pub mod db;
+pub mod doctor;
 pub mod error;
+pub mod git_history;
 pub mod inventory;
 pub mod learning;
 pub mod memory_render;
 pub mod models;
 pub mod paths;
 pub mod recall;
+pub mod secret_scrub;
 pub mod tech;
+pub mod timeline;
 pub mod topic_key;
 pub mod vault;
 
@@ -18,8 +22,8 @@ pub use db::memory_graph::{KEEP_SESSIONS, short_id};
 pub use error::{CoreError, CoreResult};
 pub use models::*;
 pub use paths::{
-    default_db_path, detect_agent_name, detect_project_root, kpi_events_path_for, project_key,
-    vault_key_path_for,
+    PROJECT_MARKER, canonical_project_path, default_db_path, detect_agent_name,
+    detect_project_root, find_project_marker, kpi_events_path_for, project_key, vault_key_path_for,
 };
 pub use topic_key::normalize_topic_key;
 pub use vault::Vault;

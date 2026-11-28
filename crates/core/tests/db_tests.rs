@@ -443,3 +443,66 @@ async fn test_create_and_update_task_validate_title() {
         .expect("valid update should succeed");
     assert_eq!(renamed.task.title, "Renamed task");
 }
+
+#[tokio::test]
+async fn marker_file_names_the_project_and_wins_over_a_parent_project() {
+    let db = setup_test_db().await;
+    let dir = tempfile::tempdir().expect("tempdir");
+    let parent = dir.path().join("monorepo");
+    let app = parent.join("apps/app");
+    std::fs::create_dir_all(app.join("src")).expect("dirs");
+    db.create_project(CreateProjectInput {
+        name: "monorepo".into(),
+        path: parent.display().to_string(),
+    })
+    .await
+    .expect("parent");
+    std::fs::write(app.join(".saispace.toml"), "project = \"tienda-web\"\n").expect("marker");
+
+    let found = db
+        .project_for_path(&app.join("src"), false)
+        .await
+        .expect("resolve")
+        .expect("project");
+    assert_eq!(found.name, "tienda-web");
+    assert_eq!(found.path, app.display().to_string());
+    let again = db
+        .project_for_path(&app, false)
+        .await
+        .expect("resolve")
+        .expect("project");
+    assert_eq!(again.id, found.id, "registered once, then reused");
+}
+
+#[tokio::test]
+async fn test_git_worktree_resolves_to_its_main_repository() {
+    let db = setup_test_db().await;
+    let dir = tempfile::tempdir().expect("tempdir");
+    let main = dir.path().join("work/saispace");
+    let worktree = dir.path().join("work/.t3/worktrees/t3-1234");
+    std::fs::create_dir_all(main.join(".git/worktrees/t3-1234")).expect("main");
+    std::fs::create_dir_all(worktree.join("src")).expect("worktree");
+    std::fs::write(
+        worktree.join(".git"),
+        format!(
+            "gitdir: {}\n",
+            main.join(".git/worktrees/t3-1234").display()
+        ),
+    )
+    .expect("gitdir");
+    let project = db
+        .create_project(CreateProjectInput {
+            name: "saispace".into(),
+            path: main.display().to_string(),
+        })
+        .await
+        .expect("project");
+
+    let found = db
+        .project_for_path(&worktree.join("src"), true)
+        .await
+        .expect("resolve")
+        .expect("project");
+    assert_eq!(found.id, project.id);
+    assert_eq!(db.list_projects().await.expect("list").len(), 1);
+}

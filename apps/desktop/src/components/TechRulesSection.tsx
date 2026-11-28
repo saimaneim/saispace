@@ -28,11 +28,11 @@ export function TechRulesSection({ projectId, stackVersion }: TechRulesSectionPr
 
   return (
     <section aria-label="Reglas por tecnología" className="space-y-2">
-      <h3 className="text-xs font-semibold text-fog px-1 tabular-nums">Reglas · {rules.length}</h3>
+      <h3 className="text-fog px-1 text-xs font-semibold tabular-nums">Reglas · {rules.length}</h3>
 
       {error && (
         <div
-          className="mb-2 px-3 py-2 rounded-md bg-coral-red/10 text-coral-red text-sm"
+          className="bg-coral-red/10 text-coral-red mb-2 rounded-md px-3 py-2 text-sm"
           role="alert"
         >
           {error}
@@ -40,21 +40,21 @@ export function TechRulesSection({ projectId, stackVersion }: TechRulesSectionPr
       )}
 
       {rules.length > 0 && (
-        <ul className="bg-carbon rounded-xl p-1.5 space-y-0.5">
+        <ul className="bg-carbon space-y-0.5 rounded-xl p-1.5">
           {rules.map((rule) => (
             <li
               key={rule.id}
-              className="flex items-start gap-3 px-3 py-2.5 rounded-lg hover:bg-obsidian transition-colors duration-[120ms] min-w-0"
+              className="hover:bg-obsidian flex min-w-0 items-start gap-3 rounded-lg px-3 py-2.5 transition-colors duration-[120ms]"
             >
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-obsidian text-xs font-medium text-paper whitespace-nowrap flex-shrink-0">
+              <span className="bg-obsidian text-paper inline-flex flex-shrink-0 items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap">
                 <span>{rule.technology}</span>
                 {rule.version_req && (
-                  <span className="text-fog tabular-nums font-mono font-normal">
+                  <span className="text-fog font-mono font-normal tabular-nums">
                     {rule.version_req}
                   </span>
                 )}
               </span>
-              <span className="flex-1 min-w-0 text-sm text-mist leading-relaxed break-words">
+              <span className="text-mist min-w-0 flex-1 text-sm leading-relaxed break-words">
                 {rule.rule}
               </span>
             </li>

@@ -125,22 +125,22 @@ function TechRow({
       onClick={() => api.openUrl(tech.docs_url).catch((e) => onError(formatError(e)))}
       title={`Abrir documentación de ${tech.name} ${tech.version}`}
       className={cn(
-        "group w-full flex items-center gap-2.5 px-2.5 rounded-md text-left hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 min-w-0",
+        "group hover:bg-obsidian focus-visible:ring-accent/40 flex w-full min-w-0 items-center gap-2.5 rounded-md px-2.5 text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2",
         nested ? "h-8 pl-3.5" : "h-10",
       )}
     >
-      {!nested && <TechIcon name={tech.name} className="w-5 h-5" />}
+      {!nested && <TechIcon name={tech.name} className="h-5 w-5" />}
       <span
         className={cn(
-          "truncate flex-1 min-w-0",
-          nested ? "text-xs text-mist" : "text-sm text-paper",
+          "min-w-0 flex-1 truncate",
+          nested ? "text-mist text-xs" : "text-paper text-sm",
         )}
       >
         {tech.name}
       </span>
-      <span className="flex items-center gap-1.5 flex-shrink-0">
-        <span className="text-xs text-fog tabular-nums font-mono">{tech.version}</span>
-        <ExternalLink className="w-3.5 h-3.5 text-fog opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity duration-[120ms]" />
+      <span className="flex flex-shrink-0 items-center gap-1.5">
+        <span className="text-fog font-mono text-xs tabular-nums">{tech.version}</span>
+        <ExternalLink className="text-fog h-3.5 w-3.5 opacity-0 transition-opacity duration-[120ms] group-hover:opacity-100 group-focus-visible:opacity-100" />
       </span>
     </button>
   );
@@ -206,27 +206,27 @@ export function TechnologiesTab({ project }: TechnologiesTabProps) {
   }, [items, query]);
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 px-6 pt-2 pb-6 gap-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 px-6 pt-2 pb-6">
       {items.length > 12 && (
         <div className="flex items-center justify-end">
           <div className="relative w-56">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-fog pointer-events-none" />
+            <Search className="text-fog pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2" />
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Filtrar…"
               aria-label="Filtrar tecnologías"
-              className="w-full h-9 pl-8 pr-7 text-sm bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 transition-colors duration-[120ms]"
+              className="bg-obsidian text-paper placeholder:text-fog focus-visible:ring-accent/40 h-9 w-full rounded-md pr-7 pl-8 text-sm transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2"
             />
             {query && (
               <button
                 type="button"
                 onClick={() => setQuery("")}
                 aria-label="Limpiar filtro"
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 h-6 w-6 rounded flex items-center justify-center text-fog hover:text-paper hover:bg-elevated transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                className="text-fog hover:text-paper hover:bg-elevated focus-visible:ring-accent/40 absolute top-1/2 right-1.5 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
@@ -234,29 +234,29 @@ export function TechnologiesTab({ project }: TechnologiesTabProps) {
       )}
 
       {error && (
-        <div className="px-3 py-2 rounded-md bg-coral-red/10 text-coral-red text-sm" role="alert">
+        <div className="bg-coral-red/10 text-coral-red rounded-md px-3 py-2 text-sm" role="alert">
           {error}
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto space-y-6 pr-1">
+      <div className="flex-1 space-y-6 overflow-y-auto pr-1">
         <TechRulesSection projectId={project.id} stack={items} stackVersion={syncCount} />
 
         {!isLoaded && items.length === 0 && (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-2.5">
-            <div className="h-24 rounded-xl bg-carbon" />
-            <div className="h-24 rounded-xl bg-carbon/70" />
-            <div className="h-24 rounded-xl bg-carbon/50" />
+            <div className="bg-carbon h-24 rounded-xl" />
+            <div className="bg-carbon/70 h-24 rounded-xl" />
+            <div className="bg-carbon/50 h-24 rounded-xl" />
           </div>
         )}
 
         {grouped.map(([ecosystem, list]) => (
           <section key={ecosystem} className="space-y-2">
-            <h3 className="flex items-center gap-2 text-xs font-semibold text-fog px-1 tabular-nums">
+            <h3 className="text-fog flex items-center gap-2 px-1 text-xs font-semibold tabular-nums">
               <span>{ECOSYSTEM_LABELS[ecosystem]}</span>
               <span className="text-ash font-normal">{list.length}</span>
             </h3>
-            <ul className="bg-carbon rounded-xl p-1.5 columns-[250px] gap-x-1.5">
+            <ul className="bg-carbon columns-[250px] gap-x-1.5 rounded-xl p-1.5">
               {groupFamilies(list).map((family) =>
                 family.members.length === 1 ? (
                   <li key={family.key} className="break-inside-avoid">
@@ -264,12 +264,12 @@ export function TechnologiesTab({ project }: TechnologiesTabProps) {
                   </li>
                 ) : (
                   <li key={family.key} className="break-inside-avoid pb-1">
-                    <div className="flex items-center gap-2.5 px-2.5 h-10 min-w-0">
-                      <TechIcon name={family.icon} className="w-5 h-5" />
-                      <span className="text-sm text-paper truncate flex-1">{family.label}</span>
-                      <span className="text-xs text-fog tabular-nums">{family.members.length}</span>
+                    <div className="flex h-10 min-w-0 items-center gap-2.5 px-2.5">
+                      <TechIcon name={family.icon} className="h-5 w-5" />
+                      <span className="text-paper flex-1 truncate text-sm">{family.label}</span>
+                      <span className="text-fog text-xs tabular-nums">{family.members.length}</span>
                     </div>
-                    <ul className="ml-[19px] border-l border-obsidian">
+                    <ul className="border-obsidian ml-[19px] border-l">
                       {family.members.map((tech) => (
                         <li key={tech.id}>
                           <TechRow tech={tech} nested onError={setError} />
@@ -284,11 +284,11 @@ export function TechnologiesTab({ project }: TechnologiesTabProps) {
         ))}
 
         {isLoaded && syncCount > 0 && grouped.length === 0 && !query && (
-          <div className="py-16 text-center text-sm text-fog">Sin dependencias detectadas</div>
+          <div className="text-fog py-16 text-center text-sm">Sin dependencias detectadas</div>
         )}
 
         {query && grouped.length === 0 && (
-          <div className="py-12 text-center text-sm text-fog">
+          <div className="text-fog py-12 text-center text-sm">
             Ninguna tecnología coincide con el filtro
           </div>
         )}

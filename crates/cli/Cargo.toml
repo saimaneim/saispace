@@ -1,6 +1,7 @@
 [package]
 name = "saispace-cli"
 version.workspace = true
+license.workspace = true
 edition = "2024"
 
 [[bin]]
@@ -20,6 +21,7 @@ thiserror = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+toml = "0.8"
 
 [lints]
 workspace = true

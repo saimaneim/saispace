@@ -69,6 +69,37 @@ pub fn detect_project_root(path: &Path) -> PathBuf {
         .to_path_buf()
 }
 
+/// Main checkout of a linked git worktree: its `.git` is a file pointing at
+/// `<main>/.git/worktrees/<name>`. Submodules (`.git/modules/…`) are not
+/// worktrees and return `None`.
+fn main_checkout_of(worktree: &Path) -> Option<PathBuf> {
+    let text = std::fs::read_to_string(worktree.join(".git")).ok()?;
+    let gitdir = PathBuf::from(text.strip_prefix("gitdir:")?.trim());
+    let gitdir = if gitdir.is_absolute() {
+        gitdir
+    } else {
+        worktree.join(gitdir)
+    };
+    let worktrees = gitdir.parent()?;
+    if worktrees.file_name()? != "worktrees" {
+        return None;
+    }
+    let dot_git = worktrees.parent()?;
+    (dot_git.file_name()? == ".git").then(|| dot_git.parent().map(Path::to_path_buf))?
+}
+
+/// `path` seen from the main checkout when it lives in a linked git worktree
+/// (agents such as T3 Code or Codex work in throwaway worktrees), so a
+/// worktree resolves to the project of its repository instead of a new one.
+#[must_use]
+pub fn canonical_project_path(path: &Path) -> PathBuf {
+    let root = detect_project_root(path);
+    match main_checkout_of(&root) {
+        Some(main) => main.join(path.strip_prefix(&root).unwrap_or(Path::new(""))),
+        None => path.to_path_buf(),
+    }
+}
+
 /// Whether `root` may be registered automatically as a project. Rejects the
 /// filesystem root, `home` and its ancestors, and direct children of `home`
 /// (such as `~/Dev`), which usually hold many projects.
@@ -87,4 +118,25 @@ pub fn is_auto_project_root(root: &Path, home: Option<&Path>) -> bool {
         Ok(rest) => rest.components().count() >= 2,
         Err(_) => true,
     }
+}
+
+/// File that pins a folder to a project: `project = "name"`. Written by
+/// `sai init`; commit it so every clone resolves to the same project name.
+pub const PROJECT_MARKER: &str = ".saispace.toml";
+
+/// The nearest ancestor of `path` holding [`PROJECT_MARKER`], with the
+/// project name it declares (the folder name when `project` is missing).
+#[must_use]
+pub fn find_project_marker(path: &Path) -> Option<(PathBuf, String)> {
+    let dir = path
+        .ancestors()
+        .find(|d| d.join(PROJECT_MARKER).is_file())?;
+    let text = std::fs::read_to_string(dir.join(PROJECT_MARKER)).ok()?;
+    let declared = text
+        .parse::<toml::Table>()
+        .ok()
+        .and_then(|t| t.get("project")?.as_str().map(str::trim).map(String::from))
+        .filter(|n| !n.is_empty());
+    let name = declared.or_else(|| dir.file_name().map(|n| n.to_string_lossy().into_owned()))?;
+    Some((dir.to_path_buf(), name))
 }

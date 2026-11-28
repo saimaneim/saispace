@@ -39,6 +39,68 @@ const ALIASES: Record<string, string> = {
   claude: "claude ai",
   "claude code": "claude ai",
   opencode: "opencode",
+  antigravity: "gemini",
+  oxlint: "oxc",
+  "@xyflow/react": "react",
+  vue: "vue",
+  "vue-router": "vue",
+  "solid-js": "solid",
+  "@sveltejs/kit": "svelte",
+  "next-auth": "nextdotjs",
+  "@prisma/client": "prisma",
+  mongoose: "mongodb",
+  ioredis: "redis",
+  "socket.io": "socket.io",
+  "socket.io-client": "socket.io",
+  "@reduxjs/toolkit": "redux",
+  "react-redux": "redux",
+  three: "three.js",
+  "@react-three/fiber": "three.js",
+  "chart.js": "chart.js",
+  "framer-motion": "framer",
+  "styled-components": "styled components",
+  "@playwright/test": "playwright",
+  xlsx: "microsoft excel",
+  exceljs: "microsoft excel",
+  "react-hook-form": "react hook form",
+  "@trpc/server": "trpc",
+  "@trpc/client": "trpc",
+  "@sentry/node": "sentry",
+  "@sentry/react": "sentry",
+  "@vercel/analytics": "vercel",
+  openai: "openai",
+  "@langchain/core": "langchain",
+  stripe: "stripe",
+  firebase: "firebase",
+  "firebase-admin": "firebase",
+  "@nestjs/core": "nestjs",
+  "@nestjs/common": "nestjs",
+  "@angular/core": "angular",
+  axum: "rust",
+  "actix-web": "rust",
+  reqwest: "rust",
+  clap: "rust",
+  anyhow: "rust",
+  thiserror: "rust",
+  tracing: "rust",
+  "tracing-subscriber": "rust",
+  rayon: "rust",
+  chrono: "rust",
+  regex: "rust",
+  uuid: "rust",
+  tempfile: "rust",
+  flate2: "rust",
+  getrandom: "rust",
+  globset: "rust",
+  schemars: "rust",
+  base64: "rust",
+  chacha20poly1305: "rust",
+  serde_yaml: "rust",
+  torch: "pytorch",
+  "scikit-learn": "scikit-learn",
+  sklearn: "scikit-learn",
+  requests: "python",
+  uvicorn: "fastapi",
 };
 
 /** Scopes whose packages all share the project's logo. */
@@ -56,6 +118,24 @@ const SCOPE_ICONS: Record<string, string> = {
   "@anthropic-ai": "anthropic",
   "@fontsource": "google fonts",
   "@fontsource-variable": "google fonts",
+  "@nestjs": "nestjs",
+  "@angular": "angular",
+  "@sveltejs": "svelte",
+  "@prisma": "prisma",
+  "@trpc": "trpc",
+  "@sentry": "sentry",
+  "@vercel": "vercel",
+  "@storybook": "storybook",
+  "@testing-library": "testing library",
+  "@reduxjs": "redux",
+  "@react-three": "three.js",
+  "@langchain": "langchain",
+  "@aws-sdk": "aws",
+  "@google-cloud": "google cloud",
+  "@firebase": "firebase",
+  "@stripe": "stripe",
+  "@playwright": "playwright",
+  "@xyflow": "react",
 };
 
 export function iconQuery(name: string): string {
@@ -63,9 +143,10 @@ export function iconQuery(name: string): string {
   if (lower in ALIASES) return ALIASES[lower];
   if (lower.startsWith("tauri-plugin-")) return "tauri";
   if (lower.startsWith("@types/")) {
-    // @types/babel__traverse belongs to @babel/traverse.
+    // @types/babel__traverse belongs to @babel/traverse; typings share the
+    // logo of the library they describe.
     const base = lower.slice("@types/".length).replace(/^(.+)__(.+)$/, "@$1/$2");
-    return base in ALIASES || base.startsWith("@") ? iconQuery(base) : "typescript";
+    return iconQuery(base);
   }
   const scope = lower.match(/^(@[^/]+)\//)?.[1];
   if (scope && scope in SCOPE_ICONS) return SCOPE_ICONS[scope];
@@ -90,6 +171,45 @@ function loadIcon(query: string, pkg?: string): Promise<string | null> {
   return pending;
 }
 
+const tones = new Map<string, Promise<boolean>>();
+
+/** Whether a logo is too dark to read on the dark UI (average luminance of
+ * its visible pixels). Such logos get a light tile behind them. */
+function isDarkLogo(src: string): Promise<boolean> {
+  let pending = tones.get(src);
+  if (!pending) {
+    pending = new Promise<boolean>((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const size = 24;
+          const canvas = document.createElement("canvas");
+          canvas.width = size;
+          canvas.height = size;
+          const ctx = canvas.getContext("2d", { willReadFrequently: true });
+          if (!ctx) return resolve(false);
+          ctx.drawImage(img, 0, 0, size, size);
+          const { data } = ctx.getImageData(0, 0, size, size);
+          let sum = 0;
+          let count = 0;
+          for (let i = 0; i < data.length; i += 4) {
+            if (data[i + 3] < 128) continue;
+            sum += 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+            count++;
+          }
+          resolve(count > 0 && sum / count < 70);
+        } catch {
+          resolve(false);
+        }
+      };
+      img.onerror = () => resolve(false);
+      img.src = src;
+    });
+    tones.set(src, pending);
+  }
+  return pending;
+}
+
 interface TechIconProps {
   name: string;
   className?: string;
@@ -98,12 +218,18 @@ interface TechIconProps {
 export function TechIcon({ name, className }: TechIconProps) {
   const query = iconQuery(name);
   const [src, setSrc] = useState<string | null>(null);
+  const [dark, setDark] = useState(false);
 
   useEffect(() => {
     let alive = true;
     setSrc(null);
-    loadIcon(query, npmPackage(name)).then((icon) => {
-      if (alive && icon) setSrc(icon);
+    setDark(false);
+    loadIcon(query, npmPackage(name)).then(async (icon) => {
+      if (!alive || !icon) return;
+      const tooDark = await isDarkLogo(icon);
+      if (!alive) return;
+      setDark(tooDark);
+      setSrc(icon);
     });
     return () => {
       alive = false;
@@ -114,7 +240,7 @@ export function TechIcon({ name, className }: TechIconProps) {
     return (
       <span
         className={cn(
-          "w-6 h-6 rounded-md bg-elevated text-fog text-xs font-semibold flex items-center justify-center flex-shrink-0",
+          "bg-elevated text-fog flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md text-xs font-semibold",
           className,
         )}
       >
@@ -128,7 +254,11 @@ export function TechIcon({ name, className }: TechIconProps) {
       alt=""
       width={24}
       height={24}
-      className={cn("w-6 h-6 p-0.5 flex-shrink-0 object-contain", className)}
+      className={cn(
+        "h-6 w-6 flex-shrink-0 object-contain p-0.5",
+        dark && "bg-paper rounded-[5px] p-[3px]",
+        className,
+      )}
     />
   );
 }

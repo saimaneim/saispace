@@ -677,3 +677,64 @@ async fn core_reads_do_not_auto_touch_usage() {
     assert_eq!(after.use_count, 0);
     assert!(after.last_used_at.is_none());
 }
+
+#[tokio::test]
+async fn temporary_facts_show_once_while_valid_and_vanish_after() {
+    let db = setup().await;
+    let now = Utc::now();
+    let quota = db
+        .save_memory(SaveMemoryInput {
+            kind: MemoryKind::Preference,
+            ..input("Antigravity sin cuota", "No delegues a Antigravity.", None)
+        })
+        .await
+        .expect("quota");
+    let old = db
+        .save_memory(input("VPS en mantenimiento", "Ya pasó.", None))
+        .await
+        .expect("old");
+    db.set_memory_triggers(quota.id, &["quota_exhausted"])
+        .await
+        .expect("trigger");
+    db.set_memory_expiry(quota.id, Some(now + Duration::days(2)))
+        .await
+        .expect("expiry");
+    db.set_memory_expiry(old.id, Some(now - Duration::hours(1)))
+        .await
+        .expect("past");
+
+    let mut context = db
+        .memory_context(MemoryScope::All, 10)
+        .await
+        .expect("context");
+    db.attach_temporary(&mut context, now)
+        .await
+        .expect("attach");
+    assert_eq!(context.temporary.len(), 1);
+    assert_eq!(context.temporary[0].memory.id, quota.id);
+    assert!(
+        context.preferences.iter().all(|m| m.id != quota.id),
+        "shown once, under its own section"
+    );
+    assert!(
+        context.memories.iter().all(|m| m.id != old.id),
+        "expired facts leave the context"
+    );
+
+    let fired = |at| {
+        let db = &db;
+        async move {
+            db.set_memory_expiry(quota.id, Some(at)).await.expect("set");
+            db.triggered_memories(MemoryScope::All, "error: quota_exhausted", &[], false)
+                .await
+                .expect("triggers")
+                .len()
+        }
+    };
+    assert_eq!(fired(now + Duration::days(1)).await, 1);
+    assert_eq!(
+        fired(now - Duration::minutes(1)).await,
+        0,
+        "expired lessons stop firing"
+    );
+}

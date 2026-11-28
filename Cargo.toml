@@ -3,6 +3,7 @@ resolver = "2"
 members = ["crates/core", "crates/mcp", "crates/rules", "crates/cli", "apps/desktop/src-tauri"]
 
 [workspace.package]
+license = "MIT"
 version = "0.1.0"
 
 [workspace.dependencies]

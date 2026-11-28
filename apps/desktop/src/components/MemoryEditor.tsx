@@ -76,7 +76,7 @@ export function MemoryEditor({ memory, open, onOpenChange, onSaved }: MemoryEdit
 
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="memory-title" className="text-xs font-medium text-fog">
+              <label htmlFor="memory-title" className="text-fog text-xs font-medium">
                 Título
               </label>
               <input
@@ -92,7 +92,7 @@ export function MemoryEditor({ memory, open, onOpenChange, onSaved }: MemoryEdit
 
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="memory-kind" className="text-xs font-medium text-fog">
+                <label htmlFor="memory-kind" className="text-fog text-xs font-medium">
                   Tipo
                 </label>
                 <Select value={kind} onValueChange={(val) => setKind(val as MemoryKind)}>
@@ -110,7 +110,7 @@ export function MemoryEditor({ memory, open, onOpenChange, onSaved }: MemoryEdit
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="memory-topic" className="text-xs font-medium text-fog">
+                <label htmlFor="memory-topic" className="text-fog text-xs font-medium">
                   Tema (opcional)
                 </label>
                 <input
@@ -126,7 +126,7 @@ export function MemoryEditor({ memory, open, onOpenChange, onSaved }: MemoryEdit
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="memory-content" className="text-xs font-medium text-fog">
+              <label htmlFor="memory-content" className="text-fog text-xs font-medium">
                 Contenido
               </label>
               <textarea
@@ -135,14 +135,14 @@ export function MemoryEditor({ memory, open, onOpenChange, onSaved }: MemoryEdit
                 onChange={(e) => setContent(e.target.value)}
                 placeholder="Contenido en Markdown o What:/Why:/Where:/Learned:…"
                 aria-label="Contenido"
-                className="w-full h-60 max-h-[45vh] p-3.5 text-sm font-mono leading-relaxed bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 resize-y transition-colors duration-[120ms]"
+                className="bg-obsidian text-paper placeholder:text-fog focus-visible:ring-accent/40 h-60 max-h-[45vh] w-full resize-y rounded-md p-3.5 font-mono text-sm leading-relaxed transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2"
                 required
               />
             </div>
           </div>
 
           {error && (
-            <p className="text-sm text-coral-red break-words" role="alert">
+            <p className="text-coral-red text-sm break-words" role="alert">
               {error}
             </p>
           )}

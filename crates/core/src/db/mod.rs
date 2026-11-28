@@ -13,26 +13,43 @@ pub mod kpi;
 pub mod memory;
 pub mod memory_dupes;
 pub mod memory_edit;
+pub mod memory_expiry;
 pub mod memory_graph;
 pub mod memory_orphans;
 pub mod memory_pin;
+pub mod memory_privacy;
 pub mod memory_stale;
 pub mod memory_stats;
+pub mod memory_tidy;
 pub mod memory_topics;
 pub mod memory_triggers;
 pub mod memory_usage;
+pub mod obsidian;
 pub mod project;
 pub mod project_layout;
 pub mod search;
 pub mod secret;
+pub mod sync;
 pub mod task;
 pub mod tech_rule;
 pub mod technology;
+pub mod timeline;
 mod validation;
 
 pub use memory_dupes::DuplicatePair;
 pub use memory_orphans::OrphanGroup;
 pub use memory_stale::StaleReport;
+
+/// Shared settings for file databases: WAL so the app, `sai` and the MCP read
+/// while one writes, and a capped WAL so it never grows without bound.
+fn file_options(options: SqliteConnectOptions) -> SqliteConnectOptions {
+    options
+        .create_if_missing(true)
+        .journal_mode(SqliteJournalMode::Wal)
+        .foreign_keys(true)
+        .busy_timeout(Duration::from_secs(5))
+        .pragma("journal_size_limit", "67108864")
+}
 
 #[derive(Debug, Clone)]
 pub struct Db {
@@ -44,11 +61,7 @@ impl Db {
     ///
     /// Returns an error if the database URL is invalid or the pool cannot connect.
     pub async fn connect(database_url: &str) -> CoreResult<Self> {
-        let options = SqliteConnectOptions::from_str(database_url)?
-            .create_if_missing(true)
-            .journal_mode(SqliteJournalMode::Wal)
-            .foreign_keys(true)
-            .busy_timeout(Duration::from_secs(5));
+        let options = file_options(SqliteConnectOptions::from_str(database_url)?);
 
         let pool = SqlitePoolOptions::new()
             .max_connections(5)
@@ -67,12 +80,7 @@ impl Db {
                 CoreError::Validation(format!("cannot create {}: {e}", parent.display()))
             })?;
         }
-        let options = SqliteConnectOptions::new()
-            .filename(path)
-            .create_if_missing(true)
-            .journal_mode(SqliteJournalMode::Wal)
-            .foreign_keys(true)
-            .busy_timeout(Duration::from_secs(5));
+        let options = file_options(SqliteConnectOptions::new().filename(path));
         let pool = SqlitePoolOptions::new()
             .max_connections(5)
             .connect_with(options)
@@ -80,6 +88,23 @@ impl Db {
         let db = Self { pool };
         db.migrate().await?;
         Ok(db)
+    }
+
+    /// Opens an existing database without creating, migrating or writing it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file is missing or cannot be opened.
+    pub async fn open_read_only(path: &Path) -> CoreResult<Self> {
+        let options = SqliteConnectOptions::new()
+            .filename(path)
+            .read_only(true)
+            .busy_timeout(Duration::from_secs(5));
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await?;
+        Ok(Self { pool })
     }
 
     /// # Errors

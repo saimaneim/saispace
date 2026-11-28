@@ -1,12 +1,29 @@
 # saispace
 
-Local project memory for AI coding agents. One SQLite database, three front ends:
+Local project memory and static checks for AI coding agents. One SQLite database, three front ends:
 
-- **`sai`** — CLI for memories, verifiable repo rules and stored secrets.
+- **`sai`** — CLI for memories, the `sai check` static checker, the plan and stored secrets.
 - **`saispace-mcp`** — MCP server (stdio) exposing the same data to agents.
 - **Desktop app** — Tauri UI over the same database.
 
 The database lives at `~/.local/share/saispace/saispace.db` (override with `SAISPACE_DB_PATH`). Anything saved from one front end is visible in the others. Projects are resolved from the working directory (git root) and registered on the first save.
+
+## Quickstart
+
+```sh
+curl -fsSL https://github.com/saimaneim/saispace/releases/latest/download/install.sh | sh
+sai setup claude        # or: opencode, cursor, windsurf, vscode, codex, gemini-cli, antigravity, manual
+sai doctor              # database, index, vault key and connected agents, read-only
+```
+
+## Why saispace
+
+- **Lessons come back on their own.** A memory with `--trigger "database is locked"` is re-injected the moment that error shows up again, and `env:<host>` lessons load only on that host.
+- **Measured, not claimed.** `sai bench` scores recall, search, duplicate detection and latency on fixed fixtures and fails CI on regressions; `sai kpi` tracks real use.
+- **Rules that run.** `.agents/checks` are executed by `sai check` in Rust: zero tokens, same result every time.
+- **Secrets stay secret.** A ChaCha20-Poly1305 vault for keys, credentials scrubbed from every memory before it is stored, and `sai memory purge` for a trace-free delete.
+- **Local first.** No account, no server. Share a project's knowledge through git with `sai sync`.
+- **Native desktop app** in Tauri 2 over the same database.
 
 ## Workspace
 
@@ -42,7 +59,7 @@ bun install
 bunx tauri dev      # or: bunx tauri build
 ```
 
-Prebuilt `sai` binaries for linux-x64 and macos-arm64 are attached to each GitHub release (`v*` tags).
+Every merge to `main` publishes a release (`v0.1.0`, `v0.1.1`, …) with `sai`, `saispace-mcp` and the desktop app (`saispace`) for linux-x64, macos-arm64, macos-x64 and windows-x64, plus `SHA256SUMS` and `install.sh`. `sai update` installs the latest one next to the running `sai`; `sai update --check` only looks. `sai --version` prints the version and commit.
 
 ## Tests
 
@@ -51,7 +68,8 @@ cargo test --workspace
 
 cd apps/desktop
 bun run check   # tsc --noEmit
-bun run lint    # biome
+bun run lint    # biome lint + bun fmt --check
+bun run format  # bun fmt
 ```
 
 ## Benchmark
@@ -87,7 +105,17 @@ $ sai skills sync           # link .agents/skills into .claude/skills (Claude Co
 $ sai setup opencode        # install the OpenCode plugin
 $ sai setup claude          # install the Claude Code memory hooks
 $ sai setup rules           # copy ~/.config/saispace/rules.md into every installed agent's global file
+$ sai setup cursor          # MCP for cursor, windsurf, vscode, codex, gemini-cli, antigravity (backs up with .bak)
+$ sai doctor [--deep] [--json]
+$ sai init [name]           # pin this repo to a project name with .saispace.toml
+$ sai memory save --personal …   # personal note: never exported
+$ sai memory tidy [--apply] # merge look-alikes, archive surplus sessions, attach orphans
+$ sai memory purge <id> --yes    # irreversible, trace-free delete
+$ sai sync export | import  # share project memories through .saispace/sync/ (no personal notes, no secrets)
+$ sai export obsidian --out ~/vault   # notes with [[wikilinks]] from the memory graph
 ```
+
+The project is resolved from `SAISPACE_PROJECT`, then the nearest `.saispace.toml`, then the git root. The session context is capped at 8,000 bytes (`--max-bytes` or `SAISPACE_CONTEXT_BYTES`), filled by priority: preferences, host lessons, temporary facts, pinned, plan, last session, recent titles.
 
 Saving again with the same `--topic` updates the memory instead of creating a duplicate. Mentioning another memory's id or `topic_key` in the content links them, and only the latest 3 session summaries per project stay active.
 
@@ -112,7 +140,7 @@ Or in a JSON client config:
 }
 ```
 
-Tools include `save_memory`, `search_memory`, `memory_context`, `get_memory`, `link_memories`, `consolidate_memories`, `delete_memory`, `list_projects`, `get_project_context` (re-detects the stack), `create_task`, `update_task`, `get_active_plan`, `create_goal`, `update_goal`, `complete_task`, `list_secrets` and `request_secret_access`. Example `save_memory` call:
+Or let `sai setup <client>` write it for you. Tools include `doctor`, `save_memory`, `search_memory`, `memory_context`, `get_memory`, `link_memories`, `consolidate_memories`, `delete_memory`, `list_projects`, `get_project_context` (re-detects the stack), `create_task`, `update_task`, `get_active_plan`, `create_goal`, `update_goal`, `complete_task`, `list_secrets` and `request_secret_access`. Example `save_memory` call:
 
 ```json
 {
@@ -124,6 +152,19 @@ Tools include `save_memory`, `search_memory`, `memory_context`, `get_memory`, `l
 ```
 
 The memory is scoped to the project of the server's working directory, or to `path` / `project_id` if given; `"global": true` makes it cross-project.
+
+## Static checks (`sai check`)
+
+Project rules live as TOML files in `.agents/checks/` and run with `sai check`: a Rust engine, parallel and deterministic, that costs agents zero tokens. A rule that can be checked is a check, not a line in `AGENTS.md`.
+
+- Match kinds: `forbid`, `require`, `max_lines`, path references that must exist, and more (see [crates/rules/README.md](crates/rules/README.md)).
+- Scope with globs, file guards (`only_if`, `unless`), line and match exceptions, `within` a captured span.
+- `--json` output for agents, `--strict` to fail on warnings; the pre-push hook and CI run it.
+
+```sh
+$ sai check                 # all rules
+$ sai check src/ --rule ui-no-raw-colors --json
+```
 
 ## Learning from mistakes
 
@@ -137,3 +178,7 @@ Agents save a lesson when it happens: a user correction becomes a `preference`; 
 | The session ends | Asks to save what was learned, naming errors that repeated. |
 
 A lesson comes back on its own through triggers: a stable piece of an error message (`--trigger "<error text>"`), or `env:<host>` for lessons about a specific host. `sai setup claude` installs the Claude Code hooks; the OpenCode plugin does the same for OpenCode.
+
+## License
+
+MIT, see [LICENSE](LICENSE).

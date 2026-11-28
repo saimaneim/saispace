@@ -4,6 +4,7 @@ import {
   Brain,
   FileText,
   FolderOpen,
+  History,
   ListTodo,
   PanelLeft,
   Search,
@@ -14,6 +15,7 @@ import { ActivityFeed } from "./components/ActivityFeed";
 import { ContextTab } from "./components/ContextTab";
 import { DirectoryPickerModal } from "./components/DirectoryPickerModal";
 import { GlobalView } from "./components/GlobalView";
+import { HistoryTab } from "./components/HistoryTab";
 import { MemoryTab } from "./components/MemoryTab";
 import { PlanTab } from "./components/PlanTab";
 import { ProjectHeader } from "./components/ProjectHeader";
@@ -22,10 +24,11 @@ import { Sidebar } from "./components/Sidebar";
 import { TechnologiesTab } from "./components/TechnologiesTab";
 import { WindowControls } from "./components/WindowControls";
 import { api, formatError } from "./lib/api";
+import { type DefaultTabId, readDefaultTab } from "./lib/preferences";
 import type { ActivityEvent, Project, ProjectStatus, SearchHit, Task } from "./lib/types";
 import { cn } from "./lib/utils";
 
-type TabId = "plan" | "context" | "tech" | "memory";
+type TabId = DefaultTabId;
 
 const isOpenTask = (task: Task) => task.status !== "done" && task.status !== "cancelled";
 
@@ -46,12 +49,13 @@ export function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [tasksByProject, setTasksByProject] = useState<Record<string, Task[]>>({});
   const [activities, setActivities] = useState<ActivityEvent[]>([]);
-  const [activeTab, setActiveTab] = useState<TabId>("plan");
+  const [activeTab, setActiveTab] = useState<TabId>(readDefaultTab);
   const [isFeedOpen, setIsFeedOpen] = useState(() => readFlag(FEED_STORAGE_KEY, false));
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => readFlag(SIDEBAR_STORAGE_KEY, true));
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [focusMemoryId, setFocusMemoryId] = useState<string | null>(null);
+  const [focusSeq, setFocusSeq] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isGlobal, setIsGlobal] = useState(false);
   const [pendingRequests, setPendingRequests] = useState(0);
@@ -176,8 +180,14 @@ export function App() {
   }, []);
 
   const handleSelectHit = (hit: SearchHit) => {
-    if (hit.project_id) selectProject(hit.project_id);
     setFocusMemoryId(hit.kind === "memory" ? hit.id : null);
+    setFocusSeq((n) => n + 1);
+    if (hit.project_id) {
+      selectProject(hit.project_id);
+    } else if (isGlobal || !activeProject) {
+      setIsGlobal(true);
+      return;
+    }
     const target: Record<SearchHit["kind"], TabId> = {
       task: "plan",
       tech_rule: "tech",
@@ -228,12 +238,13 @@ export function App() {
   const tabs: { id: TabId; label: string; icon: typeof ListTodo; count?: number }[] = [
     { id: "context", label: "Contexto", icon: FileText },
     { id: "plan", label: "Plan", icon: ListTodo, count: openTasksCount },
+    { id: "history", label: "Historial", icon: History },
     { id: "tech", label: "Tecnologías", icon: Boxes },
     { id: "memory", label: "Memoria", icon: Brain },
   ];
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-void text-mist font-sans select-none">
+    <div className="bg-void text-mist flex h-screen w-screen overflow-hidden font-sans select-none">
       <Sidebar
         projects={projects}
         selectedProjectId={isGlobal ? null : (activeProject?.id ?? null)}
@@ -246,23 +257,23 @@ export function App() {
         isOpen={isSidebarOpen}
       />
 
-      <div className="flex-1 flex flex-col min-w-0 min-h-0">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header
           data-tauri-drag-region
-          className="h-12 flex-shrink-0 flex items-center gap-3 pl-3 bg-void"
+          className="bg-void flex h-12 flex-shrink-0 items-center gap-3 pl-3"
         >
           <button
             type="button"
             onClick={() => setIsSidebarOpen((open) => !open)}
             aria-label={isSidebarOpen ? "Ocultar barra lateral" : "Mostrar barra lateral"}
             title="Barra lateral (Ctrl+B)"
-            className="h-8 w-8 flex-shrink-0 rounded-md flex items-center justify-center text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 pointer-events-auto"
+            className="text-fog hover:text-paper hover:bg-obsidian focus-visible:ring-accent/40 pointer-events-auto flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2"
           >
-            <PanelLeft className="w-4 h-4" />
+            <PanelLeft className="h-4 w-4" />
           </button>
           {isGlobal ? (
-            <div className="flex items-baseline gap-3 min-w-0 flex-1 pointer-events-none">
-              <h1 className="text-sm font-semibold text-paper">Global</h1>
+            <div className="pointer-events-none flex min-w-0 flex-1 items-baseline gap-3">
+              <h1 className="text-paper text-sm font-semibold">Global</h1>
             </div>
           ) : activeProject ? (
             <ProjectHeader
@@ -279,38 +290,38 @@ export function App() {
               }
             />
           ) : (
-            <div className="flex-1 pointer-events-none" />
+            <div className="pointer-events-none flex-1" />
           )}
           <button
             type="button"
             onClick={() => setIsSearchOpen(true)}
             aria-label="Buscar"
             title="Buscar (Ctrl+K)"
-            className="h-8 w-8 flex-shrink-0 rounded-md flex items-center justify-center text-fog hover:text-paper hover:bg-obsidian transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 pointer-events-auto"
+            className="text-fog hover:text-paper hover:bg-obsidian focus-visible:ring-accent/40 pointer-events-auto flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2"
           >
-            <Search className="w-4 h-4" />
+            <Search className="h-4 w-4" />
           </button>
           <WindowControls />
         </header>
 
-        <div className="flex flex-1 min-h-0">
-          <main className="flex-1 flex flex-col min-w-0 min-h-0 bg-void">
+        <div className="flex min-h-0 flex-1">
+          <main className="bg-void flex min-h-0 min-w-0 flex-1 flex-col">
             {errorMessage && (
               <div
-                className="mx-6 mb-2 flex items-center justify-between gap-2 px-3 h-10 rounded-md bg-coral-red/10 text-coral-red text-sm flex-shrink-0"
+                className="bg-coral-red/10 text-coral-red mx-6 mb-2 flex h-10 flex-shrink-0 items-center justify-between gap-2 rounded-md px-3 text-sm"
                 role="alert"
               >
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
                   <span className="truncate">{errorMessage}</span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setErrorMessage(null)}
                   aria-label="Cerrar notificación de error"
-                  className="p-1 rounded hover:bg-coral-red/20 transition-colors focus-visible:ring-1 focus-visible:ring-coral-red focus:outline-none"
+                  className="hover:bg-coral-red/20 focus-visible:ring-coral-red rounded p-1 transition-colors focus:outline-none focus-visible:ring-1"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="h-4 w-4" />
                 </button>
               </div>
             )}
@@ -320,10 +331,12 @@ export function App() {
                 refreshKey={activities[0]?.id ?? null}
                 pendingRequests={pendingRequests}
                 onSecretsChanged={refreshPending}
+                focusMemoryId={focusMemoryId}
+                focusSeq={focusSeq}
               />
             ) : activeProject ? (
               <>
-                <div className="flex items-center gap-4 px-6 h-12 flex-shrink-0">
+                <div className="flex h-12 flex-shrink-0 items-center gap-4 px-6">
                   <div
                     role="tablist"
                     aria-label="Secciones del proyecto"
@@ -337,18 +350,20 @@ export function App() {
                           type="button"
                           role="tab"
                           aria-selected={selected}
+                          aria-label={label}
+                          title={label}
                           onClick={() => setActiveTab(id)}
                           className={cn(
-                            "h-9 px-3 rounded-md text-sm font-medium flex items-center gap-2 transition-colors duration-[120ms] focus-visible:ring-2 focus-visible:ring-accent/40 focus:outline-none",
+                            "focus-visible:ring-accent/40 flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2",
                             selected
                               ? "bg-elevated text-paper font-medium"
                               : "text-fog hover:text-mist hover:bg-obsidian",
                           )}
                         >
-                          <Icon className="w-4 h-4" />
-                          <span>{label}</span>
+                          <Icon className="h-4 w-4" />
+                          <span className="hidden lg:inline">{label}</span>
                           {count !== undefined && count > 0 && (
-                            <span className="text-xs tabular-nums text-fog">{count}</span>
+                            <span className="text-fog text-xs tabular-nums">{count}</span>
                           )}
                         </button>
                       );
@@ -356,7 +371,7 @@ export function App() {
                   </div>
                 </div>
 
-                <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                   {activeTab === "plan" && (
                     <PlanTab
                       key={activeProject.id}
@@ -366,12 +381,21 @@ export function App() {
                       onChanged={refreshAll}
                     />
                   )}
+                  {activeTab === "history" && (
+                    <HistoryTab
+                      key={activeProject.id}
+                      project={activeProject}
+                      refreshKey={activities[0]?.id ?? null}
+                      onError={reportError}
+                    />
+                  )}
                   {activeTab === "memory" && (
                     <MemoryTab
                       key={activeProject.id}
                       project={activeProject}
                       refreshKey={activities[0]?.id ?? null}
                       focusId={focusMemoryId}
+                      focusSeq={focusSeq}
                     />
                   )}
                   {activeTab === "tech" && (
@@ -383,12 +407,12 @@ export function App() {
                 </div>
               </>
             ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-center gap-2 px-6">
-                <div className="w-12 h-12 rounded-xl bg-obsidian flex items-center justify-center text-ash mb-2">
-                  <FolderOpen className="w-6 h-6" />
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+                <div className="bg-obsidian text-ash mb-2 flex h-12 w-12 items-center justify-center rounded-xl">
+                  <FolderOpen className="h-6 w-6" />
                 </div>
-                <h2 className="text-base font-semibold text-paper">Sin proyectos</h2>
-                <p className="text-sm text-fog max-w-xs leading-relaxed">
+                <h2 className="text-paper text-base font-semibold">Sin proyectos</h2>
+                <p className="text-fog max-w-xs text-sm leading-relaxed">
                   Usa el botón + de la barra lateral para añadir una carpeta de trabajo.
                 </p>
               </div>
@@ -396,7 +420,7 @@ export function App() {
           </main>
 
           {isFeedOpen && activeProject && !isGlobal && (
-            <aside className="w-80 flex-shrink-0 bg-carbon flex flex-col min-h-0">
+            <aside className="bg-carbon flex min-h-0 w-80 flex-shrink-0 flex-col">
               <ActivityFeed activities={activities} />
             </aside>
           )}

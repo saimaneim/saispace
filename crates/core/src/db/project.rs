@@ -2,7 +2,10 @@ use crate::db::Db;
 use crate::db::validation::{limited_text, required_text};
 use crate::error::{CoreError, CoreResult};
 use crate::models::{CreateProjectInput, Project, ProjectStatus, UpdateProjectInput};
-use crate::paths::{detect_project_root, is_auto_project_root, project_key};
+use crate::paths::{
+    canonical_project_path, detect_project_root, find_project_marker, is_auto_project_root,
+    project_key,
+};
 use chrono::Utc;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -160,6 +163,7 @@ impl Db {
         &self,
         path: &std::path::Path,
     ) -> CoreResult<Option<Project>> {
+        let path = canonical_project_path(path);
         let projects = self.list_projects().await?;
         Ok(projects
             .into_iter()
@@ -181,6 +185,50 @@ impl Db {
         path: &Path,
         register: bool,
     ) -> CoreResult<Option<Project>> {
+        let path = canonical_project_path(path);
+        let path = path.as_path();
+        if let Some(wanted) = std::env::var("SAISPACE_PROJECT")
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+        {
+            let key = project_key(&wanted);
+            let found = self
+                .list_projects()
+                .await?
+                .into_iter()
+                .find(|p| project_key(&p.name) == key || p.path == wanted);
+            return match found {
+                Some(project) => Ok(Some(project)),
+                None => Err(CoreError::Validation(format!(
+                    "SAISPACE_PROJECT={wanted} no coincide con ningún proyecto registrado"
+                ))),
+            };
+        }
+        if let Some((root, name)) = find_project_marker(path) {
+            let root_str = root.to_string_lossy().to_string();
+            if let Some(project) = self.get_project_by_path(&root_str).await? {
+                return Ok(Some(project));
+            }
+            // Another clone of the same repo, or the same folder reached
+            // through a symlink: the marker's name is the identity.
+            let key = project_key(&name);
+            if let Some(project) = self
+                .list_projects()
+                .await?
+                .into_iter()
+                .find(|p| project_key(&p.name) == key)
+            {
+                return Ok(Some(project));
+            }
+            // The marker is an explicit choice: register even if not asked.
+            return Ok(Some(
+                self.create_project(CreateProjectInput {
+                    name,
+                    path: root_str,
+                })
+                .await?,
+            ));
+        }
         if let Some(project) = self.find_project_for_path(path).await? {
             return Ok(Some(project));
         }

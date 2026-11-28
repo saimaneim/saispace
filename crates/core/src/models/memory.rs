@@ -35,6 +35,17 @@ impl MemoryKind {
     }
 }
 
+/// Who a memory belongs to: the repo (`project`, shareable with `sai sync`)
+/// or the developer (`personal`, never exported).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "TEXT", rename_all = "snake_case")]
+pub enum Visibility {
+    #[default]
+    Project,
+    Personal,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Memory {
     pub id: Uuid,
@@ -51,6 +62,9 @@ pub struct Memory {
     pub use_count: i64,
     /// Set when the memory was consolidated into another one.
     pub superseded_by: Option<Uuid>,
+    #[serde(default)]
+    #[sqlx(default)]
+    pub scope: Visibility,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -115,6 +129,15 @@ pub struct MemoryContext {
     /// still sees what was left to finish.
     #[serde(default)]
     pub open_tasks: Vec<OpenTask>,
+    /// Still-valid temporary facts (`--until`), soonest to expire first.
+    #[serde(default)]
+    pub temporary: Vec<TemporaryMemory>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TemporaryMemory {
+    pub memory: Memory,
+    pub expires_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -9,6 +9,7 @@ pub mod secret;
 pub mod task;
 pub mod tech_rule;
 pub mod technology;
+pub mod timeline;
 
 pub use activity::{ActionKind, ActivityEvent, Actor, EntityKind, RecordActivityInput};
 pub use goal::{
@@ -20,7 +21,8 @@ pub use kpi::{
 };
 pub use memory::{
     AgentMemorySaves, Memory, MemoryContext, MemoryKind, MemoryScope, MemoryUsageStats,
-    MostUsedMemory, OpenTask, ProjectMemoryUsage, SaveMemoryInput, UpdateMemoryInput,
+    MostUsedMemory, OpenTask, ProjectMemoryUsage, SaveMemoryInput, TemporaryMemory,
+    UpdateMemoryInput, Visibility,
 };
 pub use memory_graph::{
     ConsolidateHint, ConsolidateInput, LinkDirection, MemoryLink, MemoryRelation,
@@ -31,3 +33,4 @@ pub use secret::{GrantStatus, SecretGrant, SecretMeta};
 pub use task::{CreateTaskInput, Task, TaskPriority, TaskStatus, TaskUpdate, UpdateTaskInput};
 pub use tech_rule::{TechRule, UpsertTechRuleInput};
 pub use technology::{DetectedTechnology, Technology};
+pub use timeline::{TimelineDay, TimelineItem, TimelineKind};

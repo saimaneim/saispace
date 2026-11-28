@@ -1,12 +1,14 @@
 [package]
 name = "saispace-rules"
 version.workspace = true
+license.workspace = true
 edition = "2024"
 
 [dependencies]
 serde = { workspace = true }
 thiserror = { workspace = true }
 toml = "0.8"
+serde_json = { workspace = true }
 regex = "1.13"
 globset = "0.4"
 ignore = "0.4"

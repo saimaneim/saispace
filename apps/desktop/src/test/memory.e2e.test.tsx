@@ -204,3 +204,25 @@ describe("flujo: guardar y leer memoria", () => {
     expect(screen.queryByText("Beta")).not.toBeInTheDocument();
   });
 });
+
+describe("flujo: abrir una memoria global desde el buscador", () => {
+  it("en la vista Global, el resultado abre su detalle", async () => {
+    const global = makeMemory({
+      project_id: null,
+      title: "Webs con sesión",
+      content: "Usa su navegador.",
+    });
+    const { user } = await renderApp({
+      projects: [project],
+      memories: [makeMemory({ project_id: null, title: "Otra global" }), global],
+    });
+
+    await user.click(screen.getByRole("button", { name: /Global/ }));
+    await user.keyboard("{Control>}k{/Control}");
+    await user.type(await screen.findByLabelText("Consulta de búsqueda"), "webs");
+    await user.click(await screen.findByRole("button", { name: /Webs con sesión/ }));
+
+    expect(await screen.findByRole("heading", { name: "Webs con sesión" })).toBeInTheDocument();
+    expect(screen.getByText("Usa su navegador.")).toBeInTheDocument();
+  });
+});

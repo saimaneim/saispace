@@ -1,39 +1,136 @@
 name: Release
 
+# Every merge to main publishes a release, so `install.sh` and `sai update`
+# always get the latest code. The tag is the workspace version, or its next
+# patch once that tag exists (0.1.0, 0.1.1, …). Pushing a tag by hand also works.
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+    tags: ["v*.*.*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: tag
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -n "$(git tag --points-at HEAD 'v*')" ]; then
+            echo "HEAD ya tiene versión"
+            exit 0
+          fi
+          base=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
+          minor="${base%.*}"
+          last=$(git tag -l "v$minor.*" --sort=-v:refname | head -n 1)
+          if [ -z "$last" ]; then
+            tag="v$base"
+          else
+            tag="v$minor.$(( ${last##*.} + 1 ))"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
   build:
-    name: sai (${{ matrix.name }})
+    needs: version
+    if: needs.version.outputs.tag != ''
+    name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    env:
+      TAG: ${{ needs.version.outputs.tag }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: linux-x64
-            os: ubuntu-latest
+            os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
           - name: macos-arm64
             os: macos-latest
             target: aarch64-apple-darwin
+          - name: macos-x64
+            os: macos-latest
+            target: x86_64-apple-darwin
+          - name: windows-x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
-      - name: Build
-        run: cargo build --release --locked -p saispace-cli --target ${{ matrix.target }}
-      - name: Package
+      - uses: oven-sh/setup-bun@v2
+      - name: Linux system deps (Tauri)
+        if: runner.os == 'Linux'
         run: |
-          archive="sai-${GITHUB_REF_NAME}-${{ matrix.name }}.tar.gz"
-          tar -czf "$archive" -C "target/${{ matrix.target }}/release" sai
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev pkg-config
+      - name: Version
+        shell: bash
+        run: echo "SAI_RELEASE_VERSION=${TAG#v}" >> "$GITHUB_ENV"
+      - name: Build CLI and MCP
+        run: cargo build --release --locked -p saispace-cli -p saispace-mcp --target ${{ matrix.target }}
+      - name: Build desktop app
+        working-directory: apps/desktop
+        run: |
+          bun install --frozen-lockfile
+          bunx tauri build --no-bundle --target ${{ matrix.target }}
+      - name: Package (unix)
+        if: runner.os != 'Windows'
+        run: |
+          out="target/${{ matrix.target }}/release"
+          cp "$out/saispace-desktop" "$out/saispace"
+          archive="saispace-$TAG-${{ matrix.name }}.tar.gz"
+          tar -czf "$archive" -C "$out" sai saispace-mcp saispace
           echo "ARCHIVE=$archive" >> "$GITHUB_ENV"
+      - name: Package (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $out = "target/${{ matrix.target }}/release"
+          Copy-Item "$out/saispace-desktop.exe" "$out/saispace.exe"
+          $archive = "saispace-$env:TAG-${{ matrix.name }}.zip"
+          Compress-Archive -Path "$out/sai.exe","$out/saispace-mcp.exe","$out/saispace.exe" -DestinationPath $archive
+          "ARCHIVE=$archive" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ env.ARCHIVE }}
+
+  publish:
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS
       - uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.ARCHIVE }}
+          tag_name: ${{ needs.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          make_latest: true
+          files: |
+            dist/*
+            install.sh

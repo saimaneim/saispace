@@ -81,14 +81,14 @@ function renderInline(text: string): ReactNode[] {
       parts.push(
         <code
           key={`c-${key++}`}
-          className="px-1.5 py-0.5 rounded bg-obsidian text-bone font-mono text-xs break-words"
+          className="bg-obsidian text-bone rounded px-1.5 py-0.5 font-mono text-xs break-words"
         >
           {earliest.content}
         </code>,
       );
     } else if (earliest.type === "bold") {
       parts.push(
-        <strong key={`b-${key++}`} className="font-semibold text-paper">
+        <strong key={`b-${key++}`} className="text-paper font-semibold">
           {earliest.content}
         </strong>,
       );
@@ -100,7 +100,7 @@ function renderInline(text: string): ReactNode[] {
           type="button"
           title={href}
           onClick={() => void api.openUrl(href)}
-          className="text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent break-words inline text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/40 rounded-sm"
+          className="text-accent decoration-accent/40 hover:decoration-accent focus-visible:ring-accent/40 inline rounded-sm text-left break-words underline underline-offset-2 focus:outline-none focus-visible:ring-1"
         >
           {earliest.content}
         </button>,
@@ -110,7 +110,7 @@ function renderInline(text: string): ReactNode[] {
         <span
           key={`l-${key++}`}
           title={earliest.extra}
-          className="text-paper underline decoration-smoke underline-offset-2 break-words"
+          className="text-paper decoration-smoke break-words underline underline-offset-2"
         >
           {earliest.content}
         </span>,
@@ -160,12 +160,12 @@ function renderFlowBlocks(lines: string[], keyPrefix: string): ReactNode[] {
       <Tag
         key={`${keyPrefix}-${suffix}`}
         className={cn(
-          "my-2 space-y-1 pl-4 text-sm text-mist",
+          "text-mist my-2 space-y-1 pl-4 text-sm",
           listBuffer.type === "ul" ? "list-disc" : "list-decimal",
         )}
       >
         {listBuffer.items.map((item, i) => (
-          <li key={`li-${i}`} className="break-words leading-relaxed">
+          <li key={`li-${i}`} className="leading-relaxed break-words">
             {renderInline(item)}
           </li>
         ))}
@@ -184,12 +184,12 @@ function renderFlowBlocks(lines: string[], keyPrefix: string): ReactNode[] {
     const body = hasHeader ? rows.slice(2) : rows;
     elements.push(
       <div key={`${keyPrefix}-tbl-${suffix}`} className="my-3 overflow-x-auto">
-        <table className="w-full text-xs border-collapse">
+        <table className="w-full border-collapse text-xs">
           {head && (
             <thead>
-              <tr className="border-b border-obsidian">
+              <tr className="border-obsidian border-b">
                 {head.map((cell, i) => (
-                  <th key={`th-${i}`} className="text-left font-semibold text-paper px-2.5 py-1.5">
+                  <th key={`th-${i}`} className="text-paper px-2.5 py-1.5 text-left font-semibold">
                     {renderInline(cell)}
                   </th>
                 ))}
@@ -198,9 +198,9 @@ function renderFlowBlocks(lines: string[], keyPrefix: string): ReactNode[] {
           )}
           <tbody>
             {body.map((row, r) => (
-              <tr key={`tr-${r}`} className="border-b border-obsidian/60 last:border-0">
+              <tr key={`tr-${r}`} className="border-obsidian/60 border-b last:border-0">
                 {row.map((cell, i) => (
-                  <td key={`td-${i}`} className="px-2.5 py-1.5 align-top text-mist break-words">
+                  <td key={`td-${i}`} className="text-mist px-2.5 py-1.5 align-top break-words">
                     {renderInline(cell)}
                   </td>
                 ))}
@@ -226,7 +226,7 @@ function renderFlowBlocks(lines: string[], keyPrefix: string): ReactNode[] {
         elements.push(
           <pre
             key={`${keyPrefix}-code-${idx}`}
-            className="my-2.5 p-3.5 bg-obsidian rounded-md font-mono text-xs text-mist overflow-x-auto leading-relaxed"
+            className="bg-obsidian text-mist my-2.5 overflow-x-auto rounded-md p-3.5 font-mono text-xs leading-relaxed"
           >
             <code>{codeBuffer.join("\n")}</code>
           </pre>,
@@ -264,7 +264,7 @@ function renderFlowBlocks(lines: string[], keyPrefix: string): ReactNode[] {
     flushList(`fl-post-${idx}`);
 
     if (/^[-*_]{3,}\s*$/.test(line)) {
-      elements.push(<div key={`${keyPrefix}-hr-${idx}`} className="h-px bg-obsidian my-4" />);
+      elements.push(<div key={`${keyPrefix}-hr-${idx}`} className="bg-obsidian my-4 h-px" />);
       return;
     }
 
@@ -272,7 +272,7 @@ function renderFlowBlocks(lines: string[], keyPrefix: string): ReactNode[] {
       elements.push(
         <h4
           key={`${keyPrefix}-h4-${idx}`}
-          className="text-xs font-semibold text-bone mt-3 mb-1 font-sans break-words"
+          className="text-bone mt-3 mb-1 font-sans text-xs font-semibold break-words"
         >
           {renderInline(line.slice(5))}
         </h4>,
@@ -284,7 +284,7 @@ function renderFlowBlocks(lines: string[], keyPrefix: string): ReactNode[] {
       elements.push(
         <h3
           key={`${keyPrefix}-h3-${idx}`}
-          className="text-sm font-semibold text-paper mt-4 mb-1.5 font-sans break-words"
+          className="text-paper mt-4 mb-1.5 font-sans text-sm font-semibold break-words"
         >
           {renderInline(line.slice(4))}
         </h3>,
@@ -296,7 +296,7 @@ function renderFlowBlocks(lines: string[], keyPrefix: string): ReactNode[] {
       elements.push(
         <h2
           key={`${keyPrefix}-h2-${idx}`}
-          className="text-base font-semibold text-paper tracking-tight mt-5 mb-2 font-sans break-words"
+          className="text-paper mt-5 mb-2 font-sans text-base font-semibold tracking-tight break-words"
         >
           {renderInline(line.slice(3))}
         </h2>,
@@ -308,7 +308,7 @@ function renderFlowBlocks(lines: string[], keyPrefix: string): ReactNode[] {
       elements.push(
         <h1
           key={`${keyPrefix}-h1-${idx}`}
-          className="text-lg font-bold text-paper tracking-tight mt-5 mb-2 font-sans break-words"
+          className="text-paper mt-5 mb-2 font-sans text-lg font-bold tracking-tight break-words"
         >
           {renderInline(line.slice(2))}
         </h1>,
@@ -320,10 +320,10 @@ function renderFlowBlocks(lines: string[], keyPrefix: string): ReactNode[] {
       elements.push(
         <blockquote
           key={`${keyPrefix}-quote-${idx}`}
-          className="bg-obsidian/60 px-3.5 py-2 rounded-md my-2 text-sm text-fog font-sans flex gap-2.5 min-w-0"
+          className="bg-obsidian/60 text-fog my-2 flex min-w-0 gap-2.5 rounded-md px-3.5 py-2 font-sans text-sm"
         >
-          <span className="w-0.5 rounded-full bg-smoke flex-shrink-0" aria-hidden="true" />
-          <span className="min-w-0 flex-1 italic break-words">{renderInline(line.slice(2))}</span>
+          <span className="bg-smoke w-0.5 flex-shrink-0 rounded-full" aria-hidden="true" />
+          <span className="min-w-0 flex-1 break-words italic">{renderInline(line.slice(2))}</span>
         </blockquote>,
       );
       return;
@@ -334,7 +334,7 @@ function renderFlowBlocks(lines: string[], keyPrefix: string): ReactNode[] {
     elements.push(
       <p
         key={`${keyPrefix}-p-${idx}`}
-        className="text-sm text-mist leading-relaxed my-1.5 break-words"
+        className="text-mist my-1.5 text-sm leading-relaxed break-words"
       >
         {renderInline(line)}
       </p>,
@@ -348,7 +348,7 @@ function renderFlowBlocks(lines: string[], keyPrefix: string): ReactNode[] {
     elements.push(
       <pre
         key={`${keyPrefix}-code-final`}
-        className="my-2.5 p-3.5 bg-obsidian rounded-md font-mono text-xs text-mist overflow-x-auto leading-relaxed"
+        className="bg-obsidian text-mist my-2.5 overflow-x-auto rounded-md p-3.5 font-mono text-xs leading-relaxed"
       >
         <code>{codeBuffer.join("\n")}</code>
       </pre>,
@@ -384,7 +384,7 @@ export function Markdown({ content, className }: MarkdownProps) {
       blocks.push(
         <div
           key={`section-${suffix}`}
-          className="py-2 first:pt-0 last:pb-0 flex items-start gap-3 min-w-0"
+          className="flex min-w-0 items-start gap-3 py-2 first:pt-0 last:pb-0"
         >
           <span title={role.title} className="mt-1 flex-shrink-0">
             <Icon
@@ -397,8 +397,8 @@ export function Markdown({ content, className }: MarkdownProps) {
       );
     } else {
       blocks.push(
-        <div key={`section-${suffix}`} className="py-1.5 min-w-0">
-          <p className="text-xs font-semibold text-paper mb-0.5 break-words">
+        <div key={`section-${suffix}`} className="min-w-0 py-1.5">
+          <p className="text-paper mb-0.5 text-xs font-semibold break-words">
             {activeSection.label}
           </p>
           <div className="min-w-0 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">{body}</div>
@@ -446,7 +446,7 @@ export function Markdown({ content, className }: MarkdownProps) {
   return (
     <div
       className={cn(
-        "max-w-[70ch] text-sm leading-relaxed text-mist select-text min-w-0",
+        "text-mist max-w-[70ch] min-w-0 text-sm leading-relaxed select-text",
         className,
       )}
     >

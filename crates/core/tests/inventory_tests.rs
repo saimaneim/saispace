@@ -57,3 +57,43 @@ fn inventory_reads_global_ai_config_without_env_values() {
     assert_eq!(inv.hooks[0].command, "sai memory context");
     assert_eq!(inv.warnings.len(), 0);
 }
+
+#[test]
+fn inventory_reads_antigravity_config() {
+    let home = tempfile::tempdir().unwrap();
+    let h = home.path();
+    fs::create_dir_all(h.join(".gemini/config/plugins/notion")).unwrap();
+    fs::create_dir_all(h.join(".gemini/config/skills/rules")).unwrap();
+    fs::write(
+        h.join(".gemini/config/skills/rules/SKILL.md"),
+        "---\ndescription: R\n---\n",
+    )
+    .unwrap();
+    fs::write(
+        h.join(".gemini/config/mcp_config.json"),
+        r#"{"mcpServers":{"saispace":{"command":"saispace-mcp"},"old":{"command":"x","disabled":true}}}"#,
+    )
+    .unwrap();
+    let inv = scan_ai_inventory(h);
+    let server = |name: &str| {
+        inv.mcp_servers
+            .iter()
+            .find(|s| s.tool == "Antigravity" && s.name == name)
+            .unwrap()
+    };
+    assert!(server("saispace").enabled);
+    assert!(
+        !server("old").enabled,
+        "Antigravity marks off servers with disabled"
+    );
+    assert!(
+        inv.plugins
+            .iter()
+            .any(|p| p.tool == "Antigravity" && p.name == "notion")
+    );
+    assert!(
+        inv.skills
+            .iter()
+            .any(|s| s.source == "Antigravity" && s.name == "rules")
+    );
+}

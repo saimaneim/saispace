@@ -135,7 +135,7 @@ fn not_found_ok<T: Default>(res: std::io::Result<T>) -> std::io::Result<T> {
 
 /// Replaces `path` through a temporary sibling so a failed write never
 /// leaves it truncated. A symlink is written through to its target.
-fn write_atomic(path: &Path, content: &str) -> CliResult<()> {
+pub(crate) fn write_atomic(path: &Path, content: &str) -> CliResult<()> {
     let real = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let parent = real
         .parent()

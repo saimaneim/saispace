@@ -1,4 +1,4 @@
-import { Brain, FileText, KeyRound, Plug, Search, Wand2, X } from "lucide-react";
+import { Brain, FileText, Globe, KeyRound, Plug, Search, Wand2, X } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, formatError } from "../lib/api";
@@ -15,6 +15,8 @@ interface GlobalViewProps {
   refreshKey: string | null;
   pendingRequests: number;
   onSecretsChanged: () => void;
+  focusMemoryId?: string | null;
+  focusSeq?: number;
 }
 
 const EMPTY: AiInventory = {
@@ -28,7 +30,7 @@ const EMPTY: AiInventory = {
 
 function SectionTitle({ children, className }: { children: string; className?: string }) {
   return (
-    <h3 className={cn("text-xs font-semibold text-fog px-1 pt-5 pb-2 tabular-nums", className)}>
+    <h3 className={cn("text-fog px-1 pt-5 pb-2 text-xs font-semibold tabular-nums", className)}>
       {children}
     </h3>
   );
@@ -37,11 +39,11 @@ function SectionTitle({ children, className }: { children: string; className?: s
 function ToolBadge({ tool, disabled }: { tool: string; disabled?: boolean }) {
   return (
     <span
-      className="flex items-center gap-1.5 flex-shrink-0"
+      className="flex flex-shrink-0 items-center gap-1.5"
       title={disabled ? `${tool} · desactivado` : tool}
     >
-      {disabled && <span className="text-xs text-fog">desactivado</span>}
-      <TechIcon name={tool} className="w-4 h-4" />
+      {disabled && <span className="text-fog text-xs">desactivado</span>}
+      <TechIcon name={tool} className="h-4 w-4" />
       <span className="sr-only">{tool}</span>
     </span>
   );
@@ -52,14 +54,14 @@ function InstructionsPanel({ inventory }: { inventory: AiInventory }) {
   const file = inventory.instructions[selected];
   if (!file) {
     return (
-      <p className="flex-1 flex items-center justify-center text-sm text-fog">
+      <p className="text-fog flex flex-1 items-center justify-center text-sm">
         Sin instrucciones globales.
       </p>
     );
   }
   return (
-    <div className="flex-1 flex min-h-0">
-      <aside className="w-64 flex-shrink-0 bg-carbon p-3 space-y-0.5 overflow-y-auto">
+    <div className="flex min-h-0 flex-1">
+      <aside className="bg-carbon w-64 flex-shrink-0 space-y-0.5 overflow-y-auto p-3">
         {inventory.instructions.map((item, index) => {
           const isSelected = index === selected;
           return (
@@ -69,14 +71,14 @@ function InstructionsPanel({ inventory }: { inventory: AiInventory }) {
               onClick={() => setSelected(index)}
               aria-current={isSelected ? "true" : undefined}
               className={cn(
-                "relative w-full flex items-center gap-2.5 pl-3 pr-2.5 py-2 rounded-md text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
+                "focus-visible:ring-accent/40 relative flex w-full items-center gap-2.5 rounded-md py-2 pr-2.5 pl-3 text-left transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2",
                 isSelected ? "bg-elevated text-paper" : "text-mist hover:bg-obsidian",
               )}
             >
-              <TechIcon name={item.tool} className="w-5 h-5" />
+              <TechIcon name={item.tool} className="h-5 w-5" />
               <span className="min-w-0 flex-1">
-                <span className="block text-sm font-medium truncate">{item.tool}</span>
-                <span className="block text-xs text-fog truncate font-mono">
+                <span className="block truncate text-sm font-medium">{item.tool}</span>
+                <span className="text-fog block truncate font-mono text-xs">
                   {item.path.split("/").pop()}
                 </span>
               </span>
@@ -86,13 +88,13 @@ function InstructionsPanel({ inventory }: { inventory: AiInventory }) {
       </aside>
       <div className="flex-1 overflow-y-auto px-7 py-5">
         <div className="max-w-[76ch] space-y-3">
-          <p className="text-xs text-fog font-mono truncate select-text" title={file.path}>
+          <p className="text-fog truncate font-mono text-xs select-text" title={file.path}>
             {file.path}
           </p>
           <div className="bg-carbon rounded-xl px-6 py-5">
             <Markdown content={file.content} />
           </div>
-          {file.truncated && <p className="text-xs text-status-amber">Fichero recortado.</p>}
+          {file.truncated && <p className="text-status-amber text-xs">Fichero recortado.</p>}
         </div>
       </div>
     </div>
@@ -124,28 +126,28 @@ function SkillsPanel({ inventory }: { inventory: AiInventory }) {
 
   return (
     <div className="flex-1 overflow-y-auto px-6 pt-3 pb-6">
-      <div className="relative w-full max-w-sm mb-4">
-        <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-fog pointer-events-none" />
+      <div className="relative mb-4 w-full max-w-sm">
+        <Search className="text-fog pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2" />
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={`Filtrar ${inventory.skills.length} skills…`}
           aria-label="Filtrar skills"
-          className="w-full h-9 pl-8 pr-8 text-sm bg-obsidian text-paper placeholder:text-fog rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 transition-colors duration-[120ms]"
+          className="bg-obsidian text-paper placeholder:text-fog focus-visible:ring-accent/40 h-9 w-full rounded-md pr-8 pl-8 text-sm transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2"
         />
         {query && (
           <button
             type="button"
             onClick={() => setQuery("")}
             aria-label="Limpiar filtro"
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 h-6 w-6 rounded flex items-center justify-center text-fog hover:text-paper hover:bg-elevated transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            className="text-fog hover:text-paper hover:bg-elevated focus-visible:ring-accent/40 absolute top-1/2 right-1.5 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2"
           >
-            <X className="w-3.5 h-3.5" />
+            <X className="h-3.5 w-3.5" />
           </button>
         )}
       </div>
       {groups.length === 0 ? (
-        <p className="py-12 text-center text-sm text-fog">
+        <p className="text-fog py-12 text-center text-sm">
           {query ? "Ninguna skill coincide con el filtro." : "Sin skills instaladas."}
         </p>
       ) : (
@@ -158,11 +160,11 @@ function SkillsPanel({ inventory }: { inventory: AiInventory }) {
               {skills.map((skill) => (
                 <div
                   key={skill.path}
-                  className="bg-carbon hover:bg-obsidian/80 transition-colors duration-[120ms] rounded-xl px-4 py-3.5 min-w-0"
+                  className="bg-carbon hover:bg-obsidian/80 min-w-0 rounded-xl px-4 py-3.5 transition-colors duration-[120ms]"
                   title={skill.path}
                 >
-                  <p className="text-sm font-medium text-paper truncate">{skill.name}</p>
-                  <p className="text-xs text-fog line-clamp-2 mt-1 leading-relaxed break-words">
+                  <p className="text-paper truncate text-sm font-medium">{skill.name}</p>
+                  <p className="text-fog mt-1 line-clamp-2 text-xs leading-relaxed break-words">
                     {skill.description || "Sin descripción"}
                   </p>
                 </div>
@@ -191,13 +193,13 @@ function Row({
   return (
     <div
       className={cn(
-        "flex items-center gap-3 px-3.5 h-11 rounded-lg bg-carbon hover:bg-obsidian/80 transition-colors duration-[120ms] min-w-0",
+        "bg-carbon hover:bg-obsidian/80 flex h-11 min-w-0 items-center gap-3 rounded-lg px-3.5 transition-colors duration-[120ms]",
         muted && "opacity-50",
       )}
     >
-      <TechIcon name={icon} className="w-5 h-5" />
-      <span className="text-sm font-medium text-paper w-44 truncate flex-shrink-0">{title}</span>
-      <span className="text-xs text-fog font-mono truncate flex-1 min-w-0 select-text">
+      <TechIcon name={icon} className="h-5 w-5" />
+      <span className="text-paper w-44 flex-shrink-0 truncate text-sm font-medium">{title}</span>
+      <span className="text-fog min-w-0 flex-1 truncate font-mono text-xs select-text">
         {detail}
       </span>
       {meta}
@@ -221,70 +223,133 @@ function groupHooks(hooks: AiInventory["hooks"]) {
   return [...map.values()];
 }
 
-function ConnectionsPanel({ inventory }: { inventory: AiInventory }) {
-  const isEmpty =
-    inventory.mcp_servers.length === 0 &&
-    inventory.plugins.length === 0 &&
-    inventory.hooks.length === 0;
+interface Merged {
+  name: string;
+  detail: string;
+  tools: { tool: string; enabled: boolean }[];
+}
 
-  if (isEmpty && inventory.warnings.length === 0) {
+/** One row per name; the agents that use it become badges. */
+function mergeByName(items: { name: string; detail: string; tool: string; enabled: boolean }[]) {
+  const map = new Map<string, Merged>();
+  for (const item of items) {
+    const entry = map.get(item.name) ?? { name: item.name, detail: item.detail, tools: [] };
+    if (!entry.tools.some((t) => t.tool === item.tool)) {
+      entry.tools.push({ tool: item.tool, enabled: item.enabled });
+    }
+    map.set(item.name, entry);
+  }
+  return [...map.values()].sort(
+    (a, b) => b.tools.length - a.tools.length || a.name.localeCompare(b.name),
+  );
+}
+
+function ConnectionsPanel({ inventory }: { inventory: AiInventory }) {
+  const [agent, setAgent] = useState<string | null>(null);
+  const servers = inventory.mcp_servers.map((s) => ({
+    name: s.name,
+    detail: s.target,
+    tool: s.tool,
+    enabled: s.enabled,
+  }));
+  const plugins = inventory.plugins.map((p) => ({
+    name: p.name.split("@")[0],
+    detail: p.version ? `v${p.version}` : "",
+    tool: p.tool,
+    enabled: p.enabled,
+  }));
+  const agents = [
+    ...new Set([...servers, ...plugins, ...inventory.hooks].map((i) => i.tool)),
+  ].sort();
+  const mine = <T extends { tool: string }>(list: T[]) =>
+    agent ? list.filter((i) => i.tool === agent) : list;
+  const shownServers = mergeByName(mine(servers));
+  const shownPlugins = mergeByName(mine(plugins));
+  const shownHooks = groupHooks(mine(inventory.hooks));
+
+  if (agents.length === 0 && inventory.warnings.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center text-sm text-fog">
+      <div className="text-fog flex flex-1 items-center justify-center text-sm">
         Sin integraciones detectadas.
       </div>
     );
   }
 
+  const chip = (id: string | null, label: string, count: number) => (
+    <button
+      key={label}
+      type="button"
+      onClick={() => setAgent(id)}
+      aria-pressed={agent === id}
+      className={cn(
+        "focus-visible:ring-accent/40 flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2",
+        agent === id ? "bg-elevated text-paper" : "text-fog hover:text-paper hover:bg-obsidian",
+      )}
+    >
+      {id ? <TechIcon name={id} className="h-4 w-4" /> : <Globe className="h-4 w-4" />}
+      <span>{label}</span>
+      <span className="text-ash text-xs tabular-nums">{count}</span>
+    </button>
+  );
+  const countFor = (tool: string) => [...servers, ...plugins].filter((i) => i.tool === tool).length;
+
+  const renderMerged = (list: Merged[], iconOf: (m: Merged) => string) =>
+    list.map((m) => {
+      const off = m.tools.every((t) => !t.enabled);
+      return (
+        <Row
+          key={m.name}
+          icon={iconOf(m)}
+          title={m.name}
+          detail={m.detail}
+          muted={off}
+          meta={
+            !agent && (
+              <span className="flex flex-shrink-0 items-center gap-1.5">
+                {m.tools.map((t) => (
+                  <ToolBadge key={t.tool} tool={t.tool} disabled={!t.enabled && !off} />
+                ))}
+              </span>
+            )
+          }
+        />
+      );
+    });
+
   return (
-    <div className="flex-1 overflow-y-auto px-6 pt-2 pb-6 space-y-1.5">
-      {inventory.mcp_servers.length > 0 && (
+    <div className="flex-1 space-y-1.5 overflow-y-auto px-6 pt-2 pb-6">
+      <div className="flex flex-wrap items-center gap-1 pb-1">
+        {chip(null, "Global", mergeByName([...servers, ...plugins]).length)}
+        {agents.map((tool) => chip(tool, tool, countFor(tool)))}
+      </div>
+      {shownServers.length > 0 && (
         <>
           <SectionTitle className="pt-1">Servidores MCP</SectionTitle>
-          {inventory.mcp_servers.map((server) => (
-            <Row
-              key={`${server.tool}-${server.name}`}
-              icon={server.name}
-              title={server.name}
-              detail={server.target}
-              meta={<ToolBadge tool={server.tool} disabled={!server.enabled} />}
-              muted={!server.enabled}
-            />
-          ))}
+          {renderMerged(shownServers, (m) => m.name)}
         </>
       )}
-      {inventory.plugins.length > 0 && (
+      {shownPlugins.length > 0 && (
         <>
-          <SectionTitle className={inventory.mcp_servers.length === 0 ? "pt-1" : undefined}>
-            Plugins
-          </SectionTitle>
-          {inventory.plugins.map((plugin) => (
-            <Row
-              key={`${plugin.tool}-${plugin.name}`}
-              icon={plugin.name.split("@")[0]}
-              title={plugin.name.split("@")[0]}
-              detail={plugin.version ? `v${plugin.version}` : ""}
-              meta={<ToolBadge tool={plugin.tool} disabled={!plugin.enabled} />}
-              muted={!plugin.enabled}
-            />
-          ))}
+          <SectionTitle>Plugins</SectionTitle>
+          {renderMerged(shownPlugins, (m) => m.name)}
         </>
       )}
-      {inventory.hooks.length > 0 && (
+      {shownHooks.length > 0 && (
         <>
           <SectionTitle>Hooks</SectionTitle>
-          {groupHooks(inventory.hooks).map((hook) => (
+          {shownHooks.map((hook) => (
             <div
               key={`${hook.tool}-${hook.command}-${hook.purpose}`}
               title={hook.command}
-              className="flex items-center gap-3 px-3 min-h-10 py-2 rounded-md bg-carbon min-w-0"
+              className="bg-carbon flex min-h-10 min-w-0 items-center gap-3 rounded-md px-3 py-2"
             >
-              <TechIcon name={hook.tool} className="w-5 h-5" />
-              <span className="text-sm text-paper flex-1 min-w-0 break-words">{hook.purpose}</span>
-              <span className="flex flex-wrap justify-end gap-1 flex-shrink-0">
+              <TechIcon name={hook.tool} className="h-5 w-5" />
+              <span className="text-paper min-w-0 flex-1 text-sm break-words">{hook.purpose}</span>
+              <span className="flex flex-shrink-0 flex-wrap justify-end gap-1">
                 {hook.events.map((event) => (
                   <span
                     key={event}
-                    className="h-5 px-1.5 rounded bg-obsidian text-[11px] text-fog font-mono flex items-center"
+                    className="bg-obsidian text-fog flex h-5 items-center rounded px-1.5 font-mono text-[11px]"
                   >
                     {event}
                   </span>
@@ -295,7 +360,7 @@ function ConnectionsPanel({ inventory }: { inventory: AiInventory }) {
         </>
       )}
       {inventory.warnings.map((warning) => (
-        <p key={warning} className="text-xs text-status-amber pt-2 break-words">
+        <p key={warning} className="text-status-amber pt-2 text-xs break-words">
           {warning}
         </p>
       ))}
@@ -303,8 +368,19 @@ function ConnectionsPanel({ inventory }: { inventory: AiInventory }) {
   );
 }
 
-export function GlobalView({ refreshKey, pendingRequests, onSecretsChanged }: GlobalViewProps) {
+export function GlobalView({
+  refreshKey,
+  pendingRequests,
+  onSecretsChanged,
+  focusMemoryId,
+  focusSeq,
+}: GlobalViewProps) {
   const [tab, setTab] = useState<GlobalTab>("memory");
+
+  useEffect(() => {
+    void focusSeq;
+    if (focusMemoryId) setTab("memory");
+  }, [focusMemoryId, focusSeq]);
   const [inventory, setInventory] = useState<AiInventory>(EMPTY);
   const [error, setError] = useState<string | null>(null);
 
@@ -335,7 +411,7 @@ export function GlobalView({ refreshKey, pendingRequests, onSecretsChanged }: Gl
 
   return (
     <>
-      <div className="flex items-center gap-1 px-6 h-12 flex-shrink-0" role="tablist">
+      <div className="flex h-12 flex-shrink-0 items-center gap-1 px-6" role="tablist">
         {tabs.map(({ id, label, icon: Icon, count }) => (
           <button
             key={id}
@@ -344,11 +420,11 @@ export function GlobalView({ refreshKey, pendingRequests, onSecretsChanged }: Gl
             aria-selected={tab === id}
             onClick={() => setTab(id)}
             className={cn(
-              "h-9 px-3 rounded-md text-sm font-medium flex items-center gap-2 transition-colors duration-[120ms] focus-visible:ring-2 focus-visible:ring-accent/40 focus:outline-none",
+              "focus-visible:ring-accent/40 flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium transition-colors duration-[120ms] focus:outline-none focus-visible:ring-2",
               tab === id ? "bg-elevated text-paper" : "text-fog hover:text-mist hover:bg-obsidian",
             )}
           >
-            <Icon className="w-4 h-4" />
+            <Icon className="h-4 w-4" />
             <span>{label}</span>
             {count !== undefined && count > 0 && (
               <span
@@ -363,11 +439,16 @@ export function GlobalView({ refreshKey, pendingRequests, onSecretsChanged }: Gl
           </button>
         ))}
       </div>
-      {error && <p className="px-6 text-sm text-coral-red">{error}</p>}
-      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      {error && <p className="text-coral-red px-6 text-sm">{error}</p>}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {tab === "memory" && (
-          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            <MemoryTab project={null} refreshKey={refreshKey} />
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <MemoryTab
+              project={null}
+              refreshKey={refreshKey}
+              focusId={focusMemoryId}
+              focusSeq={focusSeq}
+            />
           </div>
         )}
         {tab === "instructions" && <InstructionsPanel inventory={inventory} />}

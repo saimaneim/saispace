@@ -1,12 +1,12 @@
 use crate::{CliError, CliResult};
 use clap::Subcommand;
 use saispace_core::memory_render::{
-    excerpt, kind_label, render_compact_notice, render_context, render_memory,
+    excerpt, kind_label, render_compact_notice, render_context_within, render_memory,
 };
 use saispace_core::models::{
     ActionKind, Actor, ConsolidateInput, EntityKind, LinkDirection, Memory, MemoryKind,
     MemoryRelation, MemoryScope, Project, RecordActivityInput, SaveMemoryInput, SearchKind,
-    UpdateMemoryInput,
+    UpdateMemoryInput, Visibility,
 };
 use saispace_core::{Db, default_db_path, short_id};
 use std::io::{IsTerminal, Read, Write};
@@ -36,6 +36,13 @@ pub enum MemoryCommand {
             long = "trigger"
         )]
         triggers: Vec<String>,
+        #[arg(
+            help = "Caduca en esta fecha o plazo (2026-12-01, 2026-12-01T10:00:00Z, 6h, 3d): hechos temporales como una cuota agotada",
+            long
+        )]
+        until: Option<String>,
+        #[arg(help = "Nota personal: no se comparte con `sai sync export`", long)]
+        personal: bool,
     },
     #[command(about = "Lista memorias recientes del proyecto y globales")]
     List {
@@ -78,6 +85,21 @@ pub enum MemoryCommand {
             conflicts_with = "triggers"
         )]
         no_triggers: bool,
+        #[arg(
+            help = "Caduca en esta fecha o plazo (2026-12-01, 2026-12-01T10:00:00Z, 6h, 3d): hechos temporales como una cuota agotada",
+            long
+        )]
+        until: Option<String>,
+        #[arg(help = "Quita la caducidad", long, conflicts_with = "until")]
+        no_until: bool,
+        #[arg(help = "Márcala como personal (no se exporta)", long)]
+        personal: bool,
+        #[arg(
+            help = "Márcala como del proyecto (se exporta)",
+            long,
+            conflicts_with = "personal"
+        )]
+        shared: bool,
     },
     #[command(about = "Búsqueda FTS5 en memorias, notas, tareas y reglas")]
     Search {
@@ -102,6 +124,11 @@ pub enum MemoryCommand {
             value_parser = ["startup", "resume", "clear", "compact"]
         )]
         source: Option<String>,
+        #[arg(
+            help = "Tamaño máximo en bytes (por defecto SAISPACE_CONTEXT_BYTES u 8000)",
+            long
+        )]
+        max_bytes: Option<usize>,
     },
     #[command(about = "Contenido completo de una memoria")]
     Get {
@@ -118,6 +145,15 @@ pub enum MemoryCommand {
     Rm {
         #[arg(help = "Id de la memoria a eliminar")]
         id: String,
+    },
+    #[command(
+        about = "Borra una memoria sin dejar rastro (índice, enlaces, actividad y páginas libres). Irreversible"
+    )]
+    Purge {
+        #[arg(help = "Id de la memoria a purgar")]
+        id: String,
+        #[arg(help = "Confirma el borrado irreversible", long)]
+        yes: bool,
     },
     #[command(about = "Enlaza dos memorias (relacionada, depende de)")]
     Connect {
@@ -175,6 +211,26 @@ pub enum MemoryCommand {
         json: bool,
         #[arg(help = "Elimina solo los resúmenes de sesión sobrantes", long)]
         prune_sessions: bool,
+    },
+    #[command(
+        about = "Pasada de mantenimiento: parecidas, sin uso, sesiones sobrantes y huérfanas. Sin --apply solo muestra el plan"
+    )]
+    Tidy {
+        #[arg(
+            help = "Aplica el plan: fusiona parecidas, archiva sesiones y enlaza huérfanas",
+            long
+        )]
+        apply: bool,
+        #[arg(
+            help = "Días sin uso para listar una memoria",
+            long,
+            default_value_t = 60
+        )]
+        days: i64,
+        #[arg(help = "Revisa todos los proyectos", long)]
+        all: bool,
+        #[arg(help = "Salida en formato JSON", long)]
+        json: bool,
     },
     #[command(about = "Importa las observaciones de engram (idempotente)")]
     ImportEngram {
@@ -299,7 +355,7 @@ async fn save(
     topic: Option<String>,
     global: bool,
     triggers: &[String],
-) -> CliResult<()> {
+) -> CliResult<Uuid> {
     // Validate before saving, so a bad trigger never leaves a half-saved memory.
     saispace_core::recall::normalize_triggers(triggers).map_err(CliError::Usage)?;
     let kind = MemoryKind::parse(kind)
@@ -379,7 +435,7 @@ async fn save(
             }
         }
     }
-    Ok(())
+    Ok(saved.id)
 }
 
 async fn list(db: &Db, kind: Option<String>, all: bool, limit: i64, json: bool) -> CliResult<()> {
@@ -531,6 +587,89 @@ async fn merge(
             .collect::<Vec<_>>()
             .join(", ")
     );
+    Ok(())
+}
+
+async fn tidy(db: &Db, apply: bool, days: i64, all: bool, json: bool) -> CliResult<()> {
+    let scope = if all {
+        MemoryScope::All
+    } else {
+        MemoryScope::for_project(current_project(db, false).await?.map(|p| p.id))
+    };
+    let plan = db
+        .tidy_plan(
+            scope,
+            days,
+            i64::try_from(saispace_core::KEEP_SESSIONS).unwrap_or(3),
+        )
+        .await?;
+    let result = if apply {
+        Some(db.apply_tidy(&plan).await?)
+    } else {
+        None
+    };
+    if json {
+        crate::out!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({ "plan": plan, "applied": result }))?
+        );
+        return Ok(());
+    }
+    if plan.is_empty() {
+        crate::out!("todo en orden");
+        return Ok(());
+    }
+    if !plan.duplicates.is_empty() {
+        crate::out!("# Parecidas, se fusionan · {}", plan.duplicates.len());
+        for pair in &plan.duplicates {
+            crate::out!(
+                "- {} {} ≈ {} {}",
+                short_id(pair.a.id),
+                excerpt(&pair.a.title, 60),
+                short_id(pair.b.id),
+                excerpt(&pair.b.title, 60)
+            );
+        }
+    }
+    if !plan.surplus_sessions.is_empty() {
+        crate::out!(
+            "# Resúmenes de sesión sobrantes, se archivan · {}",
+            plan.surplus_sessions.len()
+        );
+        for m in &plan.surplus_sessions {
+            print_memory_line(m);
+        }
+    }
+    if !plan.orphans.is_empty() {
+        crate::out!("# Huérfanas con proyecto, se enlazan");
+        for (group, project) in &plan.orphans {
+            crate::out!(
+                "- {} ({}) → {}",
+                group.project_name,
+                group.count,
+                project.name
+            );
+        }
+    }
+    if !plan.stale.is_empty() {
+        crate::out!(
+            "# Sin uso en {days} días, solo para revisar · {}",
+            plan.stale.len()
+        );
+        for m in &plan.stale {
+            print_memory_line(m);
+        }
+    }
+    if let Some(r) = result {
+        crate::out!(
+            "\nhecho: {} fusionadas, {} sesiones archivadas, {} huérfanas enlazadas",
+            r.merged,
+            r.archived_sessions,
+            r.attached_orphans
+        );
+    } else {
+        crate::out!("\nNada cambiado. Aplica con: sai memory tidy --apply");
+    }
     Ok(())
 }
 
@@ -809,7 +948,9 @@ async fn context(
     limit: i64,
     json: bool,
     source: Option<String>,
+    max_bytes: Option<usize>,
 ) -> CliResult<()> {
+    let budget = max_bytes.unwrap_or_else(saispace_core::memory_render::context_budget_from_env);
     // An explicit --source flag wins; otherwise sniff the hook payload that
     // Claude Code pipes on stdin.
     let hook = if source.is_some() {
@@ -830,6 +971,8 @@ async fn context(
     if let Some(p) = &project {
         db.attach_open_tasks(&mut context, p.id).await?;
     }
+    db.attach_temporary(&mut context, chrono::Utc::now())
+        .await?;
     if json {
         let mut value = serde_json::to_value(&context)?;
         if is_compact && let Some(obj) = value.as_object_mut() {
@@ -843,10 +986,13 @@ async fn context(
         crate::out!(
             "{}\n{}",
             render_compact_notice(),
-            render_context(project.as_ref(), &context).trim_end()
+            render_context_within(project.as_ref(), &context, budget).trim_end()
         );
     } else {
-        crate::out!("{}", render_context(project.as_ref(), &context).trim_end());
+        crate::out!(
+            "{}",
+            render_context_within(project.as_ref(), &context, budget).trim_end()
+        );
     }
     let _ = std::io::stdout().flush();
 
@@ -936,6 +1082,23 @@ async fn import_engram(db: &Db, source: Option<PathBuf>) -> CliResult<()> {
     Ok(())
 }
 
+/// Sets (`Some`) or clears (`None`) a memory's expiry and prints it.
+async fn set_until(db: &Db, id: Uuid, until: Option<&str>) -> CliResult<()> {
+    let at = until
+        .map(|raw| saispace_core::db::memory_expiry::parse_until(raw, chrono::Utc::now()))
+        .transpose()?;
+    db.set_memory_expiry(id, at).await?;
+    crate::out!(
+        "caduca: {}",
+        at.map_or_else(
+            || "nunca".to_string(),
+            |at| at.format("%Y-%m-%d %H:%M UTC").to_string()
+        )
+    );
+    Ok(())
+}
+
+#[allow(clippy::too_many_lines)] // one arm per subcommand
 async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
     let db_path = default_db_path()?;
     let db = Db::open(&db_path).await?;
@@ -947,7 +1110,20 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
             topic,
             global,
             triggers,
-        } => save(&db, title, content, &kind, topic, global, &triggers).await?,
+            until,
+            personal,
+        } => {
+            // Parse first so a bad date never leaves a half-saved memory.
+            if let Some(raw) = &until {
+                saispace_core::db::memory_expiry::parse_until(raw, chrono::Utc::now())?;
+            }
+            let id = save(&db, title, content, &kind, topic, global, &triggers).await?;
+            // Saving again on a topic without --until makes the fact durable.
+            set_until(&db, id, until.as_deref()).await?;
+            if personal {
+                db.set_memory_scope(id, Visibility::Personal).await?;
+            }
+        }
         MemoryCommand::List {
             kind,
             all,
@@ -962,8 +1138,32 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
             topic,
             triggers,
             no_triggers,
+            until,
+            no_until,
+            personal,
+            shared,
         } => {
             let id = db.resolve_memory_id(&id).await?;
+            if personal || shared {
+                let scope = if personal {
+                    Visibility::Personal
+                } else {
+                    Visibility::Project
+                };
+                db.set_memory_scope(id, scope).await?;
+            }
+            let expiry_only = title.is_none()
+                && content.is_none()
+                && kind.is_none()
+                && topic.is_none()
+                && triggers.is_empty()
+                && !no_triggers;
+            if until.is_some() || no_until {
+                set_until(&db, id, until.as_deref()).await?;
+            }
+            if expiry_only && (until.is_some() || no_until || personal || shared) {
+                return Ok(());
+            }
             // --no-triggers conflicts with --trigger, so it means an empty list.
             let triggers = (no_triggers || !triggers.is_empty()).then_some(triggers);
             edit(
@@ -987,9 +1187,28 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
             limit,
             json,
             source,
-        } => context(&db, &db_path, limit, json, source).await?,
+            max_bytes,
+        } => context(&db, &db_path, limit, json, source, max_bytes).await?,
         MemoryCommand::Get { id, json } => get(&db, &id, json).await?,
         MemoryCommand::Rm { id } => rm(&db, db.resolve_memory_id(&id).await?).await?,
+        MemoryCommand::Purge { id, yes } => {
+            let id = db.resolve_memory_id(&id).await?;
+            let memory = db.get_memory(id).await?;
+            if !yes {
+                return Err(CliError::Usage(format!(
+                    "purgar {} «{}» es irreversible: repite con --yes",
+                    short_id(id),
+                    memory.title
+                )));
+            }
+            let report = db.purge_memory(id).await?;
+            crate::out!("purgada {} ({} memorias)", short_id(id), report.purged);
+            if !report.wal_clean {
+                crate::out!(
+                    "la app u otro proceso tiene la base abierta: los restos salen del WAL al cerrarlo"
+                );
+            }
+        }
         MemoryCommand::Pin { id } => {
             set_pinned(&db, db.resolve_memory_id(&id).await?, true).await?;
         }
@@ -1020,6 +1239,12 @@ async fn run_async(cmd: MemoryCommand) -> CliResult<()> {
             json,
             prune_sessions,
         } => stale(&db, days, keep_sessions, all, json, prune_sessions).await?,
+        MemoryCommand::Tidy {
+            apply,
+            days,
+            all,
+            json,
+        } => tidy(&db, apply, days, all, json).await?,
         MemoryCommand::ImportEngram { db: source } => import_engram(&db, source).await?,
         MemoryCommand::Orphans => list_orphans(&db).await?,
         MemoryCommand::Link { project_name, path } => {
