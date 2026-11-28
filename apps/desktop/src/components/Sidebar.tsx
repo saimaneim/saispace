@@ -341,21 +341,16 @@ export function Sidebar({
           <svg
             width="20"
             height="20"
-            viewBox="0 0 24 24"
+            viewBox="80 88 352 336"
             fill="none"
+            strokeWidth="36"
             xmlns="http://www.w3.org/2000/svg"
             className="flex-shrink-0 pointer-events-none"
             aria-hidden="true"
           >
-            <rect width="24" height="24" rx="6" className="fill-elevated" />
-            <path
-              d="M15 7.5H9.5C8.11929 7.5 7 8.61929 7 10C7 11.3807 8.11929 12.5 9.5 12.5H14.5C15.8807 12.5 17 13.6193 17 15C17 16.3807 15.8807 17.5 14.5 17.5H9"
-              className="stroke-accent"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <circle cx="15.5" cy="7.5" r="1.5" className="fill-accent" />
+            <rect x="216" y="104" width="200" height="200" rx="48" className="stroke-paper" />
+            <rect x="96" y="208" width="200" height="200" rx="48" className="stroke-paper" />
+            <path d="M234 208H248A48 48 0 0 1 296 256V368" className="stroke-accent" />
           </svg>
           <span className="text-sm font-semibold tracking-tight text-paper pointer-events-none">
             saispace
